@@ -5,7 +5,7 @@ import pytest
 from multiview.benchmark.task import Task
 
 
-@pytest.mark.parametrize("dataset", ["gsm8k", "rocstories", "crossword_clues"])
+@pytest.mark.parametrize("dataset", ["gsm8k", "rocstories", "crossword_clues", "hackernews"])
 def test_create_random_triplets(dataset):
     """Test random triplet creation across different datasets."""
     # Create a task with random triplets
