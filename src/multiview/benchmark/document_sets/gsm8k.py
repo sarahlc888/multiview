@@ -54,7 +54,9 @@ class GSM8KDocSet(BaseDocSet):
         documents = []
         for i, example in enumerate(dataset):
             # Format as "Question: ...\nAnswer: ..."
-            formatted_doc = f"Question: {example['question']}\nAnswer: {example['answer']}"
+            formatted_doc = (
+                f"Question: {example['question']}\nAnswer: {example['answer']}"
+            )
             documents.append(formatted_doc)
 
             # Respect max_docs in non-streaming mode

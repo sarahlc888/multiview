@@ -1,21 +1,176 @@
 """Main inference engine.
 
-TODO: Implement your inference logic here
+This module provides the main annotate() function, which is the primary
+interface for running inference with LMs or embedding models.
+
+Ported from old query_annotator() with simplifications.
 """
 
+import logging
 
-def run_inference():
-    """Run inference on input data.
+from multiview.constants import INFERENCE_CACHE_DIR, USE_CACHE
+from multiview.inference.caching import (
+    cached_fn_completions,
+    get_cache_hash,
+    load_cached_completions,
+)
+from multiview.inference.parsers import get_parser
+from multiview.inference.presets import InferenceConfig, get_preset
+from multiview.inference.prompts import format_prompts
+from multiview.inference.providers import get_completion_fn
 
-    TODO: Add your parameters and implementation
+logger = logging.getLogger(__name__)
+
+
+def run_inference(
+    inputs: dict[str, list],
+    config: InferenceConfig | str,
+    cache_path: str | None = None,
+    cache_alias: str | None = None,
+    force_refresh: bool = False,
+    verbose: bool = False,
+    **config_overrides,
+) -> list:
+    """Run inference on inputs using a language model or embedding model.
+
+    This is the main inference function, similar to query_annotator() from the old repo.
+    It handles:
+    - Prompt formatting from inputs
+    - Deduplication for efficiency
+    - Caching to disk
+    - Calling the appropriate provider (OpenAI, Anthropic, HF API)
+    - Parsing outputs
 
     Args:
-        # Add your arguments here
+        inputs: Dictionary of input lists. Keys should match template variables.
+            Example: {"documents": ["text1", "text2"], "criterion": "word_count"}
+        config: InferenceConfig or preset name (e.g., "openai_embedding_large")
+        cache_path: Path to cache file. If None, generates from config hash.
+        cache_alias: Human-readable alias for cache file naming.
+        force_refresh: If True, ignore cache and recompute all.
+        verbose: Whether to log verbose output.
+        **config_overrides: Override config fields (e.g., temperature=0.5)
 
     Returns:
-        # Add your return type here
-    """
-    pass
+        List of parsed outputs (length matches input lists)
 
-def cached_inference():
-    pass
+    Example:
+        >>> # Using a preset
+        >>> results = run_inference(
+        ...     inputs={"documents": ["Hello world", "Goodbye world"]},
+        ...     config="openai_embedding_large",
+        ... )
+        >>> # Using a custom config
+        >>> from multiview.inference.presets import InferenceConfig
+        >>> config = InferenceConfig(
+        ...     provider="openai",
+        ...     model_name="gpt-4.1-mini",
+        ...     prompt_template="Analyze: {document}\nCriterion: {criterion}",
+        ...     parser="json",
+        ... )
+        >>> results = run_inference(
+        ...     inputs={"documents": ["Good text"], "criterion": "sentiment"},
+        ...     config=config,
+        ... )
+    """
+    # Load config if string preset name
+    if isinstance(config, str):
+        config = get_preset(config)
+
+    # Apply overrides
+    if config_overrides:
+        config = config.with_overrides(**config_overrides)
+
+    # Validate force_prefill compatibility
+    if config.force_prefill_template is not None and config.is_embedding:
+        raise ValueError(
+            f"force_prefill is not supported for embedding models. "
+            f"Provider '{config.provider}' with is_embedding=True cannot use force_prefill_template. "
+            f"Only text completion models (Anthropic, OpenAI, Gemini) support force_prefill."
+        )
+
+    # Generate cache path if not provided
+    if cache_path is None and cache_alias is not None:
+        config_dict = {
+            "provider": config.provider,
+            "model_name": config.model_name,
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens,
+            "prompt_template": config.prompt_template,
+            "embed_query_instr_template": config.embed_query_instr_template,
+            "embed_doc_instr_template": config.embed_doc_instr_template,
+            "force_prefill_template": config.force_prefill_template,
+            "is_embedding": config.is_embedding,
+            "parser": config.parser,
+            "parser_kwargs": config.parser_kwargs,
+        }
+        cache_hash = get_cache_hash(config_dict, cache_alias)
+        cache_path = str(INFERENCE_CACHE_DIR / f"{cache_hash}.json")
+
+    # Respect global USE_CACHE flag
+    # If USE_CACHE is False, disable caching by setting cache_path to None
+    if not USE_CACHE:
+        if verbose:
+            logger.info("Caching disabled globally (USE_CACHE=False)")
+        cache_path = None
+
+    if verbose and cache_path:
+        logger.info(f"Using cache path: {cache_path}")
+
+    # Format prompts from inputs
+    prompt_collection = format_prompts(inputs, config, verbose=verbose)
+
+    # Deduplicate prompts for efficiency
+    remap_idxs, deduped_prompt_collection = prompt_collection.dedup()
+    if len(deduped_prompt_collection.packed_prompts) != len(
+        prompt_collection.packed_prompts
+    ):
+        logger.info(
+            f"Deduped from {len(prompt_collection.packed_prompts)} to "
+            f"{len(deduped_prompt_collection.packed_prompts)} prompts"
+        )
+
+    # Get completion function for this provider
+    fn_completions = get_completion_fn(config.provider, config.is_embedding)
+
+    # Load cache
+    completion_cache = load_cached_completions(cache_path)
+
+    # Run completions with caching
+    prompt_dict = deduped_prompt_collection.to_dict()
+    raw_completions = cached_fn_completions(
+        packed_prompts=prompt_dict.pop("packed_prompts"),
+        non_packed_prompts=prompt_dict.pop("non_packed_prompts"),
+        fn_completions=fn_completions,
+        completion_cache=completion_cache,
+        completion_cache_path=cache_path,
+        force_refresh=force_refresh,
+        verbose=verbose,
+        return_type="list",
+        # Pass remaining prompt collection fields and model params to fn_completions
+        **prompt_dict,
+        **config.to_completion_kwargs(),
+    )
+
+    if verbose and len(raw_completions) > 0:
+        logger.info(f"Example raw completion: {raw_completions[0]}")
+
+    # Parse completions
+    parser_fn = get_parser(config.parser)
+    parser_kwargs = config.parser_kwargs or {}
+
+    parsed_completions = []
+    for raw_completion in raw_completions:
+        try:
+            parsed = parser_fn(raw_completion, **parser_kwargs)
+            parsed_completions.append(parsed)
+        except Exception as e:
+            logger.error(f"Error parsing completion: {e}")
+            logger.error(f"Raw completion: {raw_completion}")
+            # Return None or empty on parse error
+            parsed_completions.append(None)
+
+    # Re-duplicate to match original input order
+    output = [parsed_completions[i] for i in remap_idxs]
+
+    return output

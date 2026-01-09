@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "multiview"
 version = "0.1.0"
 description = "A Python project"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.0.0",
     "datasets>=2.0.0",
@@ -21,10 +21,22 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
+# API clients for inference providers
+providers = [
+    "openai>=1.0.0",
+    "anthropic>=0.20.0",
+    "google-genai>=0.2.0",
+    "huggingface-hub>=0.20.0",
+]
+# All optional dependencies for full testing
+all = [
+    "multiview[dev,providers]",
+]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py312"
 line-length = 88
+exclude = ["tests"]
 
 [tool.ruff.lint]
 select = [

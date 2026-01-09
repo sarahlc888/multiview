@@ -11,7 +11,7 @@ A task is defined by `documents: List[str]` and `criterion: str`.
 ```bash
 python scripts/run_eval.py
 # dev
-pytest tests -vs  
+pytest tests -vs
 ```
 
 Configure tasks in `configs/benchmark.yaml`.

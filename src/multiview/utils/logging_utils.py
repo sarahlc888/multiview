@@ -1,5 +1,7 @@
 """Simple logging setup for benchmark."""
 
+from __future__ import annotations
+
 import logging
 import sys
 from pathlib import Path

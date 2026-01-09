@@ -41,11 +41,11 @@ methods_to_evaluate:
     - bm25
     - bm25_annotated
   embedding_models:
-    - provider: 
-      model: 
+    - provider:
+      model:
   instruct_embedding_models:
-    - 
+    -
   lm_judge_triplet:
-    - 
+    -
   lm_judge_pair:
-    - 
+    -

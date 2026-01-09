@@ -49,7 +49,7 @@ class CrosswordCluesDocSet(BaseDocSet):
 
         # Format documents
         documents = []
-        for i, example in enumerate(dataset):
+        for _i, example in enumerate(dataset):
             # Format as "Clue: ...\nAnswer: ..."
             clue = example.get("clue", "")
             answer = example.get("answer", "")
@@ -58,7 +58,11 @@ class CrosswordCluesDocSet(BaseDocSet):
                 documents.append(formatted_doc)
 
             # Respect max_docs in non-streaming mode
-            if not use_streaming and max_docs is not None and len(documents) >= max_docs:
+            if (
+                not use_streaming
+                and max_docs is not None
+                and len(documents) >= max_docs
+            ):
                 break
 
         logger.debug(f"Loaded {len(documents)} documents from Crossword clues")
