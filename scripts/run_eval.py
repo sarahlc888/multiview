@@ -31,6 +31,7 @@ def main(cfg: DictConfig):
     for task_spec in cfg.tasks.task_list:
         cur_task = Task(config={**cfg.tasks.defaults, **task_spec})
         cur_task.load_documents()
+        cur_task.augment_with_synthetic_documents()
         if cur_task.triplet_style != "random":
             cur_task.annotate_documents()
         cur_task.create_triplets()

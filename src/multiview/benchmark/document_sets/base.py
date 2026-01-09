@@ -27,6 +27,10 @@ class BaseDocSet(ABC):
     # Optional: Metadata for LM-based criteria (schema hints, descriptions, etc.)
     # Format: {criterion_name: {description: str, category_schema_hint: str, ...}}
     CRITERION_METADATA: dict[str, dict[str, str]] = {}
+    # Synthesis prompts for criterion-specific document generation
+    # Maps criterion name → {hard_positive_prompt, hard_negative_prompt}
+    # Subclasses can override to provide custom synthesis logic per criterion
+    SYNTHESIS_CONFIGS: dict[str, dict[str, str]] = {}
 
     def __init__(self, config: dict | None = None):
         """Initialize document_set.
@@ -101,3 +105,24 @@ class BaseDocSet(ABC):
             Returns empty dict if no metadata is defined.
         """
         return self.CRITERION_METADATA.get(criterion, {})
+
+    def synthesize_documents(
+        self,
+        documents: list[Any],
+        criterion_name: str,
+        num_synthetic_per_doc: int = 2,
+    ) -> list[Any]:
+        """Generate synthetic documents using dataset-specific logic.
+
+        This method can be overridden by subclasses to provide custom synthesis.
+        If not overridden, returns empty list (no dataset-specific synthesis).
+
+        Args:
+            documents: List of original documents
+            criterion_name: Criterion being used for triplet creation
+            num_synthetic_per_doc: How many synthetic docs to generate per original
+
+        Returns:
+            List of synthetic documents, or empty list if not implemented.
+        """
+        return []  # Default: no dataset-specific synthesis

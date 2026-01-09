@@ -226,6 +226,45 @@ def regex_parser(
     return first_value
 
 
+def delimiter_parser(completion: str | dict, delimiter: str = "###", **kwargs) -> str:
+    """Parse completion by extracting text after a delimiter.
+
+    Useful for extracting final answers that come after a delimiter marker.
+
+    Args:
+        completion: Completion text (string or dict with "text" key)
+        delimiter: Delimiter string to split on (default: "###")
+
+    Returns:
+        Text after the last occurrence of the delimiter, stripped
+
+    Example:
+        >>> completion = "reasoning...\\n###\\nFinal answer here"
+        >>> delimiter_parser(completion, delimiter="###")
+        "Final answer here"
+    """
+    # Extract text from dict if needed
+    if isinstance(completion, dict):
+        if "text" in completion:
+            text = completion["text"]
+        elif "content" in completion:
+            text = completion["content"]
+        else:
+            raise ValueError(f"No text/content in completion: {completion.keys()}")
+    else:
+        text = completion
+
+    # Split by delimiter and take everything after the last occurrence
+    if delimiter in text:
+        parts = text.split(delimiter)
+        result = parts[-1].strip()
+        return result
+    else:
+        logger.warning(f"Delimiter '{delimiter}' not found in completion")
+        # Return full text if delimiter not found
+        return text.strip()
+
+
 # Registry for parser lookup
 PARSER_REGISTRY = {
     "vector": vector_parser,
@@ -234,6 +273,7 @@ PARSER_REGISTRY = {
     "dict": dict_parser,
     "noop": noop_parser,
     "regex": regex_parser,
+    "delimiter": delimiter_parser,
 }
 
 

@@ -66,6 +66,8 @@ class Task:
         self.max_docs = config.get("max_docs")
         self.max_triplets = config.get("max_triplets")
         self.triplet_style = config.get("triplet_style", "lm")
+        self.add_synthetic_docs = config.get("add_synthetic_docs", False)
+        self.num_synthetic_per_doc = config.get("num_synthetic_per_doc", 2)
 
         # Get the document_set class from registry
         if self.document_set_name not in DOCSETS:
@@ -99,6 +101,34 @@ class Task:
         # Document sets now handle max_docs internally
         self.documents = self.document_set.load_documents()
         logger.debug(f"Loaded {len(self.documents)} documents")
+
+    def augment_with_synthetic_documents(self):
+        """Generate synthetic documents using LM-based synthesis."""
+        if not self.add_synthetic_docs:
+            return
+
+        if self.documents is None:
+            raise RuntimeError(
+                "Must call load_documents() before augment_with_synthetic_documents()"
+            )
+
+        logger.info("Generating synthetic documents...")
+
+        # Import here to avoid circular dependency
+        from multiview.benchmark import synthesis_utils
+
+        synthetic_docs = synthesis_utils.synthesize_documents(
+            documents=self.documents,
+            document_set=self.document_set,
+            criterion_name=self.criterion_name,
+            num_synthetic_per_doc=self.num_synthetic_per_doc,
+        )
+
+        if synthetic_docs:
+            logger.info(f"Added {len(synthetic_docs)} synthetic documents")
+            self.documents.extend(synthetic_docs)
+        else:
+            logger.info("No synthetic documents generated")
 
     def annotate_documents(self):
         """Annotate documents with criterion values.
