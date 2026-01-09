@@ -6,6 +6,7 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.benchmark.document_sets.base import BaseDocSet
+from multiview.benchmark.document_sets.criteria_metadata import ROCSTORIES_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,9 @@ class RocStoriesDocSet(BaseDocSet):
     # Criteria that can be extracted deterministically (no LLM needed)
     # word_count is automatically included by base class
     KNOWN_CRITERIA = []
+
+    # Metadata for LM-based criteria
+    CRITERION_METADATA = ROCSTORIES_CRITERIA
 
     def load_documents(self) -> list[Any]:
         """Load ROCStories as documents from Hugging Face.

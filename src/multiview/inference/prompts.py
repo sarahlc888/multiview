@@ -9,6 +9,8 @@ Handles complex prompt formatting including:
 Ported from old repo with simplifications.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import re
@@ -182,7 +184,7 @@ class PromptCollection:
 
         return kwargs
 
-    def dedup(self) -> tuple[list[int], "PromptCollection"]:
+    def dedup(self) -> tuple[list[int], PromptCollection]:
         """Deduplicate prompts based on packed_prompts.
 
         Returns:

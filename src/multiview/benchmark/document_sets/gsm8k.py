@@ -6,6 +6,7 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.benchmark.document_sets.base import BaseDocSet
+from multiview.benchmark.document_sets.criteria_metadata import GSM8K_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,9 @@ class GSM8KDocSet(BaseDocSet):
     # Criteria that can be extracted deterministically (no LLM needed)
     # word_count is automatically included by base class
     KNOWN_CRITERIA = []
+
+    # Metadata for LM-based criteria (descriptions and schema hints)
+    CRITERION_METADATA = GSM8K_CRITERIA
 
     def load_documents(self) -> list[Any]:
         """Load GSM8K problems as documents from Hugging Face.

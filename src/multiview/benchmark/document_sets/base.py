@@ -24,6 +24,10 @@ class BaseDocSet(ABC):
     DESCRIPTION: str
     KNOWN_CRITERIA: list[str] = []
 
+    # Optional: Metadata for LM-based criteria (schema hints, descriptions, etc.)
+    # Format: {criterion_name: {description: str, category_schema_hint: str, ...}}
+    CRITERION_METADATA: dict[str, dict[str, str]] = {}
+
     def __init__(self, config: dict | None = None):
         """Initialize document_set.
 
@@ -80,3 +84,20 @@ class BaseDocSet(ABC):
             return len(text.split())
 
         return None
+
+    def get_criterion_metadata(self, criterion: str) -> dict[str, str]:
+        """Get metadata for a criterion (description, schema hints, etc.).
+
+        Args:
+            criterion: The criterion name
+
+        Returns:
+            Dict with metadata keys like:
+            - description: Criterion description
+            - category_schema_hint: Hint for category schema generation
+            - tag_schema_hint: Hint for tag schema generation
+            - summary_guidance_hint: Hint for summary guidance
+            - summary_format_hint: Hint for summary format
+            Returns empty dict if no metadata is defined.
+        """
+        return self.CRITERION_METADATA.get(criterion, {})

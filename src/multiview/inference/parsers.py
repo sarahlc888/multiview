@@ -7,6 +7,8 @@ Ported from old repo with simplifications. Provides parsers for:
 - Dictionary fields (dict_parser)
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -81,7 +83,8 @@ def json_parser(
 
     # Extract JSON from markdown code block if present
     if "```json" in completion:
-        match = re.search(r"```json(.*?)```", completion, re.DOTALL)
+        # Use greedy match to handle nested backticks within JSON strings
+        match = re.search(r"```json(.*)```", completion, re.DOTALL)
         if match:
             completion = match.group(1).strip()
 

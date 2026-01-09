@@ -1,51 +1,49 @@
-# will be used in output results/logs dir name
-run_name: "default_benchmark"
+# Benchmark configuration for GSM8K arithmetic evaluation
+# Goal: Generate 256 triplets and evaluate with 4 methods
+run_name: "gsm8k_arithmetic_256_4methods"
 logging:
-  level: DEBUG
-  output_file: outputs/logs/benchmark.log
+  level: INFO
+  output_file: null  # Log to console only
 seed: 42
 use_cache: true
 
-# which tasks to run
-# (the task configs contain the information about how triplets are created)
+# Task configuration
 tasks:
-  # Global defaults for all tasks
-  # Per-task settings override these defaults
   defaults:
-    max_docs: 10 # 1000              # Maximum number of documents to load per task
-    max_triplets: 2 # 500           # Maximum number of triplets to create per task
-    triplet_style: "random" # "lm"         # How to sample triplets (random, lm)
-    add_synthetic_docs: false   # Whether to add synthetic documents to the task
+    max_docs: 20 # 600  # Need more docs than triplets for good sampling
+    max_triplets: 2 # 256
+    triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
+    add_synthetic_docs: false
 
-  # Task list
+    # Triplet creation parameters for lm_all style
+    candidate_strategy: "multi"  # BM25 + embedding + Jaccard
+    use_spurious_hard_negs: true
+    n_schema_samples: 10
+
   task_list:
     - document_set: gsm8k
-      criterion: arithmetic
-      # Optional per-task overrides:
-      # max_docs: 500
-      # max_triplets: 100
-      # triplet_style: random
-    - document_set: gsm8k
-      criterion: final_answer_units
-    - document_set: crossword_clues
-      criterion: clue_type
-    - document_set: rocstories
-      criterion: num_character_entities
+      criterion: arithmetic_operations
 
-# which models/methods to evaluate
-# (listed by type)
-# (we can evaluate any method that creates a similarity score between two texts)
-# TODO: rename
+# Evaluation methods configuration
 methods_to_evaluate:
+  # Method 1: BM25 baseline (lexical similarity)
   bm25:
-    - bm25
-    - bm25_annotated
-  embedding_models:
-    - provider:
-      model:
-  instruct_embedding_models:
-    -
+    - name: bm25_lexical
+
+  # Method 2: LM Judge Triplet (Gemini direct comparison)
   lm_judge_triplet:
-    -
-  lm_judge_pair:
-    -
+    - name: gemini_flash_triplet
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini
+
+  # Method 3 & 4: Embeddings with/without instructions
+  embeddings:
+    # WITH instruction prefix (default)
+    - name: qwen3_8b_with_instructions
+      preset: hf_qwen3_embedding_8b
+      # Uses default instruction: "Represent this query for retrieval: "
+
+    # WITHOUT instruction prefix (override to null)
+    - name: qwen3_8b_no_instructions
+      preset: hf_qwen3_embedding_8b
+      preset_overrides:
+        embed_query_instr_template: null  # Remove instruction prefix

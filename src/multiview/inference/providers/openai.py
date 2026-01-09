@@ -3,12 +3,96 @@
 Simplified implementation focusing on core functionality.
 """
 
+from __future__ import annotations
+
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 from multiview.constants import OPENAI_API_KEYS
 
 logger = logging.getLogger(__name__)
+
+
+def _openai_single_completion(
+    client,
+    prompt: str,
+    prefill: str | None,
+    model_name: str,
+    temperature: float,
+    max_tokens: int,
+    max_retries: int = 5,
+    initial_retry_delay: float = 1.0,
+    retry_backoff_factor: float = 2.0,
+    **kwargs,
+) -> dict:
+    """Process a single OpenAI completion with retry logic.
+
+    Args:
+        client: OpenAI client instance
+        prompt: Prompt text
+        prefill: Optional prefill string to force response start
+        model_name: Model name
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens to generate
+        max_retries: Maximum number of retry attempts
+        initial_retry_delay: Initial delay in seconds for exponential backoff
+        retry_backoff_factor: Multiplier for backoff delay
+        **kwargs: Additional OpenAI API parameters
+
+    Returns:
+        Dict with "text" key containing the completion
+    """
+    try:
+        import openai
+    except ImportError:
+        raise ImportError(
+            "openai package required. Install with: pip install openai"
+        ) from None
+
+    # Build messages
+    messages = [{"role": "user", "content": prompt}]
+    if prefill:
+        messages.append({"role": "assistant", "content": prefill})
+
+    # Retry with exponential backoff
+    delay = initial_retry_delay
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs,
+            )
+            completion_text = response.choices[0].message.content
+            if prefill:
+                completion_text = prefill + completion_text
+            return {"text": completion_text}
+
+        except openai.RateLimitError as e:
+            last_exception = e  # noqa: F841
+            if attempt < max_retries:
+                logger.warning(
+                    f"Rate limit hit (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                    f"Retrying in {delay}s..."
+                )
+                time.sleep(delay)
+                delay *= retry_backoff_factor
+            else:
+                logger.error(f"Rate limit error after {max_retries + 1} attempts: {e}")
+                return {"text": ""}
+
+        except Exception as e:
+            logger.error(f"Error getting completion: {e}")
+            return {"text": ""}
+
+    # Should not reach here, but just in case
+    return {"text": ""}
 
 
 def openai_completions(
@@ -17,6 +101,10 @@ def openai_completions(
     temperature: float = 0.0,
     max_tokens: int = 4096,
     force_prefills: list[str] | None = None,
+    max_workers: int = 5,
+    max_retries: int = 5,
+    initial_retry_delay: float = 1.0,
+    retry_backoff_factor: float = 2.0,
     **kwargs,
 ) -> dict:
     """Get OpenAI chat completions.
@@ -27,6 +115,10 @@ def openai_completions(
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
         force_prefills: Optional list of prefill strings to force response start
+        max_workers: Maximum concurrent API requests (default 5)
+        max_retries: Maximum retry attempts per request (default 5)
+        initial_retry_delay: Initial delay for exponential backoff (default 1.0s)
+        retry_backoff_factor: Backoff multiplier (default 2.0)
         **kwargs: Additional OpenAI API parameters
 
     Returns:
@@ -40,7 +132,7 @@ def openai_completions(
             "openai package required. Install with: pip install openai"
         ) from None
 
-    # Initialize client
+    # Initialize client (shared across threads - OpenAI client is thread-safe)
     api_key = (
         OPENAI_API_KEYS[0] if isinstance(OPENAI_API_KEYS, list) else OPENAI_API_KEYS
     )
@@ -51,54 +143,35 @@ def openai_completions(
 
     client = openai.OpenAI(api_key=api_key)
 
-    # Process each prompt
-    completions = []
+    # Pair prompts with their corresponding prefills
+    prompt_prefill_pairs = []
     for i, prompt in enumerate(prompts):
-        # Build messages
-        messages = [{"role": "user", "content": prompt}]
-
-        # Add prefill as assistant message if provided
         prefill = None
         if force_prefills and i < len(force_prefills):
             prefill = force_prefills[i]
-            if prefill:
-                messages.append({"role": "assistant", "content": prefill})
+        prompt_prefill_pairs.append((prompt, prefill))
 
-        try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
+    # Create partial function with fixed parameters
+    completion_fn = partial(
+        _openai_single_completion,
+        client=client,
+        model_name=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        max_retries=max_retries,
+        initial_retry_delay=initial_retry_delay,
+        retry_backoff_factor=retry_backoff_factor,
+        **kwargs,
+    )
+
+    # Execute concurrently (max_workers=1 makes it sequential)
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        completions = list(
+            executor.map(
+                lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
+                prompt_prefill_pairs,
             )
-
-            completion_text = response.choices[0].message.content
-            # Prepend prefill to completion if it was used
-            if prefill:
-                completion_text = prefill + completion_text
-            completions.append({"text": completion_text})
-
-        except openai.RateLimitError as e:
-            logger.warning(f"Rate limit hit: {e}. Sleeping 5s and retrying...")
-            time.sleep(5)
-            # Retry once
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs,
-            )
-            completion_text = response.choices[0].message.content
-            if prefill:
-                completion_text = prefill + completion_text
-            completions.append({"text": completion_text})
-
-        except Exception as e:
-            logger.error(f"Error getting completion: {e}")
-            # Return empty completion on error
-            completions.append({"text": ""})
+        )
 
     return {"completions": completions}
 

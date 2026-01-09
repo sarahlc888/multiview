@@ -41,9 +41,28 @@ def main(cfg: DictConfig):
     benchmark = Benchmark(tasks)
 
     # evaluate multiview representation methods
-    benchmark.evaluate(cfg.methods_to_evaluate)
+    results = benchmark.evaluate(cfg.methods_to_evaluate)
 
-    # TODO: save results to results_dir
+    # Save results to JSON
+    import json
+
+    results_file = results_dir / "results.json"
+    with open(results_file, "w") as f:
+        json.dump(results, f, indent=2)
+    logger.info(f"Saved results to {results_file}")
+
+    # Print summary table
+    logger.info("\n" + "=" * 80)
+    logger.info("EVALUATION RESULTS SUMMARY")
+    logger.info("=" * 80)
+    for task_name, methods in results.items():
+        logger.info(f"\nTask: {task_name}")
+        for method_name, metrics in methods.items():
+            acc = metrics.get("accuracy", 0)
+            correct = metrics.get("n_correct", 0)
+            total = metrics.get("n_total", 0)
+            logger.info(f"  {method_name:35s}: {acc:6.2%} ({correct}/{total} correct)")
+    logger.info("=" * 80 + "\n")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ Improvements over old version:
 - Thread-safe and process-safe concurrent writes
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging

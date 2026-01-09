@@ -6,6 +6,8 @@ interface for running inference with LMs or embedding models.
 Ported from old query_annotator() with simplifications.
 """
 
+from __future__ import annotations
+
 import logging
 
 from multiview.constants import INFERENCE_CACHE_DIR, USE_CACHE
@@ -16,6 +18,7 @@ from multiview.inference.caching import (
 )
 from multiview.inference.parsers import get_parser
 from multiview.inference.presets import InferenceConfig, get_preset
+from multiview.inference.prompt_logger import log_batch_prompts_responses
 from multiview.inference.prompts import format_prompts
 from multiview.inference.providers import get_completion_fn
 
@@ -154,6 +157,26 @@ def run_inference(
 
     if verbose and len(raw_completions) > 0:
         logger.info(f"Example raw completion: {raw_completions[0]}")
+
+    # Log prompts and responses for auditing
+    # Extract prompts for logging
+    prompt_texts = []
+    if deduped_prompt_collection.packed_prompts:
+        prompt_texts.extend(deduped_prompt_collection.packed_prompts)
+    if deduped_prompt_collection.prompts:
+        prompt_texts.extend(deduped_prompt_collection.prompts)
+
+    log_batch_prompts_responses(
+        prompts=prompt_texts,
+        responses=raw_completions,
+        metadata={
+            "provider": config.provider,
+            "model_name": config.model_name,
+            "config": config.__class__.__name__,
+            "cache_alias": cache_alias,
+            "is_embedding": config.is_embedding,
+        },
+    )
 
     # Parse completions
     parser_fn = get_parser(config.parser)
