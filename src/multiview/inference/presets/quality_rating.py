@@ -12,7 +12,7 @@ from ._base import InferenceConfig
 LMJUDGE_QUALITY_RATING_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/quality/quality_rating_gemini.txt",
+    prompt_template="prompts/quality/quality_rating.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {
@@ -33,7 +33,7 @@ LMJUDGE_QUALITY_RATING_GEMINI = InferenceConfig(
 LMJUDGE_QUALITY_RATING_WITH_ANNOTATION_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/quality/quality_rating_with_annotation_gemini.txt",
+    prompt_template="prompts/quality/quality_rating_with_annotation.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {

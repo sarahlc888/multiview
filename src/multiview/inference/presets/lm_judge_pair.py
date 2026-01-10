@@ -13,7 +13,7 @@ from ._base import InferenceConfig
 LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/lm_judge/pair_plaintext_likerthard_gemini.txt",
+    prompt_template="prompts/lm_judge/pair_plaintext_likerthard.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {
@@ -35,7 +35,7 @@ LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI = InferenceConfig(
 LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/lm_judge/pair_norewrite_binaryhard_gemini.txt",
+    prompt_template="prompts/lm_judge/pair_norewrite_binaryhard.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {
@@ -55,7 +55,7 @@ LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI = InferenceConfig(
 LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/lm_judge/pair_with_annotation_likerthard_gemini.txt",
+    prompt_template="prompts/lm_judge/pair_with_annotation_likerthard.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {
@@ -77,7 +77,7 @@ LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI = InferenceConfig(
 LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash-lite",
-    prompt_template="prompts/lm_judge/pair_with_annotation_binaryhard_gemini.txt",
+    prompt_template="prompts/lm_judge/pair_with_annotation_binaryhard.txt",
     parser="regex",
     parser_kwargs={
         "outputs_to_match": {

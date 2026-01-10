@@ -362,14 +362,14 @@ class TestFileBasedPrompts:
         )
 
         # Verify the config has a file path
-        assert "prompts/lm_judge/triplet_plaintext_binaryhard_gemini.txt" in LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI.prompt_template
+        assert "prompts/lm_judge/triplet_plaintext_binaryhard.txt" in LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI.prompt_template
 
     def test_read_or_return_with_file(self):
         """Test read_or_return loads file correctly."""
         from multiview.utils.prompt_utils import read_or_return
 
         # Test with a known prompt file
-        content = read_or_return("prompts/lm_judge/triplet_plaintext_binaryhard_gemini.txt")
+        content = read_or_return("prompts/lm_judge/triplet_plaintext_binaryhard.txt")
 
         # Check that content was loaded
         assert isinstance(content, str)

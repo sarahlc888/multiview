@@ -10,7 +10,7 @@ from ._base import InferenceConfig
 TRIPLET_SELECTION_GEMINI = InferenceConfig(
     provider="gemini",
     model_name="gemini-2.5-flash",
-    prompt_template="prompts/triplet/triplet_selection_gemini.txt",
+    prompt_template="prompts/triplet/triplet_selection.txt",
     parser="text",
     temperature=1.0,
     max_tokens=8192,
