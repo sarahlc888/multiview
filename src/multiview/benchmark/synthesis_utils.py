@@ -10,88 +10,25 @@ from multiview.inference.presets import InferenceConfig
 logger = logging.getLogger(__name__)
 
 
-def _extract_problem_text(completion: str) -> str:
-    """Extract clean problem text from LLM completion.
-
-    Generic cleaning that removes reasoning and LLM artifacts. Looks for the
-    "---FINAL OUTPUT---" delimiter to extract the final answer, or falls back
-    to heuristic parsing. Does not assume any specific document format.
-
-    Args:
-        completion: Raw LLM completion text
-
-    Returns:
-        Cleaned problem text with reasoning and artifacts removed
-    """
-    text = completion.strip()
-
-    # Primary extraction: Look for the FINAL OUTPUT delimiter
-    if "---FINAL OUTPUT---" in text:
-        text = text.split("---FINAL OUTPUT---", 1)[1].strip()
-        return text
-
-    # Fallback: Use heuristic parsing if delimiter not found
-    # Remove markdown section headers if present
-    if "### Rewritten Problem" in text:
-        text = text.split("### Rewritten Problem", 1)[1].strip()
-
-    # Remove leading parenthetical instructions if present
-    if text.startswith("(Output ONLY") or text.startswith("(output only"):
-        lines = text.split("\n", 1)
-        if len(lines) > 1:
-            text = lines[1].strip()
-
-    # Remove leading numbered analysis lists (e.g., "1. Response 1 arithmetic...")
-    # Stop when we hit a blank line followed by actual content
-    lines = text.split("\n")
-    skip_until_blank = False
-    if lines and lines[0].strip() and lines[0].strip()[0].isdigit():
-        skip_until_blank = True
-
-    if skip_until_blank:
-        # Find the first blank line, then start from the next non-blank line
-        for i, line in enumerate(lines):
-            if not line.strip():  # Found blank line
-                # Get content after blank line
-                remaining = "\n".join(lines[i + 1 :]).strip()
-                if remaining:
-                    text = remaining
-                    break
-
-    return text
-
-
 def synthesize_documents(
     documents: list[Any],
     document_set: Any,
     criterion_name: str,
-    num_synthetic_per_doc: int = 2,
+    num_synthetic_docs: int = 0,
 ) -> tuple[list[Any], list[int]]:
-    """Generate synthetic documents using LM-based remix strategy.
-
-    For each (X, Y) pair of documents:
-    - Hard positive: Preserves X's criterion + borrows Y's themes
-    - Hard negative: Changes to Y's criterion + borrows X's themes
-
-    Args:
-        documents: List of original documents
-        document_set: DocumentSet instance (for getting text and configs)
-        criterion_name: Criterion being used
-        num_synthetic_per_doc: How many synthetic docs per original (split 50/50)
-
-    Returns:
-        Tuple of (synthetic_documents, anchor_indices)
-        - synthetic_documents: List of synthetic documents
-        - anchor_indices: List of indices of documents used as anchors (doc_x from pairs)
-
-    Raises:
-        ValueError: If no synthesis config found for this criterion
-    """
+    """Generate synthetic documents using LM-based remix strategy."""
     if len(documents) == 0:
         logger.warning("No documents to synthesize")
         return [], []
 
-    # Check for criterion-specific config
+    if num_synthetic_docs <= 0:
+        logger.info("num_synthetic_docs <= 0; skipping synthesis")
+        return [], []
+
+    num_remix_anchors = num_synthetic_docs // 2
+    if num_synthetic_docs % 2 != 0:
+        num_remix_anchors += 1
+
     synthesis_configs = getattr(document_set, "SYNTHESIS_CONFIGS", {})
     if criterion_name not in synthesis_configs:
         raise ValueError(
@@ -101,143 +38,113 @@ def synthesize_documents(
         )
 
     criterion_config = synthesis_configs[criterion_name]
-    hard_positive_prompt = criterion_config["hard_positive_prompt"]
-    hard_negative_prompt = criterion_config["hard_negative_prompt"]
+    remix_prompt = criterion_config.get("remix_prompt")
+    if remix_prompt is None:
+        raise ValueError(
+            f"Synthesis config for criterion '{criterion_name}' must define 'remix_prompt'."
+        )
 
-    # Calculate number of pairs needed
-    # Each pair generates 1 hard_positive + 1 hard_negative
-    num_pairs = (len(documents) * num_synthetic_per_doc) // 2
+    rng = random.Random(42)
+    all_indices = list(range(len(documents)))
 
-    if num_pairs == 0:
-        logger.warning("num_synthetic_per_doc too small, no pairs will be generated")
-        return [], []
+    if num_remix_anchors <= len(all_indices):
+        remix_anchor_indices = rng.sample(all_indices, k=num_remix_anchors)
+    else:
+        remix_anchor_indices = [
+            rng.choice(all_indices) for _ in range(num_remix_anchors)
+        ]
+        logger.info(
+            "num_remix_anchors=%d > len(documents)=%d; sampling anchors with replacement.",
+            num_remix_anchors,
+            len(all_indices),
+        )
 
-    logger.info(f"Generating {num_pairs} (X, Y) pairs for synthesis...")
+    logger.info(
+        "Selected %d remix anchors (will generate %d synthetic docs total).",
+        len(remix_anchor_indices),
+        2 * len(remix_anchor_indices),
+    )
 
-    # Sample (X, Y) pairs using indices
-    random.seed(42)  # For reproducibility
-    pairs = []  # List of (idx_x, idx_y) tuples
-    anchor_indices = []  # Track X indices for triplet anchors
+    angle_a_doc1: list[str] = []
+    angle_a_doc2: list[str] = []
+    angle_b_doc1: list[str] = []
+    angle_b_doc2: list[str] = []
 
-    for _ in range(num_pairs):
-        idx_x = random.randint(0, len(documents) - 1)
-        idx_y = random.randint(0, len(documents) - 1)
-        # Ensure X != Y if possible
-        while idx_y == idx_x and len(documents) > 1:
-            idx_y = random.randint(0, len(documents) - 1)
-        pairs.append((idx_x, idx_y))
-        anchor_indices.append(idx_x)
+    for anchor_idx in remix_anchor_indices:
+        if len(all_indices) > 1:
+            decoy1 = rng.choice(all_indices)
+            while decoy1 == anchor_idx:
+                decoy1 = rng.choice(all_indices)
+            decoy2 = rng.choice(all_indices)
+            while decoy2 == anchor_idx:
+                decoy2 = rng.choice(all_indices)
+        else:
+            decoy1 = anchor_idx
+            decoy2 = anchor_idx
 
-    # Build inputs for both synthesis types
-    texts_pos = [
-        document_set.get_document_text(documents[idx_x]) for idx_x, idx_y in pairs
-    ]
-    refs_pos = [
-        document_set.get_document_text(documents[idx_y]) for idx_x, idx_y in pairs
-    ]
+        angle_a_doc1.append(document_set.get_document_text(documents[anchor_idx]))
+        angle_a_doc2.append(document_set.get_document_text(documents[decoy1]))
+        angle_b_doc1.append(document_set.get_document_text(documents[decoy2]))
+        angle_b_doc2.append(document_set.get_document_text(documents[anchor_idx]))
 
-    texts_neg = [
-        document_set.get_document_text(documents[idx_x]) for idx_x, idx_y in pairs
-    ]
-    refs_neg = [
-        document_set.get_document_text(documents[idx_y]) for idx_x, idx_y in pairs
-    ]
-
-    criterias = [criterion_name] * len(pairs)
-
-    # Create InferenceConfigs dynamically with criterion-specific prompts
-    config_pos = InferenceConfig(
+    remix_config = InferenceConfig(
         provider="gemini",
         model_name="gemini-2.5-flash",
-        prompt_template=hard_positive_prompt,
-        parser="text",
+        prompt_template=remix_prompt,
+        parser="delimiter",
+        parser_kwargs={"delimiter": "---FINAL OUTPUT---"},
         temperature=0.7,
         max_tokens=2048,
     )
 
-    config_neg = InferenceConfig(
-        provider="gemini",
-        model_name="gemini-2.5-flash",
-        prompt_template=hard_negative_prompt,
-        parser="text",
-        temperature=0.7,
-        max_tokens=2048,
-    )
-
-    # Run inference for hard positives
-    logger.info(
-        f"Generating {len(pairs)} hard positive synthetic documents (preserve X's criterion, borrow Y's themes)..."
-    )
-    try:
-        raw_positives = run_inference(
-            inputs={"text": texts_pos, "ref": refs_pos, "criteria": criterias},
-            config=config_pos,
-            cache_alias=f"synth_hard_positive_{criterion_name}",
-            force_refresh=False,
-            verbose=True,
-        )
-    except Exception as e:
-        logger.error(f"Error generating hard positive documents: {e}")
-        raw_positives = []
-
-    # Run inference for hard negatives
-    logger.info(
-        f"Generating {len(pairs)} hard negative synthetic documents (change to Y's criterion, borrow X's themes)..."
-    )
-    try:
-        raw_negatives = run_inference(
-            inputs={"text": texts_neg, "ref": refs_neg, "criteria": criterias},
-            config=config_neg,
-            cache_alias=f"synth_hard_negative_{criterion_name}",
-            force_refresh=False,
-            verbose=True,
-        )
-    except Exception as e:
-        logger.error(f"Error generating hard negative documents: {e}")
-        raw_negatives = []
-
-    # Calculate maximum allowed length (125% of longest original doc)
     max_original_length = max(
         len(document_set.get_document_text(doc)) for doc in documents
     )
     max_allowed_length = int(max_original_length * 1.25)
 
-    # Extract and combine results with filtering
-    synthetic_docs = []
+    synthetic_docs: list[Any] = []
     filtered_count = 0
+    anchor_indices: list[int] = []
 
-    # Extract hard positives
-    for completion in raw_positives:
-        if completion and completion.strip():
-            cleaned = _extract_problem_text(completion)
-            if cleaned:
-                # Filter out docs that are too long
-                if len(cleaned) > max_allowed_length:
-                    logger.warning(
-                        f"Filtered out synthetic doc (too long: {len(cleaned)} > {max_allowed_length} chars)"
-                    )
-                    filtered_count += 1
-                    continue
-                synthetic_docs.append(cleaned)
+    def _append_filtered(raw_outputs: list, anchors: list[int]) -> None:
+        nonlocal filtered_count
+        for cleaned, anchor_idx in zip(raw_outputs, anchors, strict=False):
+            if not isinstance(cleaned, str):
+                continue
+            cleaned = cleaned.strip()
+            if not cleaned:
+                continue
+            if len(cleaned) > max_allowed_length:
+                logger.warning(
+                    f"Filtered out synthetic doc (too long: {len(cleaned)} > {max_allowed_length} chars)"
+                )
+                filtered_count += 1
+                continue
+            synthetic_docs.append(cleaned)
+            anchor_indices.append(anchor_idx)
 
-    # Extract hard negatives
-    for completion in raw_negatives:
-        if completion and completion.strip():
-            cleaned = _extract_problem_text(completion)
-            if cleaned:
-                # Filter out docs that are too long
-                if len(cleaned) > max_allowed_length:
-                    logger.warning(
-                        f"Filtered out synthetic doc (too long: {len(cleaned)} > {max_allowed_length} chars)"
-                    )
-                    filtered_count += 1
-                    continue
-                synthetic_docs.append(cleaned)
+    for mode, d1, d2 in (
+        ("angle_a", angle_a_doc1, angle_a_doc2),
+        ("angle_b", angle_b_doc1, angle_b_doc2),
+    ):
+        logger.info(
+            f"Generating {len(remix_anchor_indices)} {mode} synthetic documents..."
+        )
+        try:
+            raw_outputs = run_inference(
+                inputs={"document1": d1, "document2": d2},
+                config=remix_config,
+                cache_alias=f"synth_remix_{mode}_{criterion_name}",
+                force_refresh=False,
+                verbose=True,
+            )
+        except Exception as e:
+            logger.error(f"Error generating {mode} documents: {e}")
+            raw_outputs = []
+        _append_filtered(raw_outputs, remix_anchor_indices)
 
     logger.info(
         f"Successfully generated {len(synthetic_docs)} synthetic documents "
-        f"({len([x for x in raw_positives if x])} hard positive + "
-        f"{len([x for x in raw_negatives if x])} hard negative). "
         f"Filtered out {filtered_count} docs that were too long."
     )
 

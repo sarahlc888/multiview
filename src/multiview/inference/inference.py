@@ -25,6 +25,37 @@ from multiview.inference.providers import get_completion_fn
 logger = logging.getLogger(__name__)
 
 
+def generate_cache_path_if_needed(
+    *,
+    config,
+    cache_path: str | None,
+    cache_alias: str | None,
+) -> str | None:
+    """Generate a cache_path based on config + cache_alias, if needed.
+
+    This is a thin wrapper around `get_cache_hash()` that keeps cache naming logic
+    out of the main inference loop.
+    """
+    if cache_path is not None or cache_alias is None:
+        return cache_path
+
+    config_dict = {
+        "provider": config.provider,
+        "model_name": config.model_name,
+        "temperature": config.temperature,
+        "max_tokens": config.max_tokens,
+        "prompt_template": config.prompt_template,
+        "embed_query_instr_template": config.embed_query_instr_template,
+        "embed_doc_instr_template": config.embed_doc_instr_template,
+        "force_prefill_template": config.force_prefill_template,
+        "is_embedding": config.is_embedding,
+        "parser": config.parser,
+        "parser_kwargs": config.parser_kwargs,
+    }
+    cache_hash = get_cache_hash(config_dict, cache_alias)
+    return str(INFERENCE_CACHE_DIR / f"{cache_hash}.json")
+
+
 def run_inference(
     inputs: dict[str, list],
     config: InferenceConfig | str,
@@ -32,8 +63,9 @@ def run_inference(
     cache_alias: str | None = None,
     force_refresh: bool = False,
     verbose: bool = False,
+    return_raw: bool = False,
     **config_overrides,
-) -> list:
+) -> list | tuple[list, list]:
     """Run inference on inputs using a language model or embedding model.
 
     This is the main inference function, similar to query_annotator() from the old repo.
@@ -52,10 +84,12 @@ def run_inference(
         cache_alias: Human-readable alias for cache file naming.
         force_refresh: If True, ignore cache and recompute all.
         verbose: Whether to log verbose output.
+        return_raw: If True, return (parsed, raw) tuple instead of just parsed.
         **config_overrides: Override config fields (e.g., temperature=0.5)
 
     Returns:
-        List of parsed outputs (length matches input lists)
+        List of parsed outputs (length matches input lists), or
+        Tuple of (parsed_outputs, raw_completions) if return_raw=True
 
     Example:
         >>> # Using a preset
@@ -93,22 +127,11 @@ def run_inference(
         )
 
     # Generate cache path if not provided
-    if cache_path is None and cache_alias is not None:
-        config_dict = {
-            "provider": config.provider,
-            "model_name": config.model_name,
-            "temperature": config.temperature,
-            "max_tokens": config.max_tokens,
-            "prompt_template": config.prompt_template,
-            "embed_query_instr_template": config.embed_query_instr_template,
-            "embed_doc_instr_template": config.embed_doc_instr_template,
-            "force_prefill_template": config.force_prefill_template,
-            "is_embedding": config.is_embedding,
-            "parser": config.parser,
-            "parser_kwargs": config.parser_kwargs,
-        }
-        cache_hash = get_cache_hash(config_dict, cache_alias)
-        cache_path = str(INFERENCE_CACHE_DIR / f"{cache_hash}.json")
+    cache_path = generate_cache_path_if_needed(
+        config=config,
+        cache_path=cache_path,
+        cache_alias=cache_alias,
+    )
 
     # Respect global USE_CACHE flag
     # If USE_CACHE is False, disable caching by setting cache_path to None
@@ -188,12 +211,17 @@ def run_inference(
             parsed = parser_fn(raw_completion, **parser_kwargs)
             parsed_completions.append(parsed)
         except Exception as e:
-            logger.error(f"Error parsing completion: {e}")
-            logger.error(f"Raw completion: {raw_completion}")
+            # Error details already logged by parser
+            logger.debug(f"Parse error (details logged by parser): {type(e).__name__}")
             # Return None or empty on parse error
             parsed_completions.append(None)
 
     # Re-duplicate to match original input order
     output = [parsed_completions[i] for i in remap_idxs]
 
-    return output
+    if return_raw:
+        # Also return raw completions in original order
+        raw_output = [raw_completions[i] for i in remap_idxs]
+        return output, raw_output
+    else:
+        return output

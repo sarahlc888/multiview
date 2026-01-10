@@ -1,0 +1,30 @@
+You are designing annotation guidance for free-text summaries.
+
+CRITERION: {criterion}
+
+CRITERION DESCRIPTION:
+{criterion_description}
+
+SUMMARY HINT (optional):
+{guidance_hint}
+
+DESIRED FORMAT (optional):
+{format_hint}
+
+SAMPLE DOCUMENTS:
+{sample_documents}
+
+The summary should include two sections:
+1) Annotation trace: freeform text with justification and references to the document.
+2) Final summary: concise, structured, high lexical overlap for similar documents; invariant to spurious factors; should not reference the specifics of the document unless there's no other way to illustrate the point.
+
+If a desired format is specified above, the final summary should follow that format.
+
+Include a short demonstration showing how to produce both fields for one example document.
+
+Think through multiple candidate guidance options, then choose the single best option.
+Return valid JSON with reasoning:
+{
+  "reasoning": "Explain what guidance options you considered and why this approach best helps annotators create useful summaries",
+  "summary_guidance": "..."
+}

@@ -20,47 +20,6 @@ PROMPT_LOGGING_ENABLED = os.getenv("MULTIVIEW_LOG_PROMPTS", "0") == "1"
 PROMPT_LOG_DIR = Path(os.getenv("MULTIVIEW_PROMPT_LOG_DIR", "outputs/prompt_logs"))
 
 
-def log_prompt_response(
-    prompt: str,
-    response: Any,
-    metadata: dict | None = None,
-) -> None:
-    """Log a prompt and its response to a file.
-
-    Args:
-        prompt: The prompt sent to the LM
-        response: The response from the LM
-        metadata: Optional metadata (model, config, cache_alias, etc.)
-    """
-    if not PROMPT_LOGGING_ENABLED:
-        return
-
-    try:
-        # Create log directory if it doesn't exist
-        PROMPT_LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-        # Generate log filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        log_file = PROMPT_LOG_DIR / f"prompt_{timestamp}.jsonl"
-
-        # Prepare log entry
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "prompt": prompt,
-            "response": response,
-            "metadata": metadata or {},
-        }
-
-        # Write to file (append mode)
-        with open(log_file, "w") as f:
-            json.dump(log_entry, f, indent=2)
-
-        logger.debug(f"Logged prompt/response to {log_file}")
-
-    except Exception as e:
-        logger.warning(f"Failed to log prompt/response: {e}")
-
-
 def log_batch_prompts_responses(
     prompts: list[str],
     responses: list[Any],
@@ -117,13 +76,3 @@ def log_batch_prompts_responses(
 
     except Exception as e:
         logger.warning(f"Failed to log batch prompts/responses: {e}")
-
-
-def is_prompt_logging_enabled() -> bool:
-    """Check if prompt logging is enabled."""
-    return PROMPT_LOGGING_ENABLED
-
-
-def get_prompt_log_dir() -> Path:
-    """Get the directory where prompt logs are stored."""
-    return PROMPT_LOG_DIR

@@ -17,6 +17,7 @@ import pytest
 from multiview.inference import InferenceConfig, get_preset, list_presets, run_inference
 
 
+@pytest.mark.dev
 class TestPresets:
     """Test preset loading and listing."""
 
@@ -42,6 +43,7 @@ class TestPresets:
             get_preset("nonexistent_preset")
 
 
+@pytest.mark.external
 class TestGeminiInference:
     """Test Gemini LM inference."""
 
@@ -120,6 +122,7 @@ class TestGeminiInference:
         assert results[0].startswith("The sky is")
 
 
+@pytest.mark.external
 class TestCaching:
     """Test caching behavior."""
 
@@ -262,6 +265,7 @@ class TestCaching:
             assert len(cache_data["completions"]) == 2
 
 
+@pytest.mark.external
 class TestMultipleProviders:
     """Test multiple providers work."""
 
@@ -312,6 +316,7 @@ class TestMultipleProviders:
         assert "6" in results[0]
 
 
+@pytest.mark.external
 class TestPresetUsage:
     """Test using presets."""
 
@@ -345,3 +350,78 @@ class TestPresetUsage:
         # Other fields should remain
         assert modified_config.provider == "gemini"
         assert modified_config.model_name == "gemini-2.5-flash-lite"
+
+
+class TestFileBasedPrompts:
+    """Test file-based prompt loading."""
+
+    def test_file_based_prompt_loads_correctly(self):
+        """Test that prompts from files are loaded correctly."""
+        from multiview.inference.presets.lm_judge_triplet import (
+            LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
+        )
+
+        # Verify the config has a file path
+        assert "prompts/lm_judge/triplet_plaintext_binaryhard_gemini.txt" in LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI.prompt_template
+
+    def test_read_or_return_with_file(self):
+        """Test read_or_return loads file correctly."""
+        from multiview.utils.prompt_utils import read_or_return
+
+        # Test with a known prompt file
+        content = read_or_return("prompts/lm_judge/triplet_plaintext_binaryhard_gemini.txt")
+
+        # Check that content was loaded
+        assert isinstance(content, str)
+        assert len(content) > 0
+        assert "similarity" in content.lower()
+
+    def test_read_or_return_with_inline_string(self):
+        """Test read_or_return returns inline strings as-is."""
+        from multiview.utils.prompt_utils import read_or_return
+
+        inline_prompt = "You are a helpful assistant. Answer: {text}"
+        result = read_or_return(inline_prompt)
+
+        # Should return the same string
+        assert result == inline_prompt
+
+    @pytest.mark.dev
+    def test_read_or_return_inline_with_backslashes_does_not_treat_as_path(self):
+        """Inline prompts may contain escape sequences like \\n or \\' (YAML/JSON)."""
+        from multiview.utils.prompt_utils import read_or_return
+
+        inline_prompt = (
+            "Given two problems, remix them.\\n\\n"
+            "Keep structure from Problem 1 but theme from Problem 2.\\n"
+            "Don\\'t reuse the same numbers.\\n"
+            "---FINAL OUTPUT---\\n"
+            "Question: ... {text}"
+        )
+        result = read_or_return(inline_prompt)
+
+        assert result == inline_prompt
+
+    def test_backward_compatibility_with_inline_prompts(self):
+        """Test that inline prompts still work (backward compatibility)."""
+        # Create a config with an inline prompt
+        config = InferenceConfig(
+            provider="gemini",
+            model_name="gemini-2.5-flash-lite",
+            prompt_template="Test prompt: {text}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=10,
+        )
+
+        from multiview.inference.prompts import format_prompts
+
+        # Format the prompt
+        collection = format_prompts(
+            inputs={"text": ["hello"]},
+            config=config,
+        )
+
+        # Check that the prompt was formatted correctly
+        assert len(collection.prompts) == 1
+        assert collection.prompts[0] == "Test prompt: hello"

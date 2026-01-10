@@ -2,7 +2,7 @@
 # Goal: Generate 256 triplets and evaluate with 4 methods
 run_name: "gsm8k_arithmetic_256_4methods"
 logging:
-  level: INFO
+  level: DEBUG
   output_file: null  # Log to console only
 seed: 42
 use_cache: true
@@ -10,17 +10,23 @@ use_cache: true
 # Task configuration
 tasks:
   defaults:
-    max_docs: 50  # Need more docs than triplets for good sampling
-    max_triplets: 4
+    max_docs: 10 # 50  # Need more docs than triplets for good sampling
+    max_triplets: 2 # 4
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false
-    num_synthetic_per_doc: 2    # How many synthetic docs to generate per original doc
+    num_synthetic_docs: 4    # Absolute number of synthetic docs to generate
 
     # Triplet creation parameters for lm_all style
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
     use_spurious_hard_negs: true
-    n_schema_samples: 10
+    n_schema_samples: 4
+
+    # Quality filtering parameters
+    rate_triplet_quality: true  # Enable LM-based quality rating
+    min_triplet_quality: 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
+                            # 1=invalid, 2=ambiguous, 3=trivial, 4=ideal
+                            # Set to null to rate but not filter
 
   task_list:
     - document_set: gsm8k
@@ -45,7 +51,9 @@ methods_to_evaluate:
 
   # Method 2: LM Judge Triplet (Gemini direct comparison)
   lm_judge_triplet:
-    - name: gemini_flash_triplet
+    - name: gemini_flash_triplet_with_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini
+    - name: gemini_flash_triplet_no_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_gemini
 
   # Method 3 & 4: Embeddings with/without instructions

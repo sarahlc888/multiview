@@ -7,9 +7,20 @@ similarity between documents in triplets.
 import logging
 from typing import Any
 
+from multiview.benchmark.triplets.utils import (
+    add_annotation_summaries_to_inputs,
+    triplet_annotation_summary,
+    triplet_full_annotation,
+)
 from multiview.inference.inference import run_inference
 
 logger = logging.getLogger(__name__)
+
+
+def _raw_to_text(raw: Any) -> str:
+    if isinstance(raw, dict):
+        return str(raw.get("text", raw))
+    return str(raw)
 
 
 def evaluate_with_lm_judge_triplet(
@@ -20,67 +31,18 @@ def evaluate_with_lm_judge_triplet(
     cache_alias: str | None = None,
     annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate triplets using an LM judge.
-
-    This method uses a language model to judge which of two documents (positive or negative)
-    is more similar to an anchor document based on a similarity criterion.
-
-    Args:
-        triplets: List of triplet dicts with keys:
-            - "anchor": anchor document text (or document dict)
-            - "positive": positive document text (or document dict)
-            - "negative": negative document text (or document dict)
-        criterion: Similarity criterion name
-        criterion_description: Detailed description of the criterion (optional)
-        lm_judge_preset: Preset name for LM judge (default: simple triplet comparison)
-        cache_alias: Cache alias for inference caching
-        annotations: List of annotation dicts, one per document, with at least "summary" key (optional).
-            If provided, will use annotation-aware preset and include summaries in the prompt.
-
-    Returns:
-        Dict with evaluation metrics:
-            - accuracy: Float between 0 and 1
-            - n_correct: Number of triplets where positive ranked higher than negative
-            - n_incorrect: Number of triplets where negative ranked higher than positive
-            - n_ties: Number of triplets judged as ties
-            - n_total: Total number of triplets evaluated
-
-    Example:
-        >>> triplets = [
-        ...     {"anchor": "doc1", "positive": "doc2", "negative": "doc3"},
-        ...     {"anchor": "doc4", "positive": "doc5", "negative": "doc6"},
-        ... ]
-        >>> results = evaluate_with_lm_judge_triplet(
-        ...     triplets,
-        ...     criterion="mathematical_operations",
-        ...     criterion_description="What math operations are used in the problem"
-        ... )
-        >>> print(f"Accuracy: {results['accuracy']:.2f}")
-        Accuracy: 0.85
-    """
+    """Evaluate triplets using an LM judge."""
     if not triplets:
         logger.warning("No triplets provided for evaluation")
         return {
-            "accuracy": 0.0,
-            "n_correct": 0,
-            "n_incorrect": 0,
-            "n_ties": 0,
-            "n_total": 0,
+            "outcomes": [],
+            "triplet_logs": [],
         }
 
     logger.info(f"Evaluating {len(triplets)} triplets with LM judge")
     logger.info(f"Using preset: {lm_judge_preset}")
 
-    # Check if we have annotations
     has_annotations = annotations is not None and len(annotations) > 0
-
-    # Prepare inputs for batch inference
-    # For the triplet judge preset, we need:
-    # - similarity_criteria: the criterion description
-    # - document_a: anchor
-    # - document_b: positive
-    # - document_c: negative
-    # If annotations are provided, also include annotation_a, annotation_b, annotation_c
 
     inputs = {
         "similarity_criteria": [criterion_description or criterion] * len(triplets),
@@ -89,73 +51,92 @@ def evaluate_with_lm_judge_triplet(
         "document_c": [t["negative"] for t in triplets],
     }
 
-    # Add annotations if provided
     if has_annotations:
-        # Extract document IDs from triplets to look up annotations
-        # Triplets are passed with document dicts, need to get annotation by index/id
         logger.info("Using annotations in evaluation")
+        add_annotation_summaries_to_inputs(
+            inputs,
+            triplets=triplets,
+            annotations=annotations,
+            triplet_keys_by_input_suffix={
+                "a": "anchor",
+                "b": "positive",
+                "c": "negative",
+            },
+        )
 
-        # Try to get annotations from triplets directly (if they were pre-attached)
-        # Otherwise, look them up from the annotations list
-        def get_annotation_summary(triplet_key: str, triplet_idx: int) -> str:
-            """Get annotation summary for a document in the triplet."""
-            # First try to get from triplet itself (if pre-attached)
-            annotation_key = f"{triplet_key}_annotation"
-            if annotation_key in triplets[triplet_idx]:
-                ann = triplets[triplet_idx][annotation_key]
-                return ann.get("summary", "") if isinstance(ann, dict) else str(ann)
-
-            # Otherwise try to map using document indices
-            # This requires that triplets contain document indices
-            id_key = f"{triplet_key}_id"
-            if id_key in triplets[triplet_idx] and annotations:
-                doc_id = triplets[triplet_idx][id_key]
-                if 0 <= doc_id < len(annotations):
-                    ann = annotations[doc_id]
-                    return ann.get("summary", "") if isinstance(ann, dict) else ""
-
-            return ""
-
-        inputs["annotation_a"] = [
-            get_annotation_summary("anchor", i) for i in range(len(triplets))
-        ]
-        inputs["annotation_b"] = [
-            get_annotation_summary("positive", i) for i in range(len(triplets))
-        ]
-        inputs["annotation_c"] = [
-            get_annotation_summary("negative", i) for i in range(len(triplets))
-        ]
-
-    # Run inference
-    results = run_inference(
+    results, raw_responses = run_inference(
         inputs=inputs,
         config=lm_judge_preset,
         cache_alias=cache_alias,
         verbose=False,
+        return_raw=True,
     )
 
-    # Count results
-    # The triplet judge returns:
-    #   1 if (b) is more similar to (a) - i.e., positive wins (correct)
-    #  -1 if (c) is more similar to (a) - i.e., negative wins (incorrect)
-    #   0 if tie/draw
-    n_correct = sum(1 for r in results if r == 1)
-    n_incorrect = sum(1 for r in results if r == -1)
-    n_ties = sum(1 for r in results if r == 0)
-    n_total = len(results)
+    triplet_logs: list[dict[str, Any]] = []
+    crit_desc = criterion_description or criterion
 
-    # Calculate accuracy (excluding ties)
-    n_judged = n_correct + n_incorrect
-    accuracy = n_correct / n_judged if n_judged > 0 else 0.0
+    for i, t in enumerate(triplets):
+        outcome = results[i] if i < len(results) else None
+        record: dict[str, Any] = {
+            "triplet_idx": i,
+            "method_type": "lm_judge_triplet",
+            "lm_judge_preset": lm_judge_preset,
+            "cache_alias": cache_alias,
+            "criterion": criterion,
+            "criterion_description": crit_desc,
+            "outcome": outcome,
+            "anchor": t.get("anchor"),
+            "positive": t.get("positive"),
+            "negative": t.get("negative"),
+            "anchor_id": t.get("anchor_id"),
+            "positive_id": t.get("positive_id"),
+            "negative_id": t.get("negative_id"),
+        }
 
-    logger.info(f"Evaluation complete: {n_correct}/{n_total} correct ({accuracy:.2%})")
-    if n_ties > 0:
-        logger.info(f"Note: {n_ties} triplets judged as ties (excluded from accuracy)")
+        if i < len(raw_responses):
+            record["lm_judge_reasoning"] = _raw_to_text(raw_responses[i])
+
+        if has_annotations:
+            record["annotation_anchor_summary"] = triplet_annotation_summary(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="anchor",
+                annotations=annotations,
+            )
+            record["annotation_positive_summary"] = triplet_annotation_summary(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="positive",
+                annotations=annotations,
+            )
+            record["annotation_negative_summary"] = triplet_annotation_summary(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="negative",
+                annotations=annotations,
+            )
+            record["annotation_anchor_full"] = triplet_full_annotation(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="anchor",
+                annotations=annotations,
+            )
+            record["annotation_positive_full"] = triplet_full_annotation(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="positive",
+                annotations=annotations,
+            )
+            record["annotation_negative_full"] = triplet_full_annotation(
+                triplets=triplets,
+                triplet_idx=i,
+                triplet_key="negative",
+                annotations=annotations,
+            )
+
+        triplet_logs.append(record)
 
     return {
-        "accuracy": accuracy,
-        "n_correct": n_correct,
-        "n_incorrect": n_incorrect,
-        "n_ties": n_ties,
-        "n_total": n_total,
+        "outcomes": results,
+        "triplet_logs": triplet_logs,
     }

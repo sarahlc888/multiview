@@ -1,10 +1,23 @@
 # Tests
 
+## Main tests for development ladder
+- all document sets with random triplets (`tests/benchmark/test_triplet_utils.py::test_create_random_triplets`)
+- GSM8K with synthesis -> quality triplets
+
 ## Running Tests
 
 ```bash
 # Run all tests
 pytest tests/ -v
+
+# Run only core/local tests (skip external API/network tests)
+pytest tests/ -v
+
+# Opt-in to tests that call external APIs / require network
+pytest tests/ -v --run-external
+
+# Exclude lightweight dev-sanity tests
+pytest tests/ -v -m "not dev"
 
 # Run specific test file
 pytest tests/benchmark/test_annotations.py -v
@@ -35,7 +48,7 @@ pytest tests/ --cov=multiview --cov-report=html
 
 ## API Keys
 
-Some tests require API keys and are skipped by default:
+Some tests require API keys / network access and are skipped by default:
 
 ```bash
 export GEMINI_API_KEY=your_key
@@ -43,4 +56,8 @@ export OPENAI_API_KEY=your_key
 export ANTHROPIC_API_KEY=your_key
 ```
 
-Tests that need API keys are marked with `@pytest.mark.skip`.
+### Markers / flags
+
+- **`@pytest.mark.external`**: Calls external APIs / requires network. Skipped unless you pass `--run-external`.
+- **`@pytest.mark.dev`**: Lightweight sanity tests useful during development; exclude via `-m "not dev"`.
+- **`@pytest.mark.integration`**: End-to-end/pipeline tests (often also `external`).

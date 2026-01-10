@@ -1,4 +1,4 @@
-"""Benchmark evaluation methods.
+"""Scoring methods to evaluate.
 
 This package contains implementations of various methods for evaluating triplet accuracy,
 including LM judges, BM25, and embedding models.

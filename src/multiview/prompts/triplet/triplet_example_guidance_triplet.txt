@@ -1,0 +1,6 @@
+TRIPLET EXAMPLE GUIDANCE:
+This example illustrates what makes a good triplet for this criterion:
+
+EXAMPLE ANCHOR: {anchor_ex}
+EXAMPLE POSITIVE: {pos_ex}
+EXAMPLE NEGATIVE: {neg_ex}

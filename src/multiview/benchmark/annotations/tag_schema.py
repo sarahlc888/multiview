@@ -76,10 +76,6 @@ def generate_tag_schema(
 
     schema = results[0]
 
-    # Handle case where json parser wraps result in list
-    if isinstance(schema, list) and len(schema) > 0:
-        schema = schema[0]
-
     if schema is None:
         raise ValueError(
             f"Failed to generate {'spurious ' if is_spurious else ''}tag schema"
@@ -121,54 +117,6 @@ def generate_spurious_tag_schema(
         is_spurious=True,
         cache_alias=cache_alias,
     )
-
-
-def apply_tags(
-    document: str,
-    criterion: str,
-    criterion_description: str,
-    tag_schema: dict,
-    cache_alias: str | None = None,
-) -> dict:
-    """Apply binary tags to a single document.
-
-    Args:
-        document: Document string
-        criterion: Criterion name
-        criterion_description: Criterion description
-        tag_schema: Tag schema dict
-        cache_alias: Optional cache alias for inference calls
-
-    Returns:
-        Dict with tags: {"tag1": true, "tag2": false, ...}
-    """
-    # Format schema for prompt
-    tags = tag_schema.get("tags", [])
-    tags_text = "\n".join([f"- {tag['name']}: {tag['description']}" for tag in tags])
-
-    # Prepare inputs
-    inputs = {
-        "document": [document],
-        "criterion": [criterion],
-        "criterion_description": [criterion_description or ""],
-        "tag_schema": [tags_text],
-    }
-
-    # Run inference
-    results = run_inference(
-        inputs=inputs,
-        config="tag_apply_gemini",
-        cache_alias=cache_alias,
-        verbose=False,
-    )
-
-    # Extract tags (convert 0/1 to boolean)
-    result = results[0]
-    if result is None:
-        return {}
-
-    tags_dict = result if isinstance(result, dict) else {}
-    return {k: bool(v) for k, v in tags_dict.items()}
 
 
 def apply_tags_batch(

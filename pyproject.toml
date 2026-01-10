@@ -69,3 +69,8 @@ python_functions = ["test_*"]
 addopts = [
     "-v",
 ]
+markers = [
+    "dev: lightweight sanity tests useful during development",
+    "integration: end-to-end or pipeline-level tests",
+    "external: tests that call external APIs / require network access",
+]

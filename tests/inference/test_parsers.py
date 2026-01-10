@@ -10,6 +10,7 @@ Tests cover:
 import pytest
 
 from multiview.inference.parsers import (
+    delimiter_parser,
     get_parser,
     json_parser,
     text_parser,
@@ -20,13 +21,21 @@ from multiview.inference.parsers import (
 class TestJSONParser:
     """Test JSON parser."""
 
-    def test_json_parser_wraps_dict_in_list(self):
-        """Test that JSON parser wraps dict in list when no annotation_key."""
+    def test_json_parser_returns_dict_by_default(self):
+        """Test that JSON parser returns parsed JSON as-is when no annotation_key."""
         completion = '{"key": "value", "number": 42}'
 
         result = json_parser(completion)
 
-        # Should wrap in list for consistency
+        assert isinstance(result, dict)
+        assert result == {"key": "value", "number": 42}
+
+    def test_json_parser_wrap_singletons_legacy_behavior(self):
+        """Test legacy behavior: wrap dict in list when wrap_singletons=True."""
+        completion = '{"key": "value", "number": 42}'
+
+        result = json_parser(completion, wrap_singletons=True)
+
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0] == {"key": "value", "number": 42}
@@ -72,10 +81,9 @@ class TestJSONParser:
 
         result = json_parser(completion)
 
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert "categories" in result[0]
-        assert len(result[0]["categories"]) == 1
+        assert isinstance(result, dict)
+        assert "categories" in result
+        assert len(result["categories"]) == 1
 
     def test_json_parser_error_on_empty(self):
         """Test that empty completion raises error."""
@@ -110,6 +118,22 @@ class TestTextParser:
         """Test that dict without text/content raises error."""
         with pytest.raises(ValueError, match="No text/content"):
             text_parser({"other_key": "value"})
+
+
+class TestDelimiterParser:
+    def test_delimiter_parser_extracts_after_delimiter(self):
+        completion = "analysis...\n---FINAL OUTPUT---\nHello world"
+        assert (
+            delimiter_parser(completion, delimiter="---FINAL OUTPUT---") == "Hello world"
+        )
+
+    def test_delimiter_parser_uses_last_occurrence(self):
+        completion = "a\n---FINAL OUTPUT---\nfirst\n---FINAL OUTPUT---\nsecond"
+        assert delimiter_parser(completion, delimiter="---FINAL OUTPUT---") == "second"
+
+    def test_get_parser_delimiter(self):
+        parser = get_parser("delimiter")
+        assert parser == delimiter_parser
 
 
 class TestVectorParser:
@@ -161,7 +185,7 @@ class TestJSONParserEdgeCases:
     def test_schema_generation_response(self):
         """Test parsing response from category schema generation.
 
-        This was the actual bug - the response is a dict but gets wrapped in a list.
+        The response should parse as a dict.
         """
         completion = """{
   "reasoning": "I chose these categories because...",
@@ -173,16 +197,10 @@ class TestJSONParserEdgeCases:
 
         result = json_parser(completion)
 
-        # Should be wrapped in list
-        assert isinstance(result, list)
-        assert len(result) == 1
-
-        # Unwrap to get actual schema
-        schema = result[0]
-        assert isinstance(schema, dict)
-        assert "categories" in schema
-        assert "reasoning" in schema
-        assert len(schema["categories"]) == 2
+        assert isinstance(result, dict)
+        assert "categories" in result
+        assert "reasoning" in result
+        assert len(result["categories"]) == 2
 
     def test_classification_response_with_annotation_key(self):
         """Test parsing classification response with annotation_key."""
@@ -220,13 +238,10 @@ class TestJSONParserEdgeCases:
 
         result = json_parser(completion)
 
-        assert isinstance(result, list)
-        assert len(result) == 1
-
-        data = result[0]
-        assert "reasoning" in data
-        assert "summary" in data
+        assert isinstance(result, dict)
+        assert "reasoning" in result
+        assert "summary" in result
         # Verify the content with backticks is preserved correctly
-        assert "`calculate()`" in data["reasoning"]
+        assert "`calculate()`" in result["reasoning"]
         # The summary should contain the code block markers
-        assert "```" in data["summary"]
+        assert "```" in result["summary"]

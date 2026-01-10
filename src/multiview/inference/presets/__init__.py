@@ -8,18 +8,14 @@ browsing and maintenance.
 # Base configuration class
 from ._base import InferenceConfig
 
-# Annotation application
-from .annotation_apply import (
+# Annotation (schema generation + application)
+from .annotation import (
     CATEGORY_CLASSIFY_GEMINI,
-    SUMMARY_GENERATE_GEMINI,
-    TAG_APPLY_GEMINI,
-)
-
-# Annotation schema generation
-from .annotation_schemas import (
     CATEGORY_SCHEMA_GENERATION_GEMINI,
     SPURIOUS_TAG_SCHEMA_GENERATION_GEMINI,
+    SUMMARY_GENERATE_GEMINI,
     SUMMARY_GUIDANCE_GENERATION_GEMINI,
+    TAG_APPLY_GEMINI,
     TAG_SCHEMA_GENERATION_GEMINI,
 )
 
@@ -56,7 +52,14 @@ from .lm_judge_pair import (
 # LM judge presets - triplet
 from .lm_judge_triplet import (
     LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
+    LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_WITH_ANNOTATION_GEMINI,
     LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI,
+)
+
+# Quality rating presets
+from .quality_rating import (
+    LMJUDGE_QUALITY_RATING_GEMINI,
+    LMJUDGE_QUALITY_RATING_WITH_ANNOTATION_GEMINI,
 )
 
 # Document rewriting presets
@@ -89,9 +92,13 @@ PRESET_REGISTRY = {
     "lmjudge_triplet_plaintext_binaryhard_gemini": LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
     "lmjudge_pair_norewrite_binaryhard_gemini": LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI,
     # LM judge presets with annotations
+    "lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini": LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_WITH_ANNOTATION_GEMINI,
     "lmjudge_triplet_with_annotation_gemini": LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI,
     "lmjudge_pair_with_annotation_likerthard_gemini": LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI,
     "lmjudge_pair_with_annotation_binaryhard_gemini": LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI,
+    # Quality rating presets
+    "lmjudge_quality_rating_gemini": LMJUDGE_QUALITY_RATING_GEMINI,
+    "lmjudge_quality_rating_with_annotation_gemini": LMJUDGE_QUALITY_RATING_WITH_ANNOTATION_GEMINI,
     # Multi-faceted annotation presets
     "category_schema_generation_gemini": CATEGORY_SCHEMA_GENERATION_GEMINI,
     "tag_schema_generation_gemini": TAG_SCHEMA_GENERATION_GEMINI,
@@ -158,9 +165,12 @@ __all__ = [
     "LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI",
     "LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI",
     "LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI",
+    "LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_WITH_ANNOTATION_GEMINI",
     "LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI",
     "LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI",
     "LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI",
+    "LMJUDGE_QUALITY_RATING_GEMINI",
+    "LMJUDGE_QUALITY_RATING_WITH_ANNOTATION_GEMINI",
     "CATEGORY_SCHEMA_GENERATION_GEMINI",
     "TAG_SCHEMA_GENERATION_GEMINI",
     "SPURIOUS_TAG_SCHEMA_GENERATION_GEMINI",

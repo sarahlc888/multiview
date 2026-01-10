@@ -13,7 +13,7 @@ from multiview.benchmark.annotations.class_schema import (
     generate_category_schema,
 )
 
-
+pytestmark = pytest.mark.dev
 class TestSchemaUnwrapping:
     """Test that schema results are properly unwrapped."""
 

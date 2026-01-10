@@ -253,8 +253,8 @@ def cached_fn_completions(
     if completion_field_name not in completion_cache:
         completion_cache[completion_field_name] = {}
 
-    if verbose and len(packed_prompts) > 0:
-        logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
+    if len(packed_prompts) > 0:
+        logger.debug(f"Example prompt:\n{non_packed_prompts[0]}")
 
     # Hash prompts for cache keys
     prompt_hashes = [hash_prompt(p) for p in packed_prompts]
@@ -318,6 +318,21 @@ def cached_fn_completions(
 
                 record_cache_hit(model_name, input_tokens, output_tokens)
 
+        # Log cache hits
+        if cached_indices:
+            # Log at INFO level if all prompts are cached (so cache hits are visible)
+            # Otherwise log at DEBUG level to avoid noise when there are uncached prompts
+            if len(uncached_prompts) == 0:
+                logger.info(
+                    f"Cache hits: {len(cached_indices)}/{len(packed_prompts)} prompts "
+                    f"found in cache @ {completion_cache_path}"
+                )
+            else:
+                logger.debug(
+                    f"Cache hits: {len(cached_indices)}/{len(packed_prompts)} prompts "
+                    f"found in cache @ {completion_cache_path}"
+                )
+
         # Filter kwargs arrays to match uncached prompts
         for key in [
             "force_prefills",
@@ -333,9 +348,12 @@ def cached_fn_completions(
     # Log cache status
     if verbose or len(uncached_prompts) > 0:
         if not (mute_if_cache_hit and len(uncached_prompts) == 0):
+            cache_hit_info = ""
+            if not force_refresh and cached_indices:
+                cache_hit_info = f" ({len(cached_indices)} from cache)"
             logger.info(
                 f"Running {len(uncached_prompts)} uncached completions "
-                f"(out of {len(packed_prompts)} total) @ {completion_cache_path}"
+                f"(out of {len(packed_prompts)} total){cache_hit_info} @ {completion_cache_path}"
             )
 
     # Run completions for uncached prompts
@@ -383,10 +401,16 @@ def cached_fn_completions(
 
     # Return completions in requested format
     if return_type == "list":
+        logger.debug(
+            f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
+        )
         return [
             completion_cache[completion_field_name][h]["result"] for h in prompt_hashes
         ]
     elif return_type == "dict":
+        logger.debug(
+            f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
+        )
         return {
             completion_field_name: [
                 completion_cache[completion_field_name][h]["result"]

@@ -100,6 +100,31 @@ class TestFormatPrompts:
         assert pc.prompts[0] == "Say: hello"
         assert pc.prompts[1] == "Say: world"
 
+    def test_formatting_allows_literal_json_braces(self):
+        """Prompt templates often contain JSON examples with literal braces."""
+        inputs = {"criterion": ["arithmetic"], "sample_documents": ["[1] a\n\n[2] b"]}
+        config = InferenceConfig(
+            provider="gemini",
+            model_name="gemini-2.5-flash-lite",
+            prompt_template=(
+                "CRITERION: {criterion}\n\n"
+                "SAMPLE DOCUMENTS:\n{sample_documents}\n\n"
+                "Return valid JSON:\n"
+                "{\n"
+                '  "reasoning": "Explain why",\n'
+                '  "categories": [{"name": "...", "description": "..."}]\n'
+                "}\n"
+            ),
+            parser="text",
+        )
+
+        pc = format_prompts(inputs, config)
+        assert len(pc.prompts) == 1
+        assert "CRITERION: arithmetic" in pc.prompts[0]
+        assert '"reasoning"' in pc.prompts[0]
+        assert pc.prompts[0].count("{") >= 2
+        assert pc.prompts[0].count("}") >= 2
+
     def test_singleton_broadcasting(self):
         """Test that singleton inputs are broadcasted."""
         inputs = {

@@ -11,18 +11,11 @@ document sets. Each criterion includes:
 
 # GSM8K: Math word problems
 GSM8K_CRITERIA = {
-    "arithmetic": {  # Short alias
-        "description": "The types of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem.",
-        "category_schema_hint": "Consider categories like: addition only, subtraction only, multiplication/division, mixed operations, fractions/decimals, percentages, etc.",
-        "tag_schema_hint": "Create binary tags for each operation type: uses_addition, uses_subtraction, uses_multiplication, uses_division, uses_fractions, uses_percentages, uses_exponents, etc.",
-        "summary_guidance_hint": "List the sequence of arithmetic operations needed, being specific about operation types.",
-        "summary_format_hint": "Return a list of operation types in order, e.g., ['multiplication', 'addition', 'division']",
-    },
-    "arithmetic_operations": {  # Full name (same as above)
-        "description": "The types of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem.",
-        "category_schema_hint": "Consider categories like: addition only, subtraction only, multiplication/division, mixed operations, fractions/decimals, percentages, etc.",
-        "tag_schema_hint": "Create binary tags for each operation type: uses_addition, uses_subtraction, uses_multiplication, uses_division, uses_fractions, uses_percentages, uses_exponents, etc.",
-        "summary_guidance_hint": "List the sequence of arithmetic operations needed, being specific about operation types.",
+    "arithmetic": {
+        "description": "The exact sequence of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem.",
+        "category_schema_hint": None,
+        "tag_schema_hint": None,
+        "summary_guidance_hint": "List the exact sequence of arithmetic operations needed.",
         "summary_format_hint": "Return a list of operation types in order, e.g., ['multiplication', 'addition', 'division']",
     },
     "problem_type": {

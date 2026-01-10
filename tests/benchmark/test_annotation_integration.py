@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from multiview.benchmark.task import Task
+from multiview.benchmark.artifacts import save_task_annotations
 
 
 class TestTaskAnnotationIntegration:
@@ -79,7 +80,7 @@ class TestTaskAnnotationIntegration:
 
             # Save annotations
             output_dir = Path(tmpdir) / "annotations"
-            task.save_doc_annotations(output_dir)
+            save_task_annotations(task, output_dir)
 
             # Verify file was created
             task_name = task.get_task_name()
@@ -276,7 +277,7 @@ class TestAnnotationErrorHandling:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             with pytest.raises(RuntimeError, match="Must call annotate_documents"):
-                task.save_doc_annotations(tmpdir)
+                save_task_annotations(task, tmpdir)
 
 
 class TestAnnotationWithDifferentDatasets:

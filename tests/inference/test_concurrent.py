@@ -3,7 +3,9 @@
 Tests ThreadPoolExecutor integration in provider functions.
 """
 
+import sys
 import time
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -25,6 +27,7 @@ from multiview.inference.providers.gemini import (
 class TestConcurrentExecution:
     """Test concurrent execution with ThreadPoolExecutor."""
 
+    @pytest.mark.dev
     def test_openai_sequential_vs_concurrent(self):
         """Test that concurrent execution is faster than sequential."""
         # Mock OpenAI client and response
@@ -41,7 +44,15 @@ class TestConcurrentExecution:
 
         # Test sequential (max_workers=1)
         prompts = ["test"] * 5
-        with patch("multiview.inference.providers.openai.openai.OpenAI", return_value=mock_client):
+        class _FakeRateLimitError(Exception):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=lambda api_key=None: mock_client,
+            RateLimitError=_FakeRateLimitError,
+        )
+        with patch.dict(sys.modules, {"openai": fake_openai}):
             with patch("multiview.inference.providers.openai.OPENAI_API_KEYS", ["test-key"]):
                 start = time.time()
                 result_seq = openai_completions(
@@ -53,7 +64,7 @@ class TestConcurrentExecution:
                 time_seq = time.time() - start
 
         # Test concurrent (max_workers=5)
-        with patch("multiview.inference.providers.openai.openai.OpenAI", return_value=mock_client):
+        with patch.dict(sys.modules, {"openai": fake_openai}):
             with patch("multiview.inference.providers.openai.OPENAI_API_KEYS", ["test-key"]):
                 start = time.time()
                 result_conc = openai_completions(
@@ -75,6 +86,7 @@ class TestConcurrentExecution:
         # Allow some overhead, but concurrent should be at least 2x faster
         assert time_conc < time_seq / 2, f"Concurrent ({time_conc:.2f}s) not faster than sequential ({time_seq:.2f}s)"
 
+    @pytest.mark.dev
     def test_anthropic_concurrent_execution(self):
         """Test that Anthropic provider supports concurrent execution."""
         # Mock Anthropic client and response
@@ -89,7 +101,11 @@ class TestConcurrentExecution:
         mock_client.messages.create = slow_create
 
         prompts = ["test"] * 4
-        with patch("multiview.inference.providers.anthropic.anthropic.Anthropic", return_value=mock_client):
+        fake_anthropic = types.SimpleNamespace(
+            Anthropic=lambda api_key=None: mock_client,
+            RateLimitError=Exception,
+        )
+        with patch.dict(sys.modules, {"anthropic": fake_anthropic}):
             with patch("multiview.inference.providers.anthropic.ANTHROPIC_API_KEY", "test-key"):
                 start = time.time()
                 result = anthropic_completions(
@@ -108,6 +124,7 @@ class TestConcurrentExecution:
         # With 4 workers, should be ~50ms plus overhead
         assert elapsed < 0.15, f"Concurrent execution too slow: {elapsed:.2f}s"
 
+    @pytest.mark.dev
     def test_gemini_concurrent_execution(self):
         """Test that Gemini provider supports concurrent execution."""
         # Mock Gemini client and response
@@ -121,7 +138,26 @@ class TestConcurrentExecution:
         mock_client.models.generate_content = slow_generate
 
         prompts = ["test"] * 4
-        with patch("multiview.inference.providers.gemini.genai.Client", return_value=mock_client):
+        class _FakeGenerateContentConfig:  # noqa: N801
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+        fake_google_genai = types.SimpleNamespace(
+            Client=lambda api_key=None: mock_client,
+        )
+        fake_google_genai_types = types.SimpleNamespace(
+            GenerateContentConfig=_FakeGenerateContentConfig,
+        )
+        fake_google = types.SimpleNamespace(genai=fake_google_genai)
+
+        with patch.dict(
+            sys.modules,
+            {
+                "google": fake_google,
+                "google.genai": fake_google_genai,
+                "google.genai.types": fake_google_genai_types,
+            },
+        ):
             with patch("multiview.inference.providers.gemini.GEMINI_API_KEY", "test-key"):
                 start = time.time()
                 result = gemini_completions(
@@ -155,7 +191,15 @@ class TestConcurrentExecution:
         # Use distinct prompts to verify order
         prompts = [f"prompt_{i}" for i in range(10)]
 
-        with patch("multiview.inference.providers.openai.openai.OpenAI", return_value=mock_client):
+        class _FakeRateLimitError(Exception):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=lambda api_key=None: mock_client,
+            RateLimitError=_FakeRateLimitError,
+        )
+        with patch.dict(sys.modules, {"openai": fake_openai}):
             with patch("multiview.inference.providers.openai.OPENAI_API_KEYS", ["test-key"]):
                 result = openai_completions(
                     prompts=prompts,
@@ -183,7 +227,15 @@ class TestConcurrentExecution:
         prompts = ["prompt1", "prompt2", "prompt3"]
         prefills = ["pre1", "pre2", "pre3"]
 
-        with patch("multiview.inference.providers.openai.openai.OpenAI", return_value=mock_client):
+        class _FakeRateLimitError(Exception):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=lambda api_key=None: mock_client,
+            RateLimitError=_FakeRateLimitError,
+        )
+        with patch.dict(sys.modules, {"openai": fake_openai}):
             with patch("multiview.inference.providers.openai.OPENAI_API_KEYS", ["test-key"]):
                 result = openai_completions(
                     prompts=prompts,
@@ -202,9 +254,19 @@ class TestConcurrentExecution:
 class TestRetryLogic:
     """Test exponential backoff retry logic."""
 
+    @pytest.mark.dev
     def test_openai_retry_with_backoff(self):
         """Test that OpenAI retries with exponential backoff on rate limit."""
         mock_client = MagicMock()
+
+        class _FakeRateLimitError(Exception):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=lambda api_key=None: mock_client,
+            RateLimitError=_FakeRateLimitError,
+        )
 
         # Fail twice, then succeed
         call_count = 0
@@ -226,19 +288,18 @@ class TestRetryLogic:
 
         mock_client.chat.completions.create = rate_limited_create
 
-        with patch("multiview.inference.providers.openai.openai.OpenAI", return_value=mock_client):
-            with patch("multiview.inference.providers.openai.OPENAI_API_KEYS", ["test-key"]):
-                result = _openai_single_completion(
-                    client=mock_client,
-                    prompt="test",
-                    prefill=None,
-                    model_name="gpt-4.1-mini",
-                    temperature=0.0,
-                    max_tokens=100,
-                    max_retries=5,
-                    initial_retry_delay=0.1,  # Short delay for testing
-                    retry_backoff_factor=2.0,
-                )
+        with patch.dict(sys.modules, {"openai": fake_openai}):
+            result = _openai_single_completion(
+                client=mock_client,
+                prompt="test",
+                prefill=None,
+                model_name="gpt-4.1-mini",
+                temperature=0.0,
+                max_tokens=100,
+                max_retries=5,
+                initial_retry_delay=0.1,  # Short delay for testing
+                retry_backoff_factor=2.0,
+            )
 
         # Verify success after retries
         assert result["text"] == "success"
@@ -257,6 +318,15 @@ class TestRetryLogic:
         """Test that function returns empty completion after exhausting retries."""
         mock_client = MagicMock()
 
+        class _FakeRateLimitError(Exception):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args)
+
+        fake_openai = types.SimpleNamespace(
+            OpenAI=lambda api_key=None: mock_client,
+            RateLimitError=_FakeRateLimitError,
+        )
+
         # Always fail
         def always_fail(*args, **kwargs):
             import openai
@@ -264,17 +334,18 @@ class TestRetryLogic:
 
         mock_client.chat.completions.create = always_fail
 
-        result = _openai_single_completion(
-            client=mock_client,
-            prompt="test",
-            prefill=None,
-            model_name="gpt-4.1-mini",
-            temperature=0.0,
-            max_tokens=100,
-            max_retries=2,  # Only 2 retries
-            initial_retry_delay=0.01,  # Very short for testing
-            retry_backoff_factor=2.0,
-        )
+        with patch.dict(sys.modules, {"openai": fake_openai}):
+            result = _openai_single_completion(
+                client=mock_client,
+                prompt="test",
+                prefill=None,
+                model_name="gpt-4.1-mini",
+                temperature=0.0,
+                max_tokens=100,
+                max_retries=2,  # Only 2 retries
+                initial_retry_delay=0.01,  # Very short for testing
+                retry_backoff_factor=2.0,
+            )
 
         # Should return empty completion after exhausting retries
         assert result["text"] == ""

@@ -20,6 +20,7 @@ from multiview.benchmark.annotations import (
     apply_tags_batch,
 )
 
+pytestmark = pytest.mark.dev
 
 # Sample test documents
 SAMPLE_DOCS = [

@@ -14,6 +14,7 @@ from multiview.benchmark.triplets.utils import (
     jaccard_similarity,
 )
 
+pytestmark = pytest.mark.dev
 
 class TestExtractActiveTags:
     """Tests for extract_active_tags helper."""

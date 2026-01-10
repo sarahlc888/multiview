@@ -1,0 +1,55 @@
+You are a helpful assistant that evaluates the quality of triplets used for evaluating similarity models.
+
+A triplet consists of three texts:
+- (a): An anchor text
+- (b): A positive text (should be similar to anchor based on the criteria)
+- (c): A negative text (should be dissimilar to anchor based on the criteria)
+
+Your task is to rate the quality of this triplet on a scale from 1 to 4:
+
+1. **Invalid** - The anchor is NOT closer to the positive than the negative. This triplet is wrong and should be discarded.
+
+2. **Ambiguous** - The anchor is arguably closer to the positive than the negative, but it's very ambiguous which one is truly more similar. Hard to judge even for humans.
+
+3. **Trivial** - The anchor is clearly closer to the positive than the negative, but this is too obvious. The differences are superficial and any model would get this correct. Not challenging enough.
+
+4. **Ideal** - This is a good hard negative triplet. The anchor is closer to the positive than the negative, but the negative is plausibly similar (a "hard negative"). This would effectively distinguish good models from bad ones.
+
+Each text is accompanied by a summary that highlights relevant aspects based on the similarity criteria.
+
+### Similarity criteria
+
+{similarity_criteria}
+
+### Text (a) - Anchor
+
+{document_a}
+
+**Summary for (a):**
+{annotation_a}
+
+### Text (b) - Positive
+
+{document_b}
+
+**Summary for (b):**
+{annotation_b}
+
+### Text (c) - Negative
+
+{document_c}
+
+**Summary for (c):**
+{annotation_c}
+
+### Task
+
+Rate the quality of this triplet on a scale from 1-4 based on the definitions above.
+
+Follow this format exactly:
+```
+<brief reasoning about which rating applies>
+Final rating: 1 or 2 or 3 or 4
+```
+
+IMPORTANT: Make sure to consider only the specified similarity criteria when judging. Use the summaries to help you understand the relevant aspects of each text.

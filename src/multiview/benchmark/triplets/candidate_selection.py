@@ -12,10 +12,26 @@ import logging
 import numpy as np
 
 from multiview.benchmark.bm25_utils import compute_bm25_scores
-from multiview.benchmark.triplets.utils import extract_active_tags, jaccard_similarity
+from multiview.benchmark.triplets.utils import (
+    annotation_final_summary,
+    extract_active_tags,
+    jaccard_similarity,
+)
 from multiview.inference.inference import run_inference
 
 logger = logging.getLogger(__name__)
+
+
+def _texts_for_similarity(
+    *,
+    documents: list[str],
+    annotations: list[dict],
+    use_summary: bool,
+) -> list[str]:
+    """Return a text corpus for similarity scoring (summaries or raw documents)."""
+    if not use_summary:
+        return documents
+    return [annotation_final_summary(ann) for ann in annotations]
 
 
 def select_candidates_bm25(
@@ -37,13 +53,9 @@ def select_candidates_bm25(
     Returns:
         List of (index, score) tuples, sorted by score descending
     """
-    # Prepare corpus
-    if use_summary:
-        corpus = [
-            ann.get("summary", {}).get("final_summary", "") for ann in annotations
-        ]
-    else:
-        corpus = documents
+    corpus = _texts_for_similarity(
+        documents=documents, annotations=annotations, use_summary=use_summary
+    )
 
     # Compute BM25 scores using advanced tokenization
     scores = compute_bm25_scores(corpus, anchor_idx)
@@ -83,11 +95,9 @@ def select_candidates_embedding(
     Returns:
         List of (index, score) tuples, sorted by score descending
     """
-    # Prepare texts
-    if use_summary:
-        texts = [ann.get("summary", {}).get("final_summary", "") for ann in annotations]
-    else:
-        texts = documents
+    texts = _texts_for_similarity(
+        documents=documents, annotations=annotations, use_summary=use_summary
+    )
 
     # Get embeddings
     inputs = {"document": texts}

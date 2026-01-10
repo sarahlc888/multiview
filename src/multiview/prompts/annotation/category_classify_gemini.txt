@@ -1,0 +1,20 @@
+Classify this document into one of the given categories based on the criteria.
+
+CRITERIA: {criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+CATEGORIES:
+{category_schema}
+
+DOCUMENT (all fields):
+{document}
+
+Use the category definitions strictly. If numeric fields are present, classify based primarily on those values.
+
+Output valid JSON with reasoning:
+{
+  "reasoning": "Briefly explain why this document fits this category based on the criteria",
+  "category": "exact_category_name"
+}

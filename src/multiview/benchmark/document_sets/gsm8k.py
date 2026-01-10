@@ -7,9 +7,7 @@ from datasets import load_dataset
 
 from multiview.benchmark.document_sets.base import BaseDocSet
 from multiview.benchmark.document_sets.criteria_metadata import GSM8K_CRITERIA
-from multiview.benchmark.document_sets.synthesis_configs import (
-    GSM8K_SYNTHESIS_CONFIGS,
-)
+from multiview.benchmark.document_sets.synthesis_configs import GSM8K_SYNTHESIS_CONFIGS
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +33,6 @@ class GSM8KDocSet(BaseDocSet):
 
         Loads the GSM8K dataset and formats each example as:
         "Question: {question}\nAnswer: {answer}"
-
-        Returns:
-            List of formatted documents (problems)
         """
         logger.info(f"Loading GSM8K from Hugging Face: {self.DATASET_PATH}")
 
@@ -51,24 +46,19 @@ class GSM8KDocSet(BaseDocSet):
             dataset = load_dataset(
                 self.DATASET_PATH, "main", split=split, streaming=True
             )
-            # Shuffle and take the first max_docs
             dataset = dataset.shuffle(seed=42).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, "main", split=split)
             if max_docs is not None:
-                # Shuffle and slice for non-streaming mode
                 dataset = dataset.shuffle(seed=42)
 
-        # Format documents
         documents = []
         for i, example in enumerate(dataset):
-            # Format as "Question: ...\nAnswer: ..."
             formatted_doc = (
                 f"Question: {example['question']}\nAnswer: {example['answer']}"
             )
             documents.append(formatted_doc)
 
-            # Respect max_docs in non-streaming mode
             if not use_streaming and max_docs is not None and i + 1 >= max_docs:
                 break
 
@@ -76,13 +66,5 @@ class GSM8KDocSet(BaseDocSet):
         return documents
 
     def get_document_text(self, document: Any) -> str:
-        """Extract text from a document.
-
-        Args:
-            document: A single document (formatted string)
-
-        Returns:
-            The text content of the document
-        """
-        # Documents are already formatted as strings
+        """Extract text from a document."""
         return document if isinstance(document, str) else ""

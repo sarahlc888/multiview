@@ -21,6 +21,7 @@ from multiview.benchmark.triplets.utils import (
     jaccard_similarity,
 )
 from multiview.inference.inference import run_inference
+from multiview.utils.prompt_utils import read_or_return
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +61,9 @@ def select_triplet(
     criterion: str,
     criterion_description: str,
     triplet_example: dict | str | None = None,
+    lm_judge_preset: str = "triplet_selection_gemini",
     cache_alias: str | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, bool]:
     """Use LM judge to select positive and negative from candidates.
 
     Args:
@@ -75,12 +77,12 @@ def select_triplet(
         cache_alias: Cache alias for LM calls
 
     Returns:
-        Tuple of (positive_idx, negative_idx)
+        Tuple of (positive_idx, negative_idx, parse_success)
     """
 
     if len(candidate_indices) < 2:
         # Not enough candidates, return first two
-        return candidate_indices[0], candidate_indices[-1]
+        return candidate_indices[0], candidate_indices[-1], False
 
     # Get anchor info
     anchor_doc = documents[anchor_idx]
@@ -108,9 +110,8 @@ def select_triplet(
 
         cand_annotation = format_annotation_for_display(cand_ann)
 
-        cand_text = f"[{i+1}] {cand}\n"
-        cand_text += f"Annotation: {cand_annotation}\n"
-        cand_text += f"True Tag Similarity: {true_sim:.2f} | Spurious Tag Similarity: {spurious_sim:.2f}"
+        cand_text = f"[{i+1}] {cand}\n{cand_annotation}\n"
+        cand_text += f"Similarity: T={true_sim:.2f} | S={spurious_sim:.2f}"
 
         candidates_text_parts.append(cand_text)
 
@@ -123,16 +124,21 @@ def select_triplet(
             anchor_ex = triplet_example.get("anchor", "")
             pos_ex = triplet_example.get("pos", "")
             neg_ex = triplet_example.get("neg", "")
-            triplet_example_section = f"""TRIPLET EXAMPLE GUIDANCE:
-This example illustrates what makes a good triplet for this criterion:
-
-EXAMPLE ANCHOR: {anchor_ex}
-EXAMPLE POSITIVE: {pos_ex}
-EXAMPLE NEGATIVE: {neg_ex}
-
-"""
+            section_template = read_or_return(
+                "prompts/triplet/triplet_example_guidance_triplet.txt"
+            )
+            triplet_example_section = section_template.format(
+                anchor_ex=anchor_ex,
+                pos_ex=pos_ex,
+                neg_ex=neg_ex,
+            )
         else:
-            triplet_example_section = f"TRIPLET EXAMPLE GUIDANCE:\n{triplet_example}\n"
+            section_template = read_or_return(
+                "prompts/triplet/triplet_example_guidance_text.txt"
+            )
+            triplet_example_section = section_template.format(
+                triplet_example=triplet_example
+            )
 
     # Prepare inputs for LM judge
     inputs = {
@@ -145,11 +151,15 @@ EXAMPLE NEGATIVE: {neg_ex}
     }
 
     # Run LM judge
+    logger.debug(
+        f"Running LM judge for triplet selection (anchor_idx={anchor_idx}, "
+        f"candidates={len(candidate_indices)}, cache_alias={cache_alias})"
+    )
     results = run_inference(
         inputs=inputs,
-        config="triplet_selection_gemini",
+        config=lm_judge_preset,
         cache_alias=cache_alias,
-        verbose=False,
+        verbose=False,  # Keep False to avoid too much noise, but cache hits will show via DEBUG logs
     )
 
     response = results[0] if results else ""
@@ -176,12 +186,25 @@ EXAMPLE NEGATIVE: {neg_ex}
                 pass
 
     # Fallback: use heuristic if parsing fails
+    parse_success = True
     if positive_idx is None:
+        logger.error(
+            f"CRITICAL: Failed to parse positive selection from LM response. "
+            f"Using first candidate as fallback.\n"
+            f"Response preview: {response[:500]}\n"
+            f"Full response: {response}"
+        )
         positive_idx = candidate_indices[0]
-        logger.warning("Failed to parse positive selection, using first candidate")
+        parse_success = False
     if negative_idx is None:
+        logger.error(
+            f"CRITICAL: Failed to parse negative selection from LM response. "
+            f"Using last candidate as fallback.\n"
+            f"Response preview: {response[:500]}\n"
+            f"Full response: {response}"
+        )
         negative_idx = candidate_indices[-1]
-        logger.warning("Failed to parse negative selection, using last candidate")
+        parse_success = False
     if positive_idx == negative_idx and len(candidate_indices) > 1:
         # Ensure they're different
         negative_idx = (
@@ -190,7 +213,7 @@ EXAMPLE NEGATIVE: {neg_ex}
             else candidate_indices[0]
         )
 
-    return positive_idx, negative_idx
+    return positive_idx, negative_idx, parse_success
 
 
 def create_lm_triplets(
@@ -274,6 +297,7 @@ def create_lm_triplets(
         )
 
     triplets = []
+    parse_failures = 0  # Track how many times LM parsing failed
 
     logger.info(
         f"Creating {len(anchors_to_process)} triplets using LM judge with {candidate_strategy} strategy"
@@ -359,7 +383,7 @@ def create_lm_triplets(
             f"{cache_alias_prefix}_judge" if cache_alias_prefix else None
         )
 
-        positive_idx, negative_idx = select_triplet(
+        positive_idx, negative_idx, parse_success = select_triplet(
             anchor_idx=anchor_idx,
             candidate_indices=candidate_indices,
             documents=documents,
@@ -369,12 +393,23 @@ def create_lm_triplets(
             or criterion
             or "general similarity",
             triplet_example=triplet_example,
+            lm_judge_preset=lm_judge_preset,
             cache_alias=judge_cache_alias,
         )
+
+        if not parse_success:
+            parse_failures += 1
 
         # Create triplet (IDs only, not text)
         triplet = (anchor_idx, positive_idx, negative_idx)
         triplets.append(triplet)
 
     logger.info(f"Created {len(triplets)} triplets")
+    if parse_failures > 0:
+        logger.error(
+            f"CRITICAL: LM judge parsing failed for {parse_failures}/{len(triplets)} triplets "
+            f"({100*parse_failures/len(triplets):.1f}%). "
+            f"These triplets used fallback heuristics instead of intelligent selection. "
+            f"Check logs above for full LM responses."
+        )
     return triplets

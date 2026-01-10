@@ -18,6 +18,7 @@ import pytest
 from multiview.inference import InferenceConfig, run_inference
 
 
+@pytest.mark.external
 class TestOpenAIEmbeddings:
     """Test OpenAI embedding models."""
 
@@ -81,6 +82,7 @@ class TestOpenAIEmbeddings:
         assert len(vector) == 3072
 
 
+@pytest.mark.external
 class TestHuggingFaceEmbeddings:
     """Test HuggingFace API embedding models."""
 
@@ -165,6 +167,7 @@ class TestHuggingFaceEmbeddings:
         assert len(vector) > 1000
 
 
+@pytest.mark.external
 class TestEmbeddingCaching:
     """Test caching behavior for embeddings."""
 
@@ -266,6 +269,7 @@ class TestEmbeddingCaching:
             assert results[0] != results[1]
 
 
+@pytest.mark.external
 class TestEmbeddingInstructions:
     """Test embedding instructions (query/doc side)."""
 
@@ -416,6 +420,7 @@ class TestVectorParser:
         not os.getenv("OPENAI_API_KEY"),
         reason="OPENAI_API_KEY not set",
     )
+    @pytest.mark.external
     def test_vector_parser_returns_list(self):
         """Test vector parser returns a list of numbers."""
         results = run_inference(

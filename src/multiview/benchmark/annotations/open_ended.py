@@ -64,7 +64,8 @@ def generate_criteria_description(
     if description is None:
         description = criterion_description or ""
     else:
-        description = description.strip()
+        # Parsing (e.g., delimiter extraction) is handled by the inference preset.
+        description = str(description).strip()
 
     logger.info("Generated enhanced criteria description")
     return {"description": description}
@@ -100,11 +101,13 @@ def generate_summary_guidance(
     sample_docs = deterministic_sample(documents, n_samples, criterion)
     sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
 
+    criterion_description = (criterion_description or "").strip()
+
     # Prepare inputs with template variables
     # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
         "criterion": [criterion],
-        "criterion_description": [criterion_description or ""],
+        "criterion_description": [criterion_description],
         "guidance_hint": [guidance_hint or ""],
         "format_hint": [format_hint or ""],
         "sample_documents": [sample_docs_str],
@@ -129,64 +132,6 @@ def generate_summary_guidance(
             logger.warning("First attempt failed to parse, retrying once...")
 
     raise ValueError("Failed to generate summary guidance after 2 attempts")
-
-
-def generate_summary(
-    document: str,
-    criterion: str,
-    criterion_description: str,
-    summary_guidance: dict,
-    cache_alias: str | None = None,
-) -> dict:
-    """Generate a structured summary for a single document.
-
-    Args:
-        document: Document string
-        criterion: Criterion name
-        criterion_description: Criterion description
-        summary_guidance: Summary guidance dict
-        cache_alias: Optional cache alias for inference calls
-
-    Returns:
-        Summary dict with structure:
-        {
-            "annotation_trace": "...",
-            "final_summary": "..."
-        }
-    """
-    # Extract the summary_guidance string from the dict
-    guidance_str = (
-        summary_guidance.get("summary_guidance", "")
-        if isinstance(summary_guidance, dict)
-        else str(summary_guidance)
-    )
-
-    # Prepare inputs
-    inputs = {
-        "document": [document],
-        "criterion": [criterion],
-        "criterion_description": [criterion_description or ""],
-        "summary_guidance": [guidance_str],
-    }
-
-    # Run inference
-    results = run_inference(
-        inputs=inputs,
-        config="summary_generate_gemini",
-        cache_alias=cache_alias,
-        verbose=False,
-    )
-
-    # Extract summary
-    result = results[0]
-    if result is None:
-        return {"annotation_trace": "", "final_summary": ""}
-
-    return (
-        result
-        if isinstance(result, dict)
-        else {"annotation_trace": "", "final_summary": str(result)}
-    )
 
 
 def generate_summaries_batch(
@@ -224,11 +169,13 @@ def generate_summaries_batch(
         else str(summary_guidance)
     )
 
+    criterion_description = (criterion_description or "").strip()
+
     # Prepare inputs
     inputs = {
         "document": documents,
         "criterion": [criterion] * len(documents),
-        "criterion_description": [criterion_description or ""] * len(documents),
+        "criterion_description": [criterion_description] * len(documents),
         "summary_guidance": [guidance_str] * len(documents),
     }
 
@@ -248,7 +195,15 @@ def generate_summaries_batch(
                 {"summary": {"annotation_trace": "", "final_summary": ""}}
             )
         else:
-            # Result should be dict with annotation_trace and final_summary
+            # Result should be dict with annotation_trace and final_summary.
+            # Be tolerant to minor schema variants (e.g., list-of-one).
+            if (
+                isinstance(result, list)
+                and len(result) == 1
+                and isinstance(result[0], dict)
+            ):
+                result = result[0]
+
             summary_dict = (
                 result
                 if isinstance(result, dict)

@@ -28,7 +28,7 @@ class BaseDocSet(ABC):
     # Format: {criterion_name: {description: str, category_schema_hint: str, ...}}
     CRITERION_METADATA: dict[str, dict[str, str]] = {}
     # Synthesis prompts for criterion-specific document generation
-    # Maps criterion name → {hard_positive_prompt, hard_negative_prompt}
+    # Maps criterion name → {remix_prompt}
     # Subclasses can override to provide custom synthesis logic per criterion
     SYNTHESIS_CONFIGS: dict[str, dict[str, str]] = {}
 
@@ -90,39 +90,5 @@ class BaseDocSet(ABC):
         return None
 
     def get_criterion_metadata(self, criterion: str) -> dict[str, str]:
-        """Get metadata for a criterion (description, schema hints, etc.).
-
-        Args:
-            criterion: The criterion name
-
-        Returns:
-            Dict with metadata keys like:
-            - description: Criterion description
-            - category_schema_hint: Hint for category schema generation
-            - tag_schema_hint: Hint for tag schema generation
-            - summary_guidance_hint: Hint for summary guidance
-            - summary_format_hint: Hint for summary format
-            Returns empty dict if no metadata is defined.
-        """
+        """Get metadata for a criterion (description, schema hints, etc.)."""
         return self.CRITERION_METADATA.get(criterion, {})
-
-    def synthesize_documents(
-        self,
-        documents: list[Any],
-        criterion_name: str,
-        num_synthetic_per_doc: int = 2,
-    ) -> list[Any]:
-        """Generate synthetic documents using dataset-specific logic.
-
-        This method can be overridden by subclasses to provide custom synthesis.
-        If not overridden, returns empty list (no dataset-specific synthesis).
-
-        Args:
-            documents: List of original documents
-            criterion_name: Criterion being used for triplet creation
-            num_synthetic_per_doc: How many synthetic docs to generate per original
-
-        Returns:
-            List of synthetic documents, or empty list if not implemented.
-        """
-        return []  # Default: no dataset-specific synthesis

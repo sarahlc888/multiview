@@ -17,6 +17,8 @@ from multiview.inference import (
     run_inference,
 )
 
+pytestmark = pytest.mark.dev
+
 
 class TestPresetListing:
     """Test listing and loading annotator presets."""
@@ -54,6 +56,7 @@ class TestPresetListing:
         assert LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI.provider == "gemini"
 
 
+@pytest.mark.external
 class TestEmbedPlaintextHFAPI:
     """Test embed_plaintext_hfapi annotator."""
 
@@ -80,6 +83,7 @@ class TestEmbedPlaintextHFAPI:
         assert all(isinstance(x, (int, float)) for x in vector)
 
 
+@pytest.mark.external
 class TestRewritePlaintextFreeformGemini:
     """Test rewrite_plaintext_freeform_gemini annotator."""
 
@@ -111,6 +115,7 @@ class TestRewritePlaintextFreeformGemini:
         )
 
 
+@pytest.mark.external
 class TestLMJudgePairLikert:
     """Test lmjudge_pair_plaintext_likerthard_gemini annotator."""
 
@@ -157,6 +162,7 @@ class TestLMJudgePairLikert:
         assert 1 <= judgment <= 7
 
 
+@pytest.mark.external
 class TestLMJudgeTripletBinary:
     """Test lmjudge_triplet_plaintext_binaryhard_gemini annotator."""
 
@@ -186,6 +192,7 @@ class TestLMJudgeTripletBinary:
         assert judgment == 1
 
 
+@pytest.mark.external
 class TestLMJudgePairBinary:
     """Test lmjudge_pair_norewrite_binaryhard_gemini annotator."""
 

@@ -1,21 +1,30 @@
 """Task representation for benchmarking."""
 
-import json
 import logging
-from pathlib import Path
 
 from multiview.benchmark.annotations import (
     annotate_with_known_criterion,
-    annotate_with_lm,
     annotate_with_lm_all,
 )
 from multiview.benchmark.document_sets import DOCSETS
+from multiview.benchmark.triplets.quality_assurance import (
+    filter_triplets_by_quality,
+    rate_triplet_quality,
+)
 from multiview.benchmark.triplets.triplet_utils import (
     create_lm_triplets,
     create_random_triplets,
 )
+from multiview.benchmark.triplets.utils import build_triplet_dicts
 
 logger = logging.getLogger(__name__)
+
+TRIPLET_STYLE_RANDOM = "random"
+TRIPLET_STYLE_LM = "lm"
+TRIPLET_STYLE_LM_ALL = "lm_all"
+
+LM_TRIPLET_STYLES = {TRIPLET_STYLE_LM, TRIPLET_STYLE_LM_ALL}
+RICH_ANNOTATION_STYLES = {TRIPLET_STYLE_LM_ALL}
 
 
 class Task:
@@ -27,34 +36,15 @@ class Task:
     def __init__(self, config: dict):
         """Initialize task from config.
 
-        Args:
-            config: Configuration dict with the following keys:
+        Required keys:
+        - document_set: Dataset name (e.g., "gsm8k")
+        - criterion: Criterion name (e.g., "arithmetic")
 
-                Core Configuration:
-                - document_set (str, required): Dataset name (e.g., 'gsm8k', 'crossword_clues')
-                - criterion (str, required): Criterion for triplet creation (e.g., 'arithmetic', 'clue_type')
-                - criterion_description (str, optional): Description of what the criterion means
-                - max_docs (int, optional): Maximum number of documents to load
-                - max_triplets (int, optional): Maximum number of triplets to create
-
-                Annotation Configuration (for triplet_style="lm_all"):
-                - n_schema_samples (int, default=10): Documents to sample for schema generation
-                - category_schema_hint (str, optional): Hint for category schema generation
-                - tag_schema_hint (str, optional): Hint for tag schema generation
-                - summary_guidance_hint (str, optional): Hint for what to include in summaries
-                - summary_format_hint (str, optional): Hint for summary format/structure
-                - include_annotation_debug (bool, default=False): Include debug/reasoning in annotations
-
-                Triplet Configuration:
-                - triplet_style (str, default="lm"): "random", "lm", or "lm_all"
-                  * "random": Random triplet sampling
-                  * "lm": LM-based triplet selection with candidate filtering
-                  * "lm_all": Uses rich multi-faceted annotations (categories + tags + summaries)
-                - candidate_strategy (str, default="multi"): "bm25", "embedding", "jaccard", or "multi"
-                - use_spurious_hard_negs (bool, default=True): Include spurious hard negatives
-                - embedding_preset (str, default="hf_qwen3_embedding_8b"): Embedding model for candidates
-                - lm_judge_preset (str, optional): LM judge preset for triplet selection
-                - triplet_example (dict/str, optional): Example triplet for LM judge guidance
+        Common optional keys:
+        - triplet_style: "random" | "lm" | "lm_all"
+        - max_docs, max_triplets, criterion_description
+        - candidate_strategy, use_spurious_hard_negs, embedding_preset, lm_judge_preset
+        - lm_all annotation hints: n_schema_samples, *_schema_hint, summary_*_hint
         """
         self.config = config
 
@@ -65,9 +55,10 @@ class Task:
         # Extract optional params with defaults
         self.max_docs = config.get("max_docs")
         self.max_triplets = config.get("max_triplets")
-        self.triplet_style = config.get("triplet_style", "lm")
+        self.triplet_style = config.get("triplet_style", TRIPLET_STYLE_LM)
         self.add_synthetic_docs = config.get("add_synthetic_docs", False)
-        self.num_synthetic_per_doc = config.get("num_synthetic_per_doc", 2)
+        # Synthetic doc synthesis configuration:
+        self.num_synthetic_docs = config.get("num_synthetic_docs", 0)
 
         # Get the document_set class from registry
         if self.document_set_name not in DOCSETS:
@@ -87,16 +78,51 @@ class Task:
         self.documents = None
         self.document_annotations = None  # List of dicts with criterion values
         self.triplets = None  # List of (anchor_id, positive_id, negative_id) tuples
+        self.triplet_quality_ratings = (
+            None  # List of quality ratings (1-4) for each triplet
+        )
         self.synthesis_anchor_indices = (
             None  # Indices of docs used as synthesis anchors
         )
 
         # Warn if criterion is provided but meaningless
-        if self.triplet_style == "random":
+        if self.triplet_style == TRIPLET_STYLE_RANDOM:
             logger.warning(
                 f"criterion '{self.criterion_name}' is required but meaningless "
                 f"for triplet_style='random'"
             )
+
+    def _require_documents(self, *, caller: str) -> None:
+        if self.documents is None:
+            raise RuntimeError(f"Must call load_documents() before {caller}()")
+
+    def _require_triplets(self, *, caller: str) -> None:
+        if self.triplets is None:
+            raise RuntimeError(f"Must call create_triplets() before {caller}()")
+
+    def _criterion_metadata(self) -> dict:
+        return self.document_set.get_criterion_metadata(self.criterion_name) or {}
+
+    def _resolved_criterion_hints(self) -> dict:
+        meta = self._criterion_metadata()
+        return {
+            "criterion_description": self.config.get("criterion_description")
+            or meta.get("description"),
+            "category_schema_hint": self.config.get("category_schema_hint")
+            or meta.get("category_schema_hint"),
+            "tag_schema_hint": self.config.get("tag_schema_hint")
+            or meta.get("tag_schema_hint"),
+            "summary_guidance_hint": self.config.get("summary_guidance_hint")
+            or meta.get("summary_guidance_hint"),
+            "summary_format_hint": self.config.get("summary_format_hint")
+            or meta.get("summary_format_hint"),
+        }
+
+    def _resolved_criterion_description(self) -> str | None:
+        return self._resolved_criterion_hints()["criterion_description"]
+
+    def _triplet_dicts(self) -> list[dict]:
+        return build_triplet_dicts(self.documents, self.triplets)
 
     def load_documents(self):
         """Load documents from the document_set."""
@@ -120,11 +146,16 @@ class Task:
         # Import here to avoid circular dependency
         from multiview.benchmark import synthesis_utils
 
+        # Resolve desired synthetic doc count (absolute)
+        if self.num_synthetic_docs <= 0:
+            logger.info("num_synthetic_docs <= 0; skipping synthetic generation")
+            return
+
         synthetic_docs, anchor_indices = synthesis_utils.synthesize_documents(
             documents=self.documents,
             document_set=self.document_set,
             criterion_name=self.criterion_name,
-            num_synthetic_per_doc=self.num_synthetic_per_doc,
+            num_synthetic_docs=self.num_synthetic_docs,
         )
 
         if synthetic_docs:
@@ -142,81 +173,51 @@ class Task:
 
         Wrapper function for methods defined in annotation_utils.
         """
-        if self.documents is None:
-            raise RuntimeError("Must call load_documents() before annotate_documents()")
+        self._require_documents(caller="annotate_documents")
 
         logger.info(f"Annotating documents for criterion: {self.criterion_name}...")
 
-        # Infer annotation mode from triplet_style
-        # lm_all → use union_all.py (categories + tags + summaries)
-        # random / lm → use simple annotation
-        needs_rich_annotation = self.triplet_style in ["lm_all", "lm_multifaceted"]
-
         if self.criterion_name in self.document_set.KNOWN_CRITERIA:
-            # Known criterion - deterministic extraction
             self.document_annotations = annotate_with_known_criterion(
                 self.documents, self.document_set, self.criterion_name
             )
-        elif needs_rich_annotation:
-            # Get criterion metadata from document_set (if available)
-            criterion_metadata = self.document_set.get_criterion_metadata(
-                self.criterion_name
-            )
-
-            # Use config values if provided, otherwise fall back to metadata
-            criterion_description = self.config.get(
-                "criterion_description"
-            ) or criterion_metadata.get("description")
-            category_schema_hint = self.config.get(
-                "category_schema_hint"
-            ) or criterion_metadata.get("category_schema_hint")
-            tag_schema_hint = self.config.get(
-                "tag_schema_hint"
-            ) or criterion_metadata.get("tag_schema_hint")
-            summary_guidance_hint = self.config.get(
-                "summary_guidance_hint"
-            ) or criterion_metadata.get("summary_guidance_hint")
-            summary_format_hint = self.config.get(
-                "summary_format_hint"
-            ) or criterion_metadata.get("summary_format_hint")
-
-            # Rich "all" LM annotation (union_all.py - combines categories, tags, summaries)
+        elif self.triplet_style in RICH_ANNOTATION_STYLES:
+            hints = self._resolved_criterion_hints()
             self.document_annotations = annotate_with_lm_all(
                 documents=self.documents,
                 criterion=self.criterion_name,
-                criterion_description=criterion_description,
+                criterion_description=hints["criterion_description"],
                 n_schema_samples=self.config.get("n_schema_samples", 10),
-                category_schema_hint=category_schema_hint,
-                tag_schema_hint=tag_schema_hint,
-                summary_guidance_hint=summary_guidance_hint,
-                summary_format_hint=summary_format_hint,
+                category_schema_hint=hints["category_schema_hint"],
+                tag_schema_hint=hints["tag_schema_hint"],
+                summary_guidance_hint=hints["summary_guidance_hint"],
+                summary_format_hint=hints["summary_format_hint"],
                 include_debug=self.config.get("include_annotation_debug", False),
                 cache_alias_prefix=f"{self.get_task_name()}_annotation",
             )
         else:
-            # Simple LM annotation (existing)
-            self.document_annotations = annotate_with_lm(
-                self.documents, self.criterion_name
+            raise ValueError(
+                f"Unknown criterion '{self.criterion_name}' for document_set "
+                f"'{self.document_set_name}'. Simple LM annotation is not implemented. "
+                f"Use triplet_style='{TRIPLET_STYLE_LM_ALL}' (rich annotation) or choose a "
+                "known criterion."
             )
 
     def create_triplets(self):
         """Create triplets based on the triplet_style.
 
         Wrapper function for methods defined in triplet_utils."""
-        if self.documents is None:
-            raise RuntimeError("Must call load_documents() before create_triplets()")
+        self._require_documents(caller="create_triplets")
 
         logger.info(f"Creating triplets for {self.document_set_name}...")
         logger.info(f"Triplet style: {self.triplet_style}")
 
-        # Create triplets based on style
-        if self.triplet_style == "random":
+        if self.triplet_style == TRIPLET_STYLE_RANDOM:
             self.triplets = create_random_triplets(
                 self.documents,
                 max_triplets=self.max_triplets,
             )
-        elif self.triplet_style in ["lm", "lm_all", "lm_multifaceted"]:
-            # LM-based with candidate selection (lm_all uses rich annotations)
+        elif self.triplet_style in LM_TRIPLET_STYLES:
             self.triplets = create_lm_triplets(
                 documents=self.documents,
                 annotations=self.document_annotations,
@@ -230,7 +231,7 @@ class Task:
                     "lm_judge_preset", "triplet_selection_gemini"
                 ),
                 criterion=self.criterion_name,
-                criterion_description=self.config.get("criterion_description"),
+                criterion_description=self._resolved_criterion_description(),
                 cache_alias_prefix=f"{self.get_task_name()}_triplets",
                 triplet_example=self.config.get("triplet_example"),
                 anchor_indices=self.synthesis_anchor_indices,
@@ -240,6 +241,79 @@ class Task:
 
         logger.info(f"Created {len(self.triplets)} triplets")
 
+    def rate_triplet_quality(
+        self,
+        lm_judge_preset: str = "lmjudge_quality_rating_gemini",
+        min_quality: int | None = None,
+    ) -> dict:
+        """Rate the quality of triplets using an LM judge and optionally filter.
+
+        This method rates each triplet on a 1-4 scale:
+        1 = invalid, 2 = ambiguous, 3 = trivial, 4 = ideal
+
+        Args:
+            lm_judge_preset: Preset for quality rating LM judge
+            min_quality: If provided, filter triplets to keep only those with
+                quality >= min_quality (1-4). If None, no filtering is applied.
+
+        Returns:
+            Dict with quality rating statistics
+
+        Example:
+            >>> task.create_triplets()
+            >>> stats = task.rate_triplet_quality(min_quality=3)
+            >>> print(f"Kept {stats['n_kept']} ideal/trivial triplets")
+        """
+        self._require_documents(caller="rate_triplet_quality")
+        self._require_triplets(caller="rate_triplet_quality")
+
+        logger.info("Rating triplet quality...")
+
+        triplet_dicts = self._triplet_dicts()
+
+        criterion_description = self._resolved_criterion_description()
+
+        has_annotations = self.document_annotations is not None
+        if has_annotations and "with_annotation" not in lm_judge_preset:
+            lm_judge_preset = "lmjudge_quality_rating_with_annotation_gemini"
+            logger.info(f"Using annotation-aware preset: {lm_judge_preset}")
+
+        cache_alias = f"{self.get_task_name()}_quality_rating"
+        results = rate_triplet_quality(
+            triplets=triplet_dicts,
+            criterion=self.criterion_name,
+            criterion_description=criterion_description,
+            lm_judge_preset=lm_judge_preset,
+            cache_alias=cache_alias,
+            annotations=self.document_annotations if has_annotations else None,
+        )
+
+        self.triplet_quality_ratings = results["ratings"]
+
+        if min_quality is not None:
+            logger.info(f"Filtering triplets with quality >= {min_quality}")
+            triplets_with_ratings = results["triplets_with_ratings"]
+            filtered_triplets, filter_stats = filter_triplets_by_quality(
+                triplets_with_ratings, min_quality=min_quality
+            )
+
+            self.triplets = [
+                (t["anchor_id"], t["positive_id"], t["negative_id"])
+                for t in filtered_triplets
+            ]
+            self.triplet_quality_ratings = [
+                t["quality_rating"] for t in filtered_triplets
+            ]
+
+            logger.info(
+                f"Filtered triplets: {len(self.triplets)} remaining "
+                f"(removed {filter_stats['n_filtered']})"
+            )
+
+            return {**results, **filter_stats}
+
+        return results
+
     def get_task_name(self) -> str:
         """Get the name of this task.
 
@@ -247,64 +321,3 @@ class Task:
             Task name in format: {document_set}__{criterion}
         """
         return f"{self.document_set_name}__{self.criterion_name}"
-
-    def save_triplets(self, output_dir: str | Path) -> None:
-        """Save triplets to a JSONL file.
-
-        Args:
-            output_dir: Output directory path (e.g., outputs/run_name/triplets)
-        """
-        if self.triplets is None:
-            raise RuntimeError("Must call create_triplets() before save_triplets()")
-
-        output_dir = Path(output_dir)
-        task_name = self.get_task_name()
-        task_dir = output_dir / task_name
-        task_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save triplets as JSONL (document IDs, not text)
-        output_file = task_dir / "triplets.jsonl"
-        with open(output_file, "w") as f:
-            for i, (anchor_id, positive_id, negative_id) in enumerate(self.triplets):
-                triplet_data = {
-                    "triplet_id": i,
-                    "anchor_id": anchor_id,
-                    "positive_id": positive_id,
-                    "negative_id": negative_id,
-                }
-                f.write(json.dumps(triplet_data) + "\n")
-
-        logger.info(f"Saved {len(self.triplets)} triplets to {output_file}")
-
-    def save_doc_annotations(self, output_dir: str | Path) -> None:
-        """Save document annotations to a JSONL file.
-
-        Args:
-            output_dir: Output directory path (e.g., outputs/run_name/annotations)
-        """
-        if self.document_annotations is None:
-            raise RuntimeError(
-                "Must call annotate_documents() before save_doc_annotations()"
-            )
-
-        output_dir = Path(output_dir)
-        task_name = self.get_task_name()
-        task_dir = output_dir / task_name
-        task_dir.mkdir(parents=True, exist_ok=True)
-
-        # Save annotations as JSONL
-        output_file = task_dir / "annotations.jsonl"
-        with open(output_file, "w") as f:
-            for i, (doc, annotation) in enumerate(
-                zip(self.documents, self.document_annotations, strict=False)
-            ):
-                annotation_data = {
-                    "doc_id": i,
-                    "document": doc,
-                    **annotation,
-                }
-                f.write(json.dumps(annotation_data) + "\n")
-
-        logger.info(
-            f"Saved {len(self.document_annotations)} annotations to {output_file}"
-        )

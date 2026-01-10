@@ -16,22 +16,35 @@ import logging
 import re
 
 from multiview.inference.presets import InferenceConfig
+from multiview.utils.prompt_utils import read_or_return
 
 logger = logging.getLogger(__name__)
 
 
-def get_format_keys(template: str) -> list[str]:
-    """Extract format keys from a template string.
+_ESCAPED_LBRACE = "\x00\x00"
+_ESCAPED_RBRACE = "\x01\x01"
 
-    Args:
-        template: Template string with {key} placeholders
 
-    Returns:
-        List of format keys found in template
+def _safe_format_template(template: str, kwargs: dict) -> str:
+    """Format a prompt template by substituting only {identifier} placeholders.
+
+    Many prompt templates contain literal braces (e.g., JSON examples). Using
+    Python's `str.format` would treat those as placeholders and raise KeyError.
     """
-    # Remove escaped braces so they're not matched
-    cleaned = template.replace("{{", "\x00\x00").replace("}}", "\x01\x01")
-    return re.findall(r"\{([^}:]+)(?::[^}]*)?\}", cleaned)
+    # Match Python's behavior for escaped braces.
+    working = template.replace("{{", _ESCAPED_LBRACE).replace("}}", _ESCAPED_RBRACE)
+
+    def _replace(match: re.Match) -> str:
+        key = match.group(1)
+        if key not in kwargs:
+            available = ", ".join(sorted(kwargs.keys()))
+            raise KeyError(
+                f"Missing template key '{key}'. Available keys: [{available}]"
+            )
+        return str(kwargs[key])
+
+    working = re.sub(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", _replace, working)
+    return working.replace(_ESCAPED_LBRACE, "{").replace(_ESCAPED_RBRACE, "}")
 
 
 def _hash_bytes(payload: bytes) -> str:
@@ -293,38 +306,44 @@ def format_prompts(
         if key in INPUT_KEY_ALIASES:
             format_kwargs[INPUT_KEY_ALIASES[key]] = values
 
+    # Load prompt template (from file if path, inline if string)
+    prompt_template = read_or_return(config.prompt_template)
+
     # Format base prompts
     prompts = []
     for i in range(n_items):
         kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-        prompt = config.prompt_template.format(**kwargs_i)
+        prompt = _safe_format_template(prompt_template, kwargs_i)
         prompts.append(prompt)
 
     # Format embed query instructions (if specified)
     embed_query_instr = None
     if config.embed_query_instr_template is not None:
+        embed_query_instr_template = read_or_return(config.embed_query_instr_template)
         embed_query_instr = []
         for i in range(n_items):
             kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            instr = config.embed_query_instr_template.format(**kwargs_i)
+            instr = _safe_format_template(embed_query_instr_template, kwargs_i)
             embed_query_instr.append(instr)
 
     # Format embed doc instructions (if specified)
     embed_doc_instr = None
     if config.embed_doc_instr_template is not None:
+        embed_doc_instr_template = read_or_return(config.embed_doc_instr_template)
         embed_doc_instr = []
         for i in range(n_items):
             kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            instr = config.embed_doc_instr_template.format(**kwargs_i)
+            instr = _safe_format_template(embed_doc_instr_template, kwargs_i)
             embed_doc_instr.append(instr)
 
     # Format force prefills (if specified)
     force_prefill = None
     if config.force_prefill_template is not None:
+        force_prefill_template = read_or_return(config.force_prefill_template)
         force_prefill = []
         for i in range(n_items):
             kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            prefill = config.force_prefill_template.format(**kwargs_i)
+            prefill = _safe_format_template(force_prefill_template, kwargs_i)
             force_prefill.append(prefill)
 
     # Handle images (if present)
@@ -343,9 +362,9 @@ def format_prompts(
         for i in range(n_items)
     ]
 
-    if verbose and len(prompts) > 0:
-        logger.info(f"Example formatted prompt:\n{prompts[0]}")
-        logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
+    # if verbose and len(prompts) > 0:
+    #     logger.info(f"Example formatted prompt:\n{prompts[0]}")
+    #     logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
 
     return PromptCollection(
         packed_prompts=packed_prompts,

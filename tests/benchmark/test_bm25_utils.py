@@ -10,6 +10,7 @@ from multiview.benchmark.bm25_utils import (
     tokenize_lucene_like,
 )
 
+pytestmark = pytest.mark.dev
 
 class TestTokenizeLuceneLike:
     """Tests for tokenize_lucene_like function."""

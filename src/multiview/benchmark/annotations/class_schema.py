@@ -67,8 +67,9 @@ def generate_category_schema(
     if schema is None:
         raise ValueError("Failed to generate category schema")
 
-    # Handle JSON parser wrapping dict in list
-    if isinstance(schema, list) and len(schema) == 1:
+    # Some JSON parsers return wrapped outputs like: [[{...schema...}]]
+    # Unwrap common single-element list wrappers.
+    while isinstance(schema, list) and len(schema) == 1:
         schema = schema[0]
 
     if not isinstance(schema, dict):
@@ -78,64 +79,6 @@ def generate_category_schema(
         f"Generated category schema with {len(schema.get('categories', []))} categories"
     )
     return schema
-
-
-def classify_document(
-    document: str,
-    criterion: str,
-    criterion_description: str,
-    category_schema: dict,
-    cache_alias: str | None = None,
-) -> str:
-    """Classify a single document into a category.
-
-    Args:
-        document: Document string
-        criterion: Criterion name
-        criterion_description: Criterion description
-        category_schema: Category schema dict
-        cache_alias: Optional cache alias for inference calls
-
-    Returns:
-        Category name as string
-    """
-    # Format schema for prompt
-    categories = category_schema.get("categories", [])
-    categories_text = "\n".join(
-        [f"- {cat['name']}: {cat['description']}" for cat in categories]
-    )
-
-    # Prepare inputs
-    inputs = {
-        "document": [document],
-        "criterion": [criterion],
-        "criterion_description": [criterion_description or ""],
-        "category_schema": [categories_text],
-    }
-
-    # Run inference
-    results = run_inference(
-        inputs=inputs,
-        config="category_classify_gemini",
-        cache_alias=cache_alias,
-        verbose=False,
-    )
-
-    # Result is plain text (category name)
-    category_name = results[0].strip() if results[0] else None
-
-    # Match to valid category names
-    if category_name:
-        response_lower = category_name.lower()
-        for cat in categories:
-            if (
-                cat["name"].lower() in response_lower
-                or response_lower in cat["name"].lower()
-            ):
-                return cat["name"]
-
-    # Fallback to first category
-    return categories[0]["name"] if categories else "unknown"
 
 
 def classify_documents_batch(

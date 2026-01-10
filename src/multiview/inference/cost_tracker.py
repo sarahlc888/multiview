@@ -191,11 +191,6 @@ class CostTracker:
 _global_tracker = CostTracker()
 
 
-def get_tracker() -> CostTracker:
-    """Get the global cost tracker instance."""
-    return _global_tracker
-
-
 def record_usage(model_name: str, input_tokens: int = 0, output_tokens: int = 0):
     """Record usage to global tracker.
 
@@ -221,8 +216,3 @@ def record_cache_hit(model_name: str, input_tokens: int = 0, output_tokens: int 
 def print_summary():
     """Print usage summary to console."""
     print(_global_tracker.get_summary())
-
-
-def reset_tracker():
-    """Reset the global tracker."""
-    _global_tracker.reset()

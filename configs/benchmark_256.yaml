@@ -15,7 +15,7 @@ tasks:
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false
-    num_synthetic_per_doc: 2    # How many synthetic docs to generate per original doc
+    num_synthetic_docs: 256    # Absolute number of synthetic docs to generate
 
     # Triplet creation parameters for lm_all style
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard

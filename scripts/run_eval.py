@@ -1,5 +1,6 @@
 """Main experiment pipeline."""
 
+import json
 import logging
 import random
 from pathlib import Path
@@ -8,12 +9,50 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig
 
+from multiview.benchmark.artifacts import (
+    save_task_annotations,
+    save_task_documents,
+    save_task_triplets,
+)
 from multiview.benchmark.benchmark import Benchmark
 from multiview.benchmark.task import Task
+from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
 from multiview.inference.cost_tracker import print_summary as print_cost_summary
 from multiview.utils.logging_utils import setup_logging_from_config
 
 logger = logging.getLogger(__name__)
+
+
+def log_triplet_quality_distribution(
+    *, stats: dict, task_name: str, min_quality: int | None = None
+) -> None:
+    """Log triplet quality distribution in a readable format."""
+    logger.info("=" * 60)
+    logger.info(f"QUALITY DISTRIBUTION - {task_name}")
+    logger.info("=" * 60)
+    logger.info(f"Total triplets rated: {stats['n_total']}")
+    logger.info("")
+    logger.info("Rating | Label      | Count | Percentage")
+    logger.info("-------|------------|-------|------------")
+
+    for level in [4, 3, 2, 1]:  # best → worst
+        count = stats["counts"][level]
+        pct = stats["percentages"][level]
+        label = QUALITY_SCALE[level]["class"]
+        logger.info(f"   {level}   | {label:10s} | {count:5d} | {pct:5.1f}%")
+
+    if min_quality is not None and "n_filtered" in stats:
+        n_total = stats["n_total"]
+        n_kept = stats["n_kept"]
+        n_filtered = stats["n_filtered"]
+        kept_pct = (n_kept / n_total * 100) if n_total else 0.0
+        filtered_pct = (n_filtered / n_total * 100) if n_total else 0.0
+        logger.info("")
+        logger.info(f"Filtering (min_quality >= {min_quality}):")
+        logger.info(f"  Kept:     {n_kept:5d} ({kept_pct:5.1f}%)")
+        logger.info(f"  Removed:  {n_filtered:5d} ({filtered_pct:5.1f}%)")
+
+    logger.info("=" * 60)
 
 
 def set_seed(seed: int):
@@ -33,8 +72,12 @@ def main(cfg: DictConfig):
     # Setup output directories
     output_base = Path("outputs") / cfg.run_name
     triplets_dir = output_base / "triplets"
+    documents_dir = output_base / "documents"
+    annotations_dir = output_base / "annotations"
     results_dir = output_base / "results"
+    method_logs_dir = output_base / "method_logs"
     results_dir.mkdir(parents=True, exist_ok=True)
+    method_logs_dir.mkdir(parents=True, exist_ok=True)
 
     # create tasks
     tasks = []
@@ -45,18 +88,33 @@ def main(cfg: DictConfig):
         if cur_task.triplet_style != "random":
             cur_task.annotate_documents()
         cur_task.create_triplets()
-        cur_task.save_triplets(triplets_dir)
+
+        # Rate and filter triplet quality if enabled
+        if cfg.tasks.defaults.get("rate_triplet_quality", False):
+            min_quality = cfg.tasks.defaults.get("min_triplet_quality")
+            quality_stats = cur_task.rate_triplet_quality(min_quality=min_quality)
+            log_triplet_quality_distribution(
+                stats=quality_stats,
+                task_name=cur_task.get_task_name(),
+                min_quality=min_quality,
+            )
+
+        # Save documents and annotations
+        save_task_documents(cur_task, documents_dir)
+        if cur_task.document_annotations is not None:
+            save_task_annotations(cur_task, annotations_dir)
+
+        save_task_triplets(cur_task, triplets_dir)
         tasks.append(cur_task)
 
     # create benchmark object
-    benchmark = Benchmark(tasks)
+    benchmark = Benchmark(tasks, method_log_output_dir=str(method_logs_dir))
 
     # evaluate multiview representation methods
     results = benchmark.evaluate(cfg.methods_to_evaluate)
 
     # Save results in multiple formats
     import csv
-    import json
 
     # 1. JSON format (machine-readable, full detail)
     results_file = results_dir / "results.json"

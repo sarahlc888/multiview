@@ -24,6 +24,43 @@ def _clean_json_string(text: str) -> str:
     # In JSON, single quotes don't need escaping, so \' is always invalid
     # Replace all \' with ' (single quotes are just regular chars in JSON strings)
     cleaned = re.sub(r"\\'", "'", cleaned)
+
+    # Fix invalid escape sequences (like \$, \x, etc.)
+    # Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    # First, protect valid \uXXXX sequences by temporarily replacing them
+    unicode_placeholders = {}
+    placeholder_counter = 0
+
+    def protect_unicode(match):
+        nonlocal placeholder_counter
+        placeholder = f"__UNICODE_PLACEHOLDER_{placeholder_counter}__"
+        placeholder_counter += 1
+        unicode_placeholders[placeholder] = match.group(0)
+        return placeholder
+
+    # Protect valid \uXXXX sequences
+    cleaned = re.sub(
+        r"\\u[0-9a-fA-F]{4}", protect_unicode, cleaned, flags=re.IGNORECASE
+    )
+
+    # Now fix invalid single-character escapes
+    # Valid single-character escapes: ", \, /, b, f, n, r, t
+    valid_single_escapes = {'"', "\\", "/", "b", "f", "n", "r", "t"}
+
+    def fix_invalid_escape(match):
+        char = match.group(1)
+        if char in valid_single_escapes:
+            return match.group(0)  # Keep valid escapes
+        # Remove the backslash (invalid escape -> just the char)
+        return char
+
+    # Replace invalid escapes
+    cleaned = re.sub(r"\\(.)", fix_invalid_escape, cleaned)
+
+    # Restore unicode sequences
+    for placeholder, unicode_seq in unicode_placeholders.items():
+        cleaned = cleaned.replace(placeholder, unicode_seq)
+
     # Remove trailing commas before closing braces/brackets
     cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
     return cleaned
@@ -62,7 +99,10 @@ def vector_parser(completion: dict, **kwargs) -> Any:
 
 
 def json_parser(
-    completion: str | dict, annotation_key: str | None = None, **kwargs
+    completion: str | dict,
+    annotation_key: str | None = None,
+    wrap_singletons: bool = False,
+    **kwargs,
 ) -> Any:
     """Parse JSON from completion text.
 
@@ -75,6 +115,9 @@ def json_parser(
         completion: Completion text (may be wrapped in markdown) or dict with "text" key
         annotation_key: If provided, extract this key from the JSON
             If None, return the full parsed JSON
+        wrap_singletons: If True and annotation_key is None, wrap a parsed JSON dict
+            in a length-1 list. This preserves the legacy behavior where
+            json_parser(...) always returned a list in the no-annotation_key case.
 
     Returns:
         Parsed JSON value (or specific key if annotation_key provided)
@@ -108,15 +151,46 @@ def json_parser(
 
     # Extract JSON from markdown code block if present
     if "```json" in completion:
-        # Use greedy match to handle nested backticks within JSON strings
-        match = re.search(r"```json(.*?)```", completion, re.DOTALL)
-        if match:
-            completion = match.group(1).strip()
+        # Find the first ```json block and extract only that one
+        # This handles both nested code blocks and multiple separate blocks
+        start_idx = completion.find("```json")
+        if start_idx != -1:
+            # Skip past the opening ```json
+            content_start = completion.find("\n", start_idx)
+            if content_start == -1:
+                content_start = start_idx + len("```json")
+            else:
+                content_start += 1  # Skip the newline
+
+            # Find the closing ``` for this specific block
+            # Look for ``` that appears on its own line (handles nested blocks in strings)
+            # Pattern: newline + ``` + newline/end
+            pattern = re.compile(r"\n```(?:\n|$)")
+            match = pattern.search(completion, content_start)
+
+            if match:
+                closing_match = match.start() + 1  # +1 to skip the newline before ```
+            else:
+                # Fallback: find first ``` after content_start
+                closing_match = completion.find("```", content_start)
+
+            if closing_match is not None and closing_match > content_start:
+                completion = completion[content_start:closing_match].strip()
     elif "```" in completion:
-        # Try to extract from any code block
-        match = re.search(r"```(?:[a-z]+)?\n?(.*?)```", completion, re.DOTALL)
-        if match:
-            completion = match.group(1).strip()
+        # Try to extract from any code block - find first closing ``` after opening
+        first_backticks = completion.find("```")
+        if first_backticks != -1:
+            # Find the language tag if present
+            lang_end = completion.find("\n", first_backticks)
+            if lang_end == -1:
+                content_start = first_backticks + 3
+            else:
+                content_start = lang_end + 1
+
+            # Find the first closing ``` after the content starts
+            closing_backticks = completion.find("```", content_start)
+            if closing_backticks > content_start:
+                completion = completion[content_start:closing_backticks].strip()
 
     # Clean up common issues
     completion = completion.strip()
@@ -149,18 +223,20 @@ def json_parser(
         last_error = error
 
     if json_loaded is None:
-        error_details = (
-            "\n".join(strategy_errors) if strategy_errors else "All strategies failed"
+        # Log first strategy error for debugging (most informative)
+        first_error = strategy_errors[0] if strategy_errors else "All strategies failed"
+        logger.error(
+            f"Failed to parse JSON: {first_error}. " f"Preview: {completion[:150]}..."
         )
-        logger.error(f"Failed to parse JSON after {len(strategies)} strategies")
-        logger.error(f"Completion preview: {completion[:500]}")
-        logger.error(f"Strategy errors:\n{error_details}")
         raise ValueError(f"Invalid JSON in completion: {last_error}") from last_error
 
     # Extract annotation key if requested
     if annotation_key is None:
-        # Return full JSON (wrapped in list for consistency)
-        return json_loaded if isinstance(json_loaded, list) else [json_loaded]
+        if wrap_singletons:
+            # Legacy behavior: always return a list in the no-annotation_key case
+            return json_loaded if isinstance(json_loaded, list) else [json_loaded]
+        # Default: return parsed JSON as-is (dict or list)
+        return json_loaded
 
     # Extract key from dict or list of dicts
     if isinstance(json_loaded, dict):

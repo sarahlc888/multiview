@@ -1,0 +1,2 @@
+TRIPLET EXAMPLE GUIDANCE:
+{triplet_example}
