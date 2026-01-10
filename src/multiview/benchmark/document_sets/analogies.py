@@ -1,6 +1,7 @@
 """Analogies document_set loader."""
 
 import logging
+import re
 from typing import Any
 
 from datasets import load_dataset
@@ -11,7 +12,25 @@ logger = logging.getLogger(__name__)
 
 
 class AnalogiesDocSet(BaseDocSet):
-    """Word analogy pairs document_set."""
+    """Word analogy pairs document_set.
+
+    Loads word analogy pairs from HuggingFace dataset "relbert/analogy_questions".
+    Each analogy question generates two documents: the stem pair and the answer pair.
+
+    Config parameters:
+        max_docs (int, optional): Maximum number of document pairs to load (applies to pairs, not questions)
+        split (str): Dataset split to use (default: "test")
+        dataset_config (str): Which analogy set to use - "bats", "sat", or "google" (default: "bats")
+
+    Implementation notes:
+        - Each question produces 2 word pairs: stem and answer
+        - max_docs applies to total pairs, so max_docs=100 loads ~50 questions
+        - Streaming disabled due to datasets 2.x split compatibility issues
+        - Documents are dicts with 'text' and 'analogy_type' fields
+        - analogy_type is a known criterion extracted from prefix field (e.g., "antonyms - gradable")
+        - Category names are extracted from file paths using regex pattern
+        - Robust error handling for malformed records
+    """
 
     DATASET_PATH = "relbert/analogy_questions"
     DESCRIPTION = "Word analogy pairs (stem and answer)"
@@ -39,7 +58,8 @@ class AnalogiesDocSet(BaseDocSet):
 
         # max_docs applies to PAIRS (each question generates 2 pairs)
         max_questions = (max_docs // 2) if max_docs else None
-        use_streaming = max_questions is not None and max_questions < 100
+        # Disable streaming for analogies due to split compatibility issues in datasets 2.x
+        use_streaming = False
 
         if use_streaming:
             logger.debug(f"Using streaming mode (max_questions={max_questions} < 100)")
@@ -48,9 +68,10 @@ class AnalogiesDocSet(BaseDocSet):
             )
             dataset = dataset.shuffle(seed=42)
         else:
-            dataset = load_dataset(
-                self.DATASET_PATH, dataset_config, split=split
-            )
+            # Load all splits first, then select the desired split
+            # This avoids split parsing issues in datasets 2.x
+            dataset_dict = load_dataset(self.DATASET_PATH, dataset_config)
+            dataset = dataset_dict[split]
             if max_questions is not None:
                 dataset = dataset.shuffle(seed=42)
 
@@ -58,8 +79,12 @@ class AnalogiesDocSet(BaseDocSet):
         documents = []
         for i, example in enumerate(dataset):
             try:
-                # Get analogy type (prefix)
-                analogy_type = example.get("prefix", "")
+                # Get analogy type (prefix) and extract category name from path
+                # Example: "./cache/BATS_3.0/4_Lexicographic_semantics/L09 [antonyms - gradable].txt"
+                # Extract: "antonyms - gradable"
+                prefix = example.get("prefix", "")
+                match = re.search(r'\[([^\]]+)\]', prefix)
+                analogy_type = match.group(1) if match else prefix
 
                 # Extract stem pair
                 stem = example.get("stem", [])

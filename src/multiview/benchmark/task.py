@@ -54,12 +54,11 @@ class Task:
             )
 
         document_set_cls = DOCSETS[self.document_set_name]
-        self.document_set = document_set_cls(
-            config={
-                "max_docs": self.max_docs,
-                "split": "train",  # Could be configurable later
-            }
-        )
+        # Pass split if provided in config, otherwise let dataset use its own default
+        dataset_config = {"max_docs": self.max_docs}
+        if "split" in config:
+            dataset_config["split"] = config["split"]
+        self.document_set = document_set_cls(config=dataset_config)
 
         self.documents = None
         self.document_annotations = None  # List of dicts with criterion values

@@ -11,7 +11,21 @@ logger = logging.getLogger(__name__)
 
 
 class HackerNewsDocSet(BaseDocSet):
-    """HackerNews posts document_set."""
+    """HackerNews posts document_set.
+
+    Loads posts from HuggingFace dataset "julien040/hacker-news-posts" and formats
+    them as "title\\nurl". Posts are filtered by score threshold.
+
+    Config parameters:
+        max_docs (int, optional): Maximum number of documents to load
+        split (str): Dataset split to use (default: "train")
+        min_score (int): Minimum score threshold for posts (default: 10)
+
+    Implementation notes:
+        - Uses streaming mode when max_docs < 100 for efficiency
+        - Filters during iteration to find enough posts above score threshold
+        - Skips posts missing title or url fields
+    """
 
     # Metadata
     DATASET_PATH = "julien040/hacker-news-posts"
