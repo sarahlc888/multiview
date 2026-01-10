@@ -4,6 +4,7 @@ from multiview.benchmark.document_sets.analogies import AnalogiesDocSet
 from multiview.benchmark.document_sets.base import BaseDocSet
 from multiview.benchmark.document_sets.crossword_clues import CrosswordCluesDocSet
 from multiview.benchmark.document_sets.gsm8k import GSM8KDocSet
+from multiview.benchmark.document_sets.hackernews import HackerNewsDocSet
 from multiview.benchmark.document_sets.rocstories import RocStoriesDocSet
 
 DOCSETS = {
@@ -11,6 +12,7 @@ DOCSETS = {
     "gsm8k": GSM8KDocSet,
     "crossword_clues": CrosswordCluesDocSet,
     "rocstories": RocStoriesDocSet,
+    "hackernews": HackerNewsDocSet,
 }
 
 __all__ = [
@@ -20,4 +22,5 @@ __all__ = [
     "GSM8KDocSet",
     "CrosswordCluesDocSet",
     "RocStoriesDocSet",
+    "HackerNewsDocSet",
 ]
