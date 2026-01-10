@@ -18,6 +18,8 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 
+from multiview.inference.cost_tracker import record_cache_hit
+
 try:
     import fcntl
 
@@ -81,6 +83,23 @@ def hash_prompt(prompt: str) -> str:
         Hash string (SHA256, truncated to 32 chars)
     """
     return hashlib.sha256(prompt.encode()).hexdigest()[:32]
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough estimate of token count for a text string.
+
+    Uses a simple heuristic of ~4 characters per token (average for English).
+    This is a rough approximation for cost estimation purposes.
+
+    Args:
+        text: Text string to estimate tokens for
+
+    Returns:
+        Estimated token count
+    """
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
 
 
 def load_cached_completions(cache_path: str | None) -> dict:
@@ -247,6 +266,7 @@ def cached_fn_completions(
         uncached_hashes = prompt_hashes
         uncached_indices = list(range(len(packed_prompts)))
         uncached_non_packed = non_packed_prompts
+        cached_indices = []
     else:
         # Find prompts not in cache (or with empty values)
         def is_non_empty(val):
@@ -262,9 +282,41 @@ def cached_fn_completions(
                 completion_cache[completion_field_name][prompt_hash].get("result")
             )
         ]
+        cached_indices = [
+            i
+            for i, prompt_hash in enumerate(prompt_hashes)
+            if prompt_hash in completion_cache[completion_field_name]
+            and is_non_empty(
+                completion_cache[completion_field_name][prompt_hash].get("result")
+            )
+        ]
         uncached_prompts = [packed_prompts[i] for i in uncached_indices]
         uncached_hashes = [prompt_hashes[i] for i in uncached_indices]
         uncached_non_packed = [non_packed_prompts[i] for i in uncached_indices]
+
+        # Record cache hits for cost tracking
+        if cached_indices and "model_name" in fn_completions_kwargs:
+            model_name = fn_completions_kwargs["model_name"]
+            for idx in cached_indices:
+                prompt_hash = prompt_hashes[idx]
+                cached_result = completion_cache[completion_field_name][prompt_hash][
+                    "result"
+                ]
+                packed_prompt = packed_prompts[idx]
+
+                # Estimate tokens for cost tracking
+                input_tokens = estimate_tokens(packed_prompt)
+
+                # Estimate output tokens based on result type
+                output_tokens = 0
+                if isinstance(cached_result, dict):
+                    if "text" in cached_result:
+                        output_tokens = estimate_tokens(cached_result["text"])
+                    # For embeddings (vector), no output tokens cost
+                elif isinstance(cached_result, str):
+                    output_tokens = estimate_tokens(cached_result)
+
+                record_cache_hit(model_name, input_tokens, output_tokens)
 
         # Filter kwargs arrays to match uncached prompts
         for key in [

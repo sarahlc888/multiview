@@ -7,21 +7,9 @@ similarity between documents in triplets.
 import logging
 from typing import Any
 
-from rank_bm25 import BM25Okapi
+from multiview.benchmark.bm25_utils import compute_bm25_matrix
 
 logger = logging.getLogger(__name__)
-
-
-def tokenize(text: str) -> list[str]:
-    """Simple whitespace tokenization for BM25.
-
-    Args:
-        text: Text to tokenize
-
-    Returns:
-        List of lowercase tokens
-    """
-    return text.lower().split()
 
 
 def evaluate_with_bm25(
@@ -67,11 +55,10 @@ def evaluate_with_bm25(
         }
 
     logger.info(f"Evaluating {len(triplet_ids)} triplets with BM25")
-    logger.info(f"Building BM25 index over {len(documents)} documents")
+    logger.info(f"Building BM25 matrix over {len(documents)} documents")
 
-    # Build BM25 index once for all documents
-    tokenized_corpus = [tokenize(doc) for doc in documents]
-    bm25 = BM25Okapi(tokenized_corpus)
+    # Precompute BM25 similarity matrix once for all documents
+    similarity_matrix = compute_bm25_matrix(documents)
 
     # Evaluate each triplet
     n_correct = 0
@@ -79,15 +66,9 @@ def evaluate_with_bm25(
     n_ties = 0
 
     for anchor_id, positive_id, negative_id in triplet_ids:
-        # Tokenize anchor (look up by ID)
-        anchor_tokens = tokenize(documents[anchor_id])
-
-        # Score all documents
-        scores = bm25.get_scores(anchor_tokens)
-
-        # Get scores for positive and negative
-        pos_score = scores[positive_id]
-        neg_score = scores[negative_id]
+        # Get scores from precomputed matrix
+        pos_score = similarity_matrix[anchor_id][positive_id]
+        neg_score = similarity_matrix[anchor_id][negative_id]
 
         # Compare scores
         if pos_score > neg_score:

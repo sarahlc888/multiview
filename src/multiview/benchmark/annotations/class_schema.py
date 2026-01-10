@@ -8,9 +8,9 @@ This module handles discrete category annotation (similar to lm_discrete.py):
 from __future__ import annotations
 
 import logging
-import random
 
 from multiview.inference.inference import run_inference
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -42,77 +42,23 @@ def generate_category_schema(
             ]
         }
     """
-    # Sample documents
-    sample_docs = random.sample(documents, min(n_samples, len(documents)))
+    # Sample documents deterministically based on criterion
+    sample_docs = deterministic_sample(documents, n_samples, criterion)
     sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
 
-    # Build prompt conditionally
-    prompt_parts = [
-        "You have a set of unlabeled documents and a criterion of interest. "
-        "Your task is to design a category schema that captures how the documents vary with respect to the criterion.",
-        "",
-        f"CRITERION: {criterion}",
-    ]
-
-    if criterion_description:
-        prompt_parts.extend(
-            [
-                "",
-                "CRITERION DESCRIPTION:",
-                criterion_description,
-            ]
-        )
-
-    if schema_hint:
-        prompt_parts.extend(
-            [
-                "",
-                "SCHEMA HINT:",
-                schema_hint,
-            ]
-        )
-
-    prompt_parts.extend(
-        [
-            "",
-            "SAMPLE DOCUMENTS:",
-            sample_docs_str,
-            "",
-            "Think about what kind of candidate schemas are possible.",
-            "- The ideal candidate schema partitions the output space into discrete categories.",
-            "- If there is a way to enumerate a closed set of categories, that would be best, but if not, it's OK to include an 'other' category.",
-            "- Try to choose a number of categories that reflects the range of variation within the sample documents.",
-            "",
-            "Choose the single best schema strategy and return it in valid JSON with reasoning:",
-            "{",
-            '  "reasoning": "Explain your schema choice: what alternatives you considered and why this schema best captures variation along the criteria",',
-            '  "categories": [{"name": "...", "description": "..."}, ...]',
-            "}",
-        ]
-    )
-
-    prompt = "\n".join(prompt_parts)
-
-    # Prepare inputs with pre-built prompt
+    # Prepare inputs with template variables
+    # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
-        "prompt": [prompt],
+        "criterion": [criterion],
+        "criterion_description": [criterion_description or ""],
+        "schema_hint": [schema_hint or ""],
+        "sample_documents": [sample_docs_str],
     }
 
-    # Generate schema using inference with a custom config
-    from multiview.inference.presets import InferenceConfig
-
-    custom_config = InferenceConfig(
-        provider="gemini",
-        model_name="gemini-2.5-pro",
-        prompt_template="{prompt}",
-        parser="json",
-        temperature=0.0,
-        max_tokens=8192,
-    )
-
+    # Generate schema using inference
     results = run_inference(
         inputs=inputs,
-        config=custom_config,
+        config="category_schema_generation_gemini",
         cache_alias=cache_alias,
         verbose=True,
     )

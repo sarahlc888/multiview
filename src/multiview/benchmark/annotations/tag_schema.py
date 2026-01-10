@@ -8,9 +8,9 @@ This module handles multi-label binary tag annotation (similar to lm_tags.py):
 from __future__ import annotations
 
 import logging
-import random
 
 from multiview.inference.inference import run_inference
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -44,130 +44,32 @@ def generate_tag_schema(
             ]
         }
     """
-    # Sample documents
-    sample_docs = random.sample(documents, min(n_samples, len(documents)))
+    # Sample documents deterministically based on criterion (and spurious flag for uniqueness)
+    seed_base = f"{criterion}_spurious" if is_spurious else criterion
+    sample_docs = deterministic_sample(documents, n_samples, seed_base)
     sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
 
-    # Build prompt conditionally based on tag type
-    from multiview.inference.presets import InferenceConfig
-
-    if is_spurious:
-        # Spurious tags prompt
-        prompt_parts = [
-            "You are designing a tag schema to identify SPURIOUS (surface-level) similarities between documents.",
-            "",
-            f"CRITERION OF INTEREST: {criterion}",
-        ]
-
-        if criterion_description:
-            prompt_parts.extend(
-                [
-                    "",
-                    "CRITERION DESCRIPTION:",
-                    criterion_description,
-                ]
-            )
-
-        prompt_parts.extend(
-            [
-                "",
-                "SAMPLE DOCUMENTS:",
-                sample_docs_str,
-                "",
-                "Your task is to create a tag schema that captures dimensions of variation that:",
-                f'1. Are INDEPENDENT of the criterion "{criterion}" (not relevant to it)',
-                "2. Capture superficial or surface-level properties of documents",
-                "3. Could cause two documents to APPEAR similar even though they differ on the criterion",
-                "4. Could be used to identify confounders or spurious correlations",
-                "",
-                "IMPORTANT:",
-                "- Tags should be BINARY (yes/no, present/absent)",
-                "- Tags should be INDEPENDENT of the criterion",
-                "- Tags should capture SUPERFICIAL similarities",
-                "- Aim for 5-10 tags that cover different aspects of spurious similarity",
-                "- Each tag should be clearly defined",
-                "",
-                "Return valid JSON with reasoning:",
-                "{",
-                '  "reasoning": "Explain what spurious/superficial properties you identified and why these tags capture surface-level similarities independent of the criterion",',
-                '  "tags": [{"name": "tag_name", "description": "when to apply this tag"}, ...]',
-                "}",
-            ]
-        )
-    else:
-        # Regular criterion-relevant tags prompt
-        prompt_parts = [
-            "You are designing a tagging schema to annotate documents based on a specific lens/criteria.",
-            "",
-            f"CRITERIA: {criterion}",
-        ]
-
-        if criterion_description:
-            prompt_parts.extend(
-                [
-                    "",
-                    "CRITERIA DESCRIPTION:",
-                    criterion_description,
-                ]
-            )
-
-        if schema_hint:
-            prompt_parts.extend(
-                [
-                    "",
-                    "TAG SCHEMA HINT:",
-                    schema_hint,
-                ]
-            )
-
-        prompt_parts.extend(
-            [
-                "",
-                f"Here are {len(sample_docs)} randomly sampled documents from the corpus (showing all fields):",
-                "",
-                sample_docs_str,
-                "",
-                f'Your task: Create a tagging schema with tags that capture different aspects of how documents relate to the criteria "{criterion}".',
-                "",
-                "IMPORTANT: Tags are NOT mutually exclusive. A document can have multiple tags or no tags. Think of tags as binary attributes.",
-                "",
-                "GUIDELINES:",
-                "- Tags should be relevant to the criteria",
-                "- Each tag should represent a single, clear attribute that either does or does not apply to a given document",
-                "- There is no limit on the number of tags. Use as many as seems reasonable. A little bit of redundancy is OK, but use your judgement. The priority is to capture the range of variation across documents as much as possible.",
-                "- If there is a finite, enumerable set of options or prototypes, enumerate them. For example, color -> [red, yellow, green, ...]",
-                "- If the decision space can be factorized into independent attributes, do so.",
-                "",
-                "Think through multiple candidate tag schemas before choosing the final one.",
-                "",
-                "Output valid JSON with reasoning:",
-                "{",
-                '  "reasoning": "Explain what tag options you considered and why you chose these specific tags to capture variation along the criteria",',
-                '  "tags": [{"name": "tag_name", "description": "when this tag applies"}, ...]',
-                "}",
-            ]
-        )
-
-    prompt = "\n".join(prompt_parts)
-
-    # Prepare inputs with pre-built prompt
+    # Prepare inputs with template variables
+    # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
-        "prompt": [prompt],
+        "criterion": [criterion],
+        "criterion_description": [criterion_description or ""],
+        "schema_hint": [schema_hint or ""],
+        "sample_documents": [sample_docs_str],
+        "n_samples": [str(len(sample_docs))],
     }
 
-    custom_config = InferenceConfig(
-        provider="gemini",
-        model_name="gemini-2.5-pro",
-        prompt_template="{prompt}",
-        parser="json",
-        temperature=0.0,
-        max_tokens=8192,
+    # Use preset based on tag type
+    preset_name = (
+        "spurious_tag_schema_generation_gemini"
+        if is_spurious
+        else "tag_schema_generation_gemini"
     )
 
     # Generate schema using inference
     results = run_inference(
         inputs=inputs,
-        config=custom_config,
+        config=preset_name,
         cache_alias=cache_alias,
         verbose=True,
     )

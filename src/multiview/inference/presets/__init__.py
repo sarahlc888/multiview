@@ -49,10 +49,15 @@ from .embeddings import (
 from .lm_judge_pair import (
     LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI,
     LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI,
+    LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI,
+    LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI,
 )
 
 # LM judge presets - triplet
-from .lm_judge_triplet import LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI
+from .lm_judge_triplet import (
+    LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
+    LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI,
+)
 
 # Document rewriting presets
 from .rewrite import REWRITE_PLAINTEXT_FREEFORM_GEMINI
@@ -83,6 +88,10 @@ PRESET_REGISTRY = {
     "lmjudge_pair_plaintext_likerthard_gemini": LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI,
     "lmjudge_triplet_plaintext_binaryhard_gemini": LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
     "lmjudge_pair_norewrite_binaryhard_gemini": LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI,
+    # LM judge presets with annotations
+    "lmjudge_triplet_with_annotation_gemini": LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI,
+    "lmjudge_pair_with_annotation_likerthard_gemini": LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI,
+    "lmjudge_pair_with_annotation_binaryhard_gemini": LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI,
     # Multi-faceted annotation presets
     "category_schema_generation_gemini": CATEGORY_SCHEMA_GENERATION_GEMINI,
     "tag_schema_generation_gemini": TAG_SCHEMA_GENERATION_GEMINI,
@@ -149,6 +158,9 @@ __all__ = [
     "LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI",
     "LMJUDGE_PAIR_NOREWRITE_BINARYHARD_GEMINI",
     "LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI",
+    "LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI",
+    "LMJUDGE_PAIR_WITH_ANNOTATION_LIKERTHARD_GEMINI",
+    "LMJUDGE_PAIR_WITH_ANNOTATION_BINARYHARD_GEMINI",
     "CATEGORY_SCHEMA_GENERATION_GEMINI",
     "TAG_SCHEMA_GENERATION_GEMINI",
     "SPURIOUS_TAG_SCHEMA_GENERATION_GEMINI",

@@ -9,9 +9,9 @@ This module handles open-ended summary annotation (similar to lm_open_ended.py):
 from __future__ import annotations
 
 import logging
-import random
 
 from multiview.inference.inference import run_inference
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,8 @@ def generate_criteria_description(
             "description": "Enhanced criteria description (str)",
         }
     """
-    # Sample documents
-    sample_docs = random.sample(documents, min(n_samples, len(documents)))
+    # Sample documents deterministically based on criterion
+    sample_docs = deterministic_sample(documents, n_samples, criterion)
     sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
 
     # Prepare inputs
@@ -96,107 +96,39 @@ def generate_summary_guidance(
             "summary_guidance": "..."
         }
     """
-    # Sample documents
-    sample_docs = random.sample(documents, min(n_samples, len(documents)))
+    # Sample documents deterministically based on criterion
+    sample_docs = deterministic_sample(documents, n_samples, criterion)
     sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
 
-    # Build prompt conditionally
-    from multiview.inference.presets import InferenceConfig
-
-    prompt_parts = [
-        "You are designing annotation guidance for free-text summaries.",
-        "",
-        f"CRITERION: {criterion}",
-    ]
-
-    if criterion_description:
-        prompt_parts.extend(
-            [
-                "",
-                "CRITERION DESCRIPTION:",
-                criterion_description,
-            ]
-        )
-
-    if guidance_hint:
-        prompt_parts.extend(
-            [
-                "",
-                "SUMMARY HINT:",
-                guidance_hint,
-            ]
-        )
-
-    if format_hint:
-        prompt_parts.extend(
-            [
-                "",
-                "DESIRED FORMAT:",
-                format_hint,
-            ]
-        )
-
-    prompt_parts.extend(
-        [
-            "",
-            "SAMPLE DOCUMENTS:",
-            sample_docs_str,
-            "",
-            "The summary should include two sections:",
-            "1) Annotation trace: freeform text with justification and references to the document.",
-            "2) Final summary: concise, structured, high lexical overlap for similar documents; invariant to spurious factors; should not reference the specifics of the document unless there's no other way to illustrate the point.",
-        ]
-    )
-
-    if format_hint:
-        prompt_parts.append(
-            "\nIf a desired format is specified above, the final summary should follow that format."
-        )
-
-    prompt_parts.extend(
-        [
-            "",
-            "Include a short demonstration showing how to produce both fields for one example document.",
-            "",
-            "Think through multiple candidate guidance options, then choose the single best option.",
-            "Return valid JSON with reasoning:",
-            "{",
-            '  "reasoning": "Explain what guidance options you considered and why this approach best helps annotators create useful summaries",',
-            '  "summary_guidance": "..."',
-            "}",
-        ]
-    )
-
-    prompt = "\n".join(prompt_parts)
-
-    # Prepare inputs with pre-built prompt
+    # Prepare inputs with template variables
+    # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
-        "prompt": [prompt],
+        "criterion": [criterion],
+        "criterion_description": [criterion_description or ""],
+        "guidance_hint": [guidance_hint or ""],
+        "format_hint": [format_hint or ""],
+        "sample_documents": [sample_docs_str],
     }
 
-    custom_config = InferenceConfig(
-        provider="gemini",
-        model_name="gemini-2.5-pro",
-        prompt_template="{prompt}",
-        parser="json",
-        temperature=0.0,
-        max_tokens=8192,
-    )
+    # Generate guidance using inference with retry on failure
+    for attempt in range(2):
+        results = run_inference(
+            inputs=inputs,
+            config="summary_guidance_generation_gemini",
+            cache_alias=cache_alias,
+            force_refresh=(attempt > 0),  # Skip cache on retry
+            verbose=True,
+        )
 
-    # Generate guidance using inference
-    results = run_inference(
-        inputs=inputs,
-        config=custom_config,
-        cache_alias=cache_alias,
-        verbose=True,
-    )
+        guidance = results[0]
+        if guidance is not None:
+            logger.info(f"Generated summary guidance on attempt {attempt + 1}")
+            return guidance
 
-    guidance = results[0]
-    if guidance is None:
-        raise ValueError("Failed to generate summary guidance")
+        if attempt == 0:
+            logger.warning("First attempt failed to parse, retrying once...")
 
-    logger.info("Generated summary guidance")
-    return guidance
+    raise ValueError("Failed to generate summary guidance after 2 attempts")
 
 
 def generate_summary(

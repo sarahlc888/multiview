@@ -87,6 +87,9 @@ class Task:
         self.documents = None
         self.document_annotations = None  # List of dicts with criterion values
         self.triplets = None  # List of (anchor_id, positive_id, negative_id) tuples
+        self.synthesis_anchor_indices = (
+            None  # Indices of docs used as synthesis anchors
+        )
 
         # Warn if criterion is provided but meaningless
         if self.triplet_style == "random":
@@ -117,7 +120,7 @@ class Task:
         # Import here to avoid circular dependency
         from multiview.benchmark import synthesis_utils
 
-        synthetic_docs = synthesis_utils.synthesize_documents(
+        synthetic_docs, anchor_indices = synthesis_utils.synthesize_documents(
             documents=self.documents,
             document_set=self.document_set,
             criterion_name=self.criterion_name,
@@ -127,6 +130,10 @@ class Task:
         if synthetic_docs:
             logger.info(f"Added {len(synthetic_docs)} synthetic documents")
             self.documents.extend(synthetic_docs)
+            self.synthesis_anchor_indices = anchor_indices
+            logger.info(
+                f"Stored {len(anchor_indices)} anchor indices for triplet creation"
+            )
         else:
             logger.info("No synthetic documents generated")
 
@@ -226,6 +233,7 @@ class Task:
                 criterion_description=self.config.get("criterion_description"),
                 cache_alias_prefix=f"{self.get_task_name()}_triplets",
                 triplet_example=self.config.get("triplet_example"),
+                anchor_indices=self.synthesis_anchor_indices,
             )
         else:
             raise ValueError(f"Unknown triplet_style: {self.triplet_style}")

@@ -18,6 +18,7 @@ def evaluate_with_lm_judge_pair(
     criterion_description: str | None = None,
     lm_judge_preset: str = "lmjudge_pair_plaintext_likerthard_gemini",
     cache_alias: str | None = None,
+    annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Evaluate triplets using pairwise LM judge scoring.
 
@@ -27,13 +28,15 @@ def evaluate_with_lm_judge_pair(
 
     Args:
         triplets: List of triplet dicts with keys:
-            - "anchor": anchor document text
-            - "positive": positive document text
-            - "negative": negative document text
+            - "anchor": anchor document text (or document dict)
+            - "positive": positive document text (or document dict)
+            - "negative": negative document text (or document dict)
         criterion: Similarity criterion name
         criterion_description: Detailed description of the criterion (optional)
         lm_judge_preset: Preset name for pairwise LM judge (default: Likert scale)
         cache_alias: Cache alias for inference caching
+        annotations: List of annotation dicts, one per document, with at least "summary" key (optional).
+            If provided, will use annotation-aware preset and include summaries in the prompt.
 
     Returns:
         Dict with evaluation metrics:
@@ -73,7 +76,29 @@ def evaluate_with_lm_judge_pair(
     logger.info(f"Evaluating {len(triplets)} triplets with pairwise LM judge")
     logger.info(f"Using preset: {lm_judge_preset}")
 
+    # Check if we have annotations
+    has_annotations = annotations is not None and len(annotations) > 0
+
     criterion_text = criterion_description or criterion
+
+    # Helper function to get annotation summary
+    def get_annotation_summary(triplet_key: str, triplet_idx: int) -> str:
+        """Get annotation summary for a document in the triplet."""
+        # First try to get from triplet itself (if pre-attached)
+        annotation_key = f"{triplet_key}_annotation"
+        if annotation_key in triplets[triplet_idx]:
+            ann = triplets[triplet_idx][annotation_key]
+            return ann.get("summary", "") if isinstance(ann, dict) else str(ann)
+
+        # Otherwise try to map using document indices
+        id_key = f"{triplet_key}_id"
+        if id_key in triplets[triplet_idx] and annotations:
+            doc_id = triplets[triplet_idx][id_key]
+            if 0 <= doc_id < len(annotations):
+                ann = annotations[doc_id]
+                return ann.get("summary", "") if isinstance(ann, dict) else ""
+
+        return ""
 
     # Prepare inputs for batch inference - score anchor-positive pairs
     positive_pairs_inputs = {
@@ -81,6 +106,16 @@ def evaluate_with_lm_judge_pair(
         "document_a": [t["anchor"] for t in triplets],
         "document_b": [t["positive"] for t in triplets],
     }
+
+    # Add annotations if provided
+    if has_annotations:
+        logger.info("Using annotations in evaluation")
+        positive_pairs_inputs["annotation_a"] = [
+            get_annotation_summary("anchor", i) for i in range(len(triplets))
+        ]
+        positive_pairs_inputs["annotation_b"] = [
+            get_annotation_summary("positive", i) for i in range(len(triplets))
+        ]
 
     # Score anchor-positive pairs
     logger.debug("Scoring anchor-positive pairs")
@@ -97,6 +132,15 @@ def evaluate_with_lm_judge_pair(
         "document_a": [t["anchor"] for t in triplets],
         "document_b": [t["negative"] for t in triplets],
     }
+
+    # Add annotations if provided
+    if has_annotations:
+        negative_pairs_inputs["annotation_a"] = [
+            get_annotation_summary("anchor", i) for i in range(len(triplets))
+        ]
+        negative_pairs_inputs["annotation_b"] = [
+            get_annotation_summary("negative", i) for i in range(len(triplets))
+        ]
 
     # Score anchor-negative pairs
     logger.debug("Scoring anchor-negative pairs")

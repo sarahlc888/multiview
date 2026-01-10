@@ -10,8 +10,8 @@ use_cache: true
 # Task configuration
 tasks:
   defaults:
-    max_docs: 50  # Need more docs than triplets for good sampling
-    max_triplets: 4
+    max_docs: 600  # Need more docs than triplets for good sampling
+    max_triplets: 256
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false

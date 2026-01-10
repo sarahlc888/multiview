@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 from multiview.constants import GEMINI_API_KEY
+from multiview.inference.cost_tracker import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,19 @@ def _gemini_single_completion(
             completion_text = response.text
             if prefill:
                 completion_text = prefill + completion_text
+
+            # Record usage
+            if hasattr(response, "usage_metadata"):
+                record_usage(
+                    model_name=model_name,
+                    input_tokens=getattr(
+                        response.usage_metadata, "prompt_token_count", 0
+                    ),
+                    output_tokens=getattr(
+                        response.usage_metadata, "candidates_token_count", 0
+                    ),
+                )
+
             return {"text": completion_text}
 
         except Exception as e:

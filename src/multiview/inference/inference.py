@@ -155,8 +155,8 @@ def run_inference(
         **config.to_completion_kwargs(),
     )
 
-    if verbose and len(raw_completions) > 0:
-        logger.info(f"Example raw completion: {raw_completions[0]}")
+    if len(raw_completions) > 0:
+        logger.debug(f"Example raw completion: {raw_completions[0]}")
 
     # Log prompts and responses for auditing
     # Extract prompts for logging

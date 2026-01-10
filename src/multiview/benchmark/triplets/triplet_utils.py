@@ -205,6 +205,7 @@ def create_lm_triplets(
     criterion_description: str | None = None,
     cache_alias_prefix: str | None = None,
     triplet_example: dict | str | None = None,
+    anchor_indices: list[int] | None = None,
 ) -> list[tuple[int, int, int]]:
     """Create triplets using language model judge with candidate selection.
 
@@ -228,6 +229,9 @@ def create_lm_triplets(
         criterion: Criterion name (for LM judge prompt)
         criterion_description: Description of criterion (for LM judge prompt)
         cache_alias_prefix: Prefix for cache aliases
+        anchor_indices: Optional list of document indices to use as anchors.
+            If provided, uses these indices as anchors (useful for synthesis).
+            If None, uses sequential indices 0, 1, 2, ..., num_triplets-1.
 
     Returns:
         List of (anchor_id, positive_id, negative_id) triplets as document indices
@@ -244,9 +248,18 @@ def create_lm_triplets(
         logger.warning("Need at least 3 documents to create triplets")
         return []
 
-    # Determine number of triplets
-    num_triplets = max_triplets if max_triplets is not None else len(documents)
-    num_triplets = min(num_triplets, len(documents))
+    # Determine anchor indices to use
+    if anchor_indices is not None:
+        # Use provided anchor indices (e.g., from synthesis)
+        anchors_to_process = anchor_indices
+        # Respect max_triplets if provided
+        if max_triplets is not None:
+            anchors_to_process = anchors_to_process[:max_triplets]
+    else:
+        # Default: sequential indices
+        num_triplets = max_triplets if max_triplets is not None else len(documents)
+        num_triplets = min(num_triplets, len(documents))
+        anchors_to_process = list(range(num_triplets))
 
     # Check if annotations are needed
     needs_annotations = (
@@ -263,12 +276,14 @@ def create_lm_triplets(
     triplets = []
 
     logger.info(
-        f"Creating {num_triplets} triplets using LM judge with {candidate_strategy} strategy"
+        f"Creating {len(anchors_to_process)} triplets using LM judge with {candidate_strategy} strategy"
     )
 
     # Process each anchor
-    for anchor_idx in range(num_triplets):
-        logger.debug(f"Processing anchor {anchor_idx + 1}/{num_triplets}")
+    for i, anchor_idx in enumerate(anchors_to_process):
+        logger.debug(
+            f"Processing anchor {i + 1}/{len(anchors_to_process)} (doc_idx={anchor_idx})"
+        )
 
         # Step 1: Select candidate pool
         if candidate_strategy == "bm25":

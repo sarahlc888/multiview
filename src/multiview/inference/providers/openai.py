@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 from multiview.constants import OPENAI_API_KEYS
+from multiview.inference.cost_tracker import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,15 @@ def _openai_single_completion(
             completion_text = response.choices[0].message.content
             if prefill:
                 completion_text = prefill + completion_text
+
+            # Record usage
+            if hasattr(response, "usage") and response.usage:
+                record_usage(
+                    model_name=model_name,
+                    input_tokens=response.usage.prompt_tokens,
+                    output_tokens=response.usage.completion_tokens,
+                )
+
             return {"text": completion_text}
 
         except openai.RateLimitError as e:
@@ -238,6 +248,14 @@ def openai_embedding_completions(
             **embedding_kwargs,
         )
 
+        # Record usage
+        if hasattr(response, "usage") and response.usage:
+            record_usage(
+                model_name=model_name,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=0,  # Embeddings don't have output tokens
+            )
+
         # Extract embeddings
         completions = [{"vector": item.embedding} for item in response.data]
 
@@ -260,6 +278,15 @@ def openai_embedding_completions(
             input=final_prompts,
             **embedding_kwargs,
         )
+
+        # Record usage
+        if hasattr(response, "usage") and response.usage:
+            record_usage(
+                model_name=model_name,
+                input_tokens=response.usage.prompt_tokens,
+                output_tokens=0,
+            )
+
         completions = [{"vector": item.embedding} for item in response.data]
         return {"completions": completions}
 

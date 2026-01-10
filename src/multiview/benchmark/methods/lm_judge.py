@@ -18,6 +18,7 @@ def evaluate_with_lm_judge_triplet(
     criterion_description: str | None = None,
     lm_judge_preset: str = "lmjudge_triplet_plaintext_binaryhard_gemini",
     cache_alias: str | None = None,
+    annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Evaluate triplets using an LM judge.
 
@@ -26,13 +27,15 @@ def evaluate_with_lm_judge_triplet(
 
     Args:
         triplets: List of triplet dicts with keys:
-            - "anchor": anchor document text
-            - "positive": positive document text
-            - "negative": negative document text
+            - "anchor": anchor document text (or document dict)
+            - "positive": positive document text (or document dict)
+            - "negative": negative document text (or document dict)
         criterion: Similarity criterion name
         criterion_description: Detailed description of the criterion (optional)
         lm_judge_preset: Preset name for LM judge (default: simple triplet comparison)
         cache_alias: Cache alias for inference caching
+        annotations: List of annotation dicts, one per document, with at least "summary" key (optional).
+            If provided, will use annotation-aware preset and include summaries in the prompt.
 
     Returns:
         Dict with evaluation metrics:
@@ -68,18 +71,60 @@ def evaluate_with_lm_judge_triplet(
     logger.info(f"Evaluating {len(triplets)} triplets with LM judge")
     logger.info(f"Using preset: {lm_judge_preset}")
 
+    # Check if we have annotations
+    has_annotations = annotations is not None and len(annotations) > 0
+
     # Prepare inputs for batch inference
     # For the triplet judge preset, we need:
     # - similarity_criteria: the criterion description
     # - document_a: anchor
     # - document_b: positive
     # - document_c: negative
+    # If annotations are provided, also include annotation_a, annotation_b, annotation_c
+
     inputs = {
         "similarity_criteria": [criterion_description or criterion] * len(triplets),
         "document_a": [t["anchor"] for t in triplets],
         "document_b": [t["positive"] for t in triplets],
         "document_c": [t["negative"] for t in triplets],
     }
+
+    # Add annotations if provided
+    if has_annotations:
+        # Extract document IDs from triplets to look up annotations
+        # Triplets are passed with document dicts, need to get annotation by index/id
+        logger.info("Using annotations in evaluation")
+
+        # Try to get annotations from triplets directly (if they were pre-attached)
+        # Otherwise, look them up from the annotations list
+        def get_annotation_summary(triplet_key: str, triplet_idx: int) -> str:
+            """Get annotation summary for a document in the triplet."""
+            # First try to get from triplet itself (if pre-attached)
+            annotation_key = f"{triplet_key}_annotation"
+            if annotation_key in triplets[triplet_idx]:
+                ann = triplets[triplet_idx][annotation_key]
+                return ann.get("summary", "") if isinstance(ann, dict) else str(ann)
+
+            # Otherwise try to map using document indices
+            # This requires that triplets contain document indices
+            id_key = f"{triplet_key}_id"
+            if id_key in triplets[triplet_idx] and annotations:
+                doc_id = triplets[triplet_idx][id_key]
+                if 0 <= doc_id < len(annotations):
+                    ann = annotations[doc_id]
+                    return ann.get("summary", "") if isinstance(ann, dict) else ""
+
+            return ""
+
+        inputs["annotation_a"] = [
+            get_annotation_summary("anchor", i) for i in range(len(triplets))
+        ]
+        inputs["annotation_b"] = [
+            get_annotation_summary("positive", i) for i in range(len(triplets))
+        ]
+        inputs["annotation_c"] = [
+            get_annotation_summary("negative", i) for i in range(len(triplets))
+        ]
 
     # Run inference
     results = run_inference(

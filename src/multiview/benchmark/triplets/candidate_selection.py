@@ -10,8 +10,8 @@ This module provides multiple strategies for selecting candidate positives/negat
 import logging
 
 import numpy as np
-from rank_bm25 import BM25Okapi
 
+from multiview.benchmark.bm25_utils import compute_bm25_scores
 from multiview.benchmark.triplets.utils import extract_active_tags, jaccard_similarity
 from multiview.inference.inference import run_inference
 
@@ -45,17 +45,8 @@ def select_candidates_bm25(
     else:
         corpus = documents
 
-    # Tokenize corpus (simple whitespace tokenization)
-    tokenized_corpus = [doc.lower().split() for doc in corpus]
-
-    # Build BM25 index
-    bm25 = BM25Okapi(tokenized_corpus)
-
-    # Get anchor query
-    anchor_query = tokenized_corpus[anchor_idx]
-
-    # Get scores for all documents
-    scores = bm25.get_scores(anchor_query)
+    # Compute BM25 scores using advanced tokenization
+    scores = compute_bm25_scores(corpus, anchor_idx)
 
     # Exclude anchor itself
     scores[anchor_idx] = -np.inf

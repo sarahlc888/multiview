@@ -17,6 +17,31 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+def _clean_json_string(text: str) -> str:
+    """Clean common JSON issues that LMs produce."""
+    cleaned = text
+    # Fix incorrectly escaped single quotes (\' -> ')
+    # In JSON, single quotes don't need escaping, so \' is always invalid
+    # Replace all \' with ' (single quotes are just regular chars in JSON strings)
+    cleaned = re.sub(r"\\'", "'", cleaned)
+    # Remove trailing commas before closing braces/brackets
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    return cleaned
+
+
+def _try_parse_json(text: str, clean: bool = False) -> tuple[Any, Exception | None]:
+    """Try to parse JSON from text.
+
+    Returns:
+        Tuple of (parsed_json, error). If parsing succeeds, error is None.
+    """
+    try:
+        cleaned_text = _clean_json_string(text) if clean else text
+        return json.loads(cleaned_text), None
+    except json.JSONDecodeError as e:
+        return None, e
+
+
 def vector_parser(completion: dict, **kwargs) -> Any:
     """Parse embedding vectors from completion.
 
@@ -84,20 +109,53 @@ def json_parser(
     # Extract JSON from markdown code block if present
     if "```json" in completion:
         # Use greedy match to handle nested backticks within JSON strings
-        match = re.search(r"```json(.*)```", completion, re.DOTALL)
+        match = re.search(r"```json(.*?)```", completion, re.DOTALL)
+        if match:
+            completion = match.group(1).strip()
+    elif "```" in completion:
+        # Try to extract from any code block
+        match = re.search(r"```(?:[a-z]+)?\n?(.*?)```", completion, re.DOTALL)
         if match:
             completion = match.group(1).strip()
 
-    # Try to parse JSON
-    try:
-        json_loaded = json.loads(completion)
-    except json.JSONDecodeError:
-        # Try wrapping in braces (common LM mistake)
-        try:
-            json_loaded = json.loads(f"{{\n{completion}\n}}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from completion: {completion[:200]}")
-            raise ValueError(f"Invalid JSON in completion: {e}") from e
+    # Clean up common issues
+    completion = completion.strip()
+
+    # Try multiple parsing strategies in order
+    # Note: We try cleaning early since LMs often produce invalid escape sequences
+    strategies = [
+        # Strategy 1: Clean and parse (try cleaning first since it's common)
+        lambda: _try_parse_json(completion, clean=True),
+        # Strategy 2: Direct parse (in case cleaning breaks valid JSON)
+        lambda: _try_parse_json(completion, clean=False),
+        # Strategy 3: Extract JSON from text and parse
+        lambda: _extract_and_parse_json(completion),
+        # Strategy 4: Wrap in braces if missing outer structure
+        lambda: _wrap_and_parse_json(completion),
+    ]
+
+    json_loaded = None
+    last_error = None
+    strategy_errors = []
+
+    for i, strategy in enumerate(strategies, 1):
+        json_loaded, error = strategy()
+        if json_loaded is not None:
+            break
+        if error:
+            strategy_errors.append(
+                f"Strategy {i}: {type(error).__name__}: {str(error)}"
+            )
+        last_error = error
+
+    if json_loaded is None:
+        error_details = (
+            "\n".join(strategy_errors) if strategy_errors else "All strategies failed"
+        )
+        logger.error(f"Failed to parse JSON after {len(strategies)} strategies")
+        logger.error(f"Completion preview: {completion[:500]}")
+        logger.error(f"Strategy errors:\n{error_details}")
+        raise ValueError(f"Invalid JSON in completion: {last_error}") from last_error
 
     # Extract annotation key if requested
     if annotation_key is None:
@@ -111,6 +169,44 @@ def json_parser(
         return [item[annotation_key] for item in json_loaded]
     else:
         raise ValueError(f"Unexpected JSON type: {type(json_loaded)}")
+
+
+def _extract_and_parse_json(text: str) -> tuple[Any, Exception | None]:
+    """Extract JSON object/array from text and try to parse it."""
+    json_match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+    if not json_match:
+        return None, ValueError("No JSON object or array found")
+
+    extracted_json = json_match.group(1)
+    # Try parsing with cleaning first (common case), then without
+    json_loaded, error = _try_parse_json(extracted_json, clean=True)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    json_loaded, error2 = _try_parse_json(extracted_json, clean=False)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    # If we get here, both attempts failed - return the last error
+    return None, error2 or error or ValueError(
+        "Extracted JSON still invalid after cleaning"
+    )
+
+
+def _wrap_and_parse_json(text: str) -> tuple[Any, Exception | None]:
+    """Wrap text in braces if it looks like it's missing outer structure."""
+    text_stripped = text.strip()
+    # If text already has outer structure, this strategy doesn't apply
+    if text_stripped.startswith("{") or text_stripped.startswith("["):
+        return None, None
+
+    # Try wrapping, then with cleaning
+    json_loaded, error = _try_parse_json(f"{{{text}}}", clean=False)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    json_loaded, error = _try_parse_json(f"{{{text}}}", clean=True)
+    return json_loaded, error
 
 
 def text_parser(completion: str | dict, **kwargs) -> str:

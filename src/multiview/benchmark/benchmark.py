@@ -104,6 +104,10 @@ class Benchmark:
                                     "anchor": task.documents[anchor_id],
                                     "positive": task.documents[positive_id],
                                     "negative": task.documents[negative_id],
+                                    # Include IDs for annotation lookup
+                                    "anchor_id": anchor_id,
+                                    "positive_id": positive_id,
+                                    "negative_id": negative_id,
                                 }
                                 for anchor_id, positive_id, negative_id in task.triplets
                             ]
@@ -117,6 +121,10 @@ class Benchmark:
                                     "anchor": task.documents[anchor_id],
                                     "positive": task.documents[positive_id],
                                     "negative": task.documents[negative_id],
+                                    # Include IDs for annotation lookup
+                                    "anchor_id": anchor_id,
+                                    "positive_id": positive_id,
+                                    "negative_id": negative_id,
                                 }
                                 for anchor_id, positive_id, negative_id in task.triplets
                             ]
@@ -186,6 +194,21 @@ class Benchmark:
         criterion = task.criterion_name
         criterion_description = task.config.get("criterion_description")
 
+        # Determine if preset requires annotations based on preset name
+        requires_annotations = "with_annotation" in preset.lower()
+
+        # Pass annotations if preset requires them
+        annotations = None
+        if requires_annotations:
+            if task.document_annotations is not None:
+                annotations = task.document_annotations
+                logger.info("Using annotations for evaluation (preset requires them)")
+            else:
+                logger.warning(
+                    f"Preset '{preset}' requires annotations but task has none. "
+                    "Evaluation may fail or produce incorrect results."
+                )
+
         # Generate cache alias
         cache_alias = (
             f"{task.get_task_name()}_eval_{method_config.get('name', 'lmjudge')}"
@@ -209,6 +232,7 @@ class Benchmark:
             criterion_description=criterion_description,
             lm_judge_preset=preset,
             cache_alias=cache_alias,
+            annotations=annotations,
         )
 
     def _evaluate_bm25(
@@ -268,6 +292,21 @@ class Benchmark:
         criterion = task.criterion_name
         criterion_description = task.config.get("criterion_description")
 
+        # Determine if preset requires annotations based on preset name
+        requires_annotations = "with_annotation" in preset.lower()
+
+        # Pass annotations if preset requires them
+        annotations = None
+        if requires_annotations:
+            if task.document_annotations is not None:
+                annotations = task.document_annotations
+                logger.info("Using annotations for evaluation (preset requires them)")
+            else:
+                logger.warning(
+                    f"Preset '{preset}' requires annotations but task has none. "
+                    "Evaluation may fail or produce incorrect results."
+                )
+
         # Generate cache alias
         cache_alias = (
             f"{task.get_task_name()}_eval_{method_config.get('name', 'lmjudge_pair')}"
@@ -287,6 +326,7 @@ class Benchmark:
             criterion_description=criterion_description,
             lm_judge_preset=preset,
             cache_alias=cache_alias,
+            annotations=annotations,
         )
 
     def _evaluate_embeddings(

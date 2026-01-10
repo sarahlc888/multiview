@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 from multiview.constants import ANTHROPIC_API_KEY
+from multiview.inference.cost_tracker import record_usage
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,15 @@ def _anthropic_single_completion(
             completion_text = response.content[0].text
             if prefill:
                 completion_text = prefill + completion_text
+
+            # Record usage
+            if hasattr(response, "usage"):
+                record_usage(
+                    model_name=model_name,
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                )
+
             return {"text": completion_text}
 
         except anthropic.RateLimitError as e:

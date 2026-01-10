@@ -59,8 +59,10 @@ def setup_logging(level: str = "INFO", output_file: str | None = None) -> None:
         "httpcore",
         "fsspec",
         "huggingface_hub.repocard",
+        "google_genai",
+        "google_genai._api_client",
     ]:
-        logging.getLogger(package).setLevel(logging.WARNING)
+        logging.getLogger(package).setLevel(logging.ERROR)
 
 
 def setup_logging_from_config(cfg) -> None:
