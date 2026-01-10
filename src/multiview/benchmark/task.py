@@ -88,8 +88,9 @@ class Task:
         self.document_annotations = None  # List of dicts with criterion values
         self.triplets = None  # List of (anchor_id, positive_id, negative_id) tuples
         self.synthesis_anchor_indices = (
-            None  # Indices of docs used as synthesis anchors
+            None  # Indices of docs used as synthesis anchors (backward compat)
         )
+        self.synthesis_metadata = None  # Full synthesis metadata dict
 
         # Warn if criterion is provided but meaningless
         if self.triplet_style == "random":
@@ -120,7 +121,7 @@ class Task:
         # Import here to avoid circular dependency
         from multiview.benchmark import synthesis_utils
 
-        synthetic_docs, anchor_indices = synthesis_utils.synthesize_documents(
+        synthetic_docs, synthesis_metadata = synthesis_utils.synthesize_documents(
             documents=self.documents,
             document_set=self.document_set,
             criterion_name=self.criterion_name,
@@ -130,9 +131,11 @@ class Task:
         if synthetic_docs:
             logger.info(f"Added {len(synthetic_docs)} synthetic documents")
             self.documents.extend(synthetic_docs)
-            self.synthesis_anchor_indices = anchor_indices
+            self.synthesis_metadata = synthesis_metadata
+            # Backward compatibility: extract anchor_indices from metadata
+            self.synthesis_anchor_indices = synthesis_metadata.get("anchor_indices", [])
             logger.info(
-                f"Stored {len(anchor_indices)} anchor indices for triplet creation"
+                f"Stored synthesis metadata with {len(self.synthesis_anchor_indices)} anchor indices"
             )
         else:
             logger.info("No synthetic documents generated")
@@ -307,4 +310,31 @@ class Task:
 
         logger.info(
             f"Saved {len(self.document_annotations)} annotations to {output_file}"
+        )
+
+    def validate_synthetic_annotations(self, output_dir: str | Path) -> dict:
+        """Validate synthetic document annotations against source documents.
+
+        Computes Jaccard similarities for tags and spurious_tags between
+        synthetic documents and their anchor documents. Generates validation
+        reports showing quality of synthesis.
+
+        Args:
+            output_dir: Output directory path (e.g., outputs/run_name/validation)
+
+        Returns:
+            Dict with validation statistics
+        """
+        if not self.synthesis_metadata or not self.document_annotations:
+            logger.warning("No synthesis metadata or annotations available for validation")
+            return {}
+
+        from multiview.benchmark.validation import validate_synthesis
+
+        return validate_synthesis(
+            documents=self.documents,
+            annotations=self.document_annotations,
+            synthesis_metadata=self.synthesis_metadata,
+            output_dir=output_dir,
+            task_name=self.get_task_name(),
         )

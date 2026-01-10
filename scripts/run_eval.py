@@ -44,6 +44,12 @@ def main(cfg: DictConfig):
         cur_task.augment_with_synthetic_documents()
         if cur_task.triplet_style != "random":
             cur_task.annotate_documents()
+
+            # Validate synthetic annotations if synthesis was performed
+            if cur_task.add_synthetic_docs and cur_task.synthesis_metadata:
+                validation_dir = output_base / "validation"
+                cur_task.validate_synthetic_annotations(validation_dir)
+
         cur_task.create_triplets()
         cur_task.save_triplets(triplets_dir)
         tasks.append(cur_task)

@@ -66,7 +66,7 @@ def synthesize_documents(
     document_set: Any,
     criterion_name: str,
     num_synthetic_per_doc: int = 2,
-) -> tuple[list[Any], list[int]]:
+) -> tuple[list[Any], dict]:
     """Generate synthetic documents using LM-based remix strategy.
 
     For each (X, Y) pair of documents:
@@ -80,16 +80,22 @@ def synthesize_documents(
         num_synthetic_per_doc: How many synthetic docs per original (split 50/50)
 
     Returns:
-        Tuple of (synthetic_documents, anchor_indices)
+        Tuple of (synthetic_documents, synthesis_metadata)
         - synthetic_documents: List of synthetic documents
-        - anchor_indices: List of indices of documents used as anchors (doc_x from pairs)
+        - synthesis_metadata: Dict with metadata about synthesis process including:
+            - anchor_indices: List of X document indices (backward compatibility)
+            - num_original_docs: Number of original documents
+            - num_pairs: Number of (X,Y) pairs generated
+            - num_filtered: Number of documents filtered out
+            - pairs: List of {pair_id, doc_x_idx, doc_y_idx} dicts
+            - synthetic_docs: List of metadata dicts for each synthetic document
 
     Raises:
         ValueError: If no synthesis config found for this criterion
     """
     if len(documents) == 0:
         logger.warning("No documents to synthesize")
-        return [], []
+        return [], {}
 
     # Check for criterion-specific config
     synthesis_configs = getattr(document_set, "SYNTHESIS_CONFIGS", {})
@@ -110,7 +116,7 @@ def synthesize_documents(
 
     if num_pairs == 0:
         logger.warning("num_synthetic_per_doc too small, no pairs will be generated")
-        return [], []
+        return [], {}
 
     logger.info(f"Generating {num_pairs} (X, Y) pairs for synthesis...")
 
@@ -118,8 +124,9 @@ def synthesize_documents(
     random.seed(42)  # For reproducibility
     pairs = []  # List of (idx_x, idx_y) tuples
     anchor_indices = []  # Track X indices for triplet anchors
+    pairs_metadata = []  # Track pair metadata for validation
 
-    for _ in range(num_pairs):
+    for pair_id in range(num_pairs):
         idx_x = random.randint(0, len(documents) - 1)
         idx_y = random.randint(0, len(documents) - 1)
         # Ensure X != Y if possible
@@ -127,6 +134,11 @@ def synthesize_documents(
             idx_y = random.randint(0, len(documents) - 1)
         pairs.append((idx_x, idx_y))
         anchor_indices.append(idx_x)
+        pairs_metadata.append({
+            "pair_id": pair_id,
+            "doc_x_idx": idx_x,
+            "doc_y_idx": idx_y,
+        })
 
     # Build inputs for both synthesis types
     texts_pos = [
@@ -204,10 +216,12 @@ def synthesize_documents(
 
     # Extract and combine results with filtering
     synthetic_docs = []
+    synthetic_docs_metadata = []
     filtered_count = 0
+    synthetic_idx = 0  # Track index in synthetic_docs list
 
     # Extract hard positives
-    for completion in raw_positives:
+    for pair_id, completion in enumerate(raw_positives):
         if completion and completion.strip():
             cleaned = _extract_problem_text(completion)
             if cleaned:
@@ -219,9 +233,17 @@ def synthesize_documents(
                     filtered_count += 1
                     continue
                 synthetic_docs.append(cleaned)
+                synthetic_docs_metadata.append({
+                    "synthetic_idx": synthetic_idx,
+                    "type": "hard_positive",
+                    "anchor_doc_idx": pairs[pair_id][0],
+                    "reference_doc_idx": pairs[pair_id][1],
+                    "pair_id": pair_id,
+                })
+                synthetic_idx += 1
 
     # Extract hard negatives
-    for completion in raw_negatives:
+    for pair_id, completion in enumerate(raw_negatives):
         if completion and completion.strip():
             cleaned = _extract_problem_text(completion)
             if cleaned:
@@ -233,6 +255,14 @@ def synthesize_documents(
                     filtered_count += 1
                     continue
                 synthetic_docs.append(cleaned)
+                synthetic_docs_metadata.append({
+                    "synthetic_idx": synthetic_idx,
+                    "type": "hard_negative",
+                    "anchor_doc_idx": pairs[pair_id][0],
+                    "reference_doc_idx": pairs[pair_id][1],
+                    "pair_id": pair_id,
+                })
+                synthetic_idx += 1
 
     logger.info(
         f"Successfully generated {len(synthetic_docs)} synthetic documents "
@@ -241,4 +271,14 @@ def synthesize_documents(
         f"Filtered out {filtered_count} docs that were too long."
     )
 
-    return synthetic_docs, anchor_indices
+    # Build synthesis metadata dict
+    synthesis_metadata = {
+        "anchor_indices": anchor_indices,  # Backward compatibility
+        "num_original_docs": len(documents),
+        "num_pairs": num_pairs,
+        "num_filtered": filtered_count,
+        "pairs": pairs_metadata,
+        "synthetic_docs": synthetic_docs_metadata,
+    }
+
+    return synthetic_docs, synthesis_metadata
