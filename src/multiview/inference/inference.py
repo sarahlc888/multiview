@@ -172,7 +172,6 @@ def run_inference(
         completion_cache_path=cache_path,
         force_refresh=force_refresh,
         verbose=verbose,
-        return_type="list",
         # Pass remaining prompt collection fields and model params to fn_completions
         **prompt_dict,
         **config.to_completion_kwargs(),

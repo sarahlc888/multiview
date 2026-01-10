@@ -220,10 +220,8 @@ def cached_fn_completions(
     fn_completions: Callable,
     completion_cache: dict,
     completion_cache_path: str | None = None,
-    completion_field_name: str = "completions",
     force_refresh: bool = False,
     verbose: bool = False,
-    return_type: str = "list",
     mute_if_cache_hit: bool = False,
     **fn_completions_kwargs,
 ) -> list:
@@ -238,17 +236,17 @@ def cached_fn_completions(
         fn_completions: Completion function to call for uncached prompts
         completion_cache: Cache dictionary (will be modified in-place)
         completion_cache_path: Path to cache file on disk
-        completion_field_name: Key to use in cache for this completion type
         force_refresh: If True, ignore cache and recompute all
         verbose: Whether to log verbose output
-        return_type: "list" or "dict" - format of return value
         mute_if_cache_hit: If True, don't log when all prompts are cached
         **fn_completions_kwargs: Additional kwargs to pass to fn_completions
             (e.g., force_prefills, embed_query_instrs, embed_doc_instrs, images)
 
     Returns:
-        List of completions (or dict with completion_field_name key)
+        List of completions (aligned to packed_prompts order)
     """
+    completion_field_name = "completions"
+
     # Initialize cache field if needed
     if completion_field_name not in completion_cache:
         completion_cache[completion_field_name] = {}
@@ -387,11 +385,10 @@ def cached_fn_completions(
             }
 
     # Validate cache has all prompts
-    if return_type == "dict":
-        for prompt_hash in prompt_hashes:
-            assert (
-                prompt_hash in completion_cache[completion_field_name]
-            ), f"Prompt hash not in cache: {prompt_hash}"
+    for prompt_hash in prompt_hashes:
+        assert (
+            prompt_hash in completion_cache[completion_field_name]
+        ), f"Prompt hash not in cache: {prompt_hash}"
 
     # Save cache to disk if we added new entries
     if len(uncached_prompts) > 0 and completion_cache_path is not None:
@@ -400,22 +397,7 @@ def cached_fn_completions(
         )
 
     # Return completions in requested format
-    if return_type == "list":
-        logger.debug(
-            f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
-        )
-        return [
-            completion_cache[completion_field_name][h]["result"] for h in prompt_hashes
-        ]
-    elif return_type == "dict":
-        logger.debug(
-            f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
-        )
-        return {
-            completion_field_name: [
-                completion_cache[completion_field_name][h]["result"]
-                for h in prompt_hashes
-            ]
-        }
-    else:
-        raise ValueError(f"Unsupported return_type: {return_type}")
+    logger.debug(
+        f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
+    )
+    return [completion_cache[completion_field_name][h]["result"] for h in prompt_hashes]
