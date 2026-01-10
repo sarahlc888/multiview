@@ -86,6 +86,13 @@ os.environ.setdefault("HF_HOME", str(HF_CACHE_DIR))
 os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(HF_CACHE_DIR))
 
 # ============================================================================
+# Dataset Identifiers
+# ============================================================================
+
+# Infinite Chats dataset configuration
+INFINITE_CHATS_DATASET_ID = "liweijiang/infinite-chats-taxonomy"
+
+# ============================================================================
 # Create directories
 # ============================================================================
 
