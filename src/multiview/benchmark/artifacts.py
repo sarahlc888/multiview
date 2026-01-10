@@ -7,8 +7,11 @@ Task owns in-memory state and orchestration; artifact IO is handled externally.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class _TaskLike(Protocol):
@@ -151,4 +154,189 @@ def save_method_triplet_logs_jsonl(
     with open(output_file, "w") as f:
         for record in triplet_logs:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    return output_file
+
+
+def save_synthesis_validation_reports(
+    *,
+    records: list[dict],
+    stats: dict,
+    output_dir: str | Path,
+    task_name: str,
+) -> dict[str, Path]:
+    """Write synthesis validation outputs under `{output_dir}/{task_name}/...`."""
+    task_dir = _task_dir(output_dir, task_name)
+    json_path = _write_validation_report_json(
+        records=records, stats=stats, output_dir=task_dir
+    )
+    md_path = _write_validation_report_markdown(
+        records=records, stats=stats, output_dir=task_dir, task_name=task_name
+    )
+    return {"json_path": json_path, "markdown_path": md_path}
+
+
+def _write_validation_report_json(
+    *, records: list[dict], stats: dict, output_dir: Path
+) -> Path:
+    """Write JSON validation report."""
+    report = {"summary": stats, "details": records}
+    output_file = output_dir / "validation_report.json"
+    with open(output_file, "w") as f:
+        json.dump(report, f, indent=2)
+    logger.info("Saved JSON validation report to %s", output_file)
+    return output_file
+
+
+def _write_validation_report_markdown(
+    *, records: list[dict], stats: dict, output_dir: Path, task_name: str
+) -> Path:
+    """Write Markdown validation report."""
+    output_file = output_dir / "validation_report.md"
+
+    with open(output_file, "w") as f:
+        f.write(f"# Synthesis Validation Report: {task_name}\n\n")
+
+        # Summary section
+        f.write("## Summary Statistics\n\n")
+        f.write(
+            f"- **Total Synthetic Documents**: {stats.get('total_synthetic_docs', 0)}\n"
+        )
+        f.write(f"- **Hard Positives**: {stats.get('num_hard_positives', 0)}\n")
+        f.write(f"- **Hard Negatives**: {stats.get('num_hard_negatives', 0)}\n\n")
+
+        # Overall metrics table
+        if stats.get("overall_count"):
+            f.write("### Overall Metrics\n\n")
+            f.write(
+                "| Metric | Tags (Mean) | Tags (Median) | Tags (Std) | Spurious (Mean) | Spurious (Median) | Spurious (Std) |\n"
+            )
+            f.write(
+                "|--------|-------------|---------------|------------|-----------------|-------------------|----------------|\n"
+            )
+            f.write(
+                f"| Overall | {stats.get('overall_tags_mean', 0):.3f} | "
+                f"{stats.get('overall_tags_median', 0):.3f} | "
+                f"{stats.get('overall_tags_std', 0):.3f} | "
+                f"{stats.get('overall_spurious_mean', 0):.3f} | "
+                f"{stats.get('overall_spurious_median', 0):.3f} | "
+                f"{stats.get('overall_spurious_std', 0):.3f} |\n\n"
+            )
+
+        # Hard positives section
+        if stats.get("num_hard_positives", 0) > 0:
+            f.write("### Hard Positives\n\n")
+            f.write(
+                "*(Should preserve anchor's criterion tags, may differ on spurious)*\n\n"
+            )
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Count | {stats.get('hard_pos_count', 0)} |\n")
+            f.write(
+                f"| Tags Jaccard (Mean ± Std) | {stats.get('hard_pos_tags_mean', 0):.3f} ± {stats.get('hard_pos_tags_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Tags Jaccard (Min - Max) | {stats.get('hard_pos_tags_min', 0):.3f} - {stats.get('hard_pos_tags_max', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Mean ± Std) | {stats.get('hard_pos_spurious_mean', 0):.3f} ± {stats.get('hard_pos_spurious_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Min - Max) | {stats.get('hard_pos_spurious_min', 0):.3f} - {stats.get('hard_pos_spurious_max', 0):.3f} |\n\n"
+            )
+
+        # Hard negatives section
+        if stats.get("num_hard_negatives", 0) > 0:
+            f.write("### Hard Negatives\n\n")
+            f.write(
+                "*(Should differ from anchor's criterion tags, may preserve spurious)*\n\n"
+            )
+            f.write("| Metric | Value |\n")
+            f.write("|--------|-------|\n")
+            f.write(f"| Count | {stats.get('hard_neg_count', 0)} |\n")
+            f.write(
+                f"| Tags Jaccard (Mean ± Std) | {stats.get('hard_neg_tags_mean', 0):.3f} ± {stats.get('hard_neg_tags_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Tags Jaccard (Min - Max) | {stats.get('hard_neg_tags_min', 0):.3f} - {stats.get('hard_neg_tags_max', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Mean ± Std) | {stats.get('hard_neg_spurious_mean', 0):.3f} ± {stats.get('hard_neg_spurious_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Min - Max) | {stats.get('hard_neg_spurious_min', 0):.3f} - {stats.get('hard_neg_spurious_max', 0):.3f} |\n\n"
+            )
+
+        # Detailed results
+        f.write("## Detailed Results\n\n")
+        f.write("### Per-Document Comparisons\n\n")
+
+        # Group by type
+        hard_pos = [r for r in records if r["type"] == "hard_positive"]
+        hard_neg = [r for r in records if r["type"] == "hard_negative"]
+
+        if hard_pos:
+            f.write("#### Hard Positives\n\n")
+            f.write(
+                "| Synth ID | Anchor ID | Tags Jaccard | Spurious Jaccard | Tags Overlap | Spurious Overlap |\n"
+            )
+            f.write(
+                "|----------|-----------|--------------|------------------|--------------|------------------|\n"
+            )
+            for r in hard_pos:
+                tags_overlap = f"{r['tags_num_intersection']}/{r['tags_num_union']}"
+                spur_overlap = (
+                    f"{r['spurious_num_intersection']}/{r['spurious_num_union']}"
+                )
+                f.write(
+                    f"| {r['synthetic_doc_idx']} | {r['anchor_doc_idx']} | "
+                    f"{r['tags_jaccard']:.3f} | {r['spurious_jaccard']:.3f} | "
+                    f"{tags_overlap} | {spur_overlap} |\n"
+                )
+            f.write("\n")
+
+        if hard_neg:
+            f.write("#### Hard Negatives\n\n")
+            f.write(
+                "| Synth ID | Anchor ID | Tags Jaccard | Spurious Jaccard | Tags Overlap | Spurious Overlap |\n"
+            )
+            f.write(
+                "|----------|-----------|--------------|------------------|--------------|------------------|\n"
+            )
+            for r in hard_neg:
+                tags_overlap = f"{r['tags_num_intersection']}/{r['tags_num_union']}"
+                spur_overlap = (
+                    f"{r['spurious_num_intersection']}/{r['spurious_num_union']}"
+                )
+                f.write(
+                    f"| {r['synthetic_doc_idx']} | {r['anchor_doc_idx']} | "
+                    f"{r['tags_jaccard']:.3f} | {r['spurious_jaccard']:.3f} | "
+                    f"{tags_overlap} | {spur_overlap} |\n"
+                )
+            f.write("\n")
+
+        # Interpretation guide
+        f.write("## Interpretation Guide\n\n")
+        f.write("### Expected Patterns\n\n")
+        f.write("**Hard Positives** (preserve criterion, borrow themes):\n")
+        f.write(
+            "- **Tags**: High similarity (0.7-1.0) - should preserve anchor's criterion-relevant tags\n"
+        )
+        f.write(
+            "- **Spurious Tags**: Low-medium similarity (0.0-0.6) - themes/surface features from reference doc\n\n"
+        )
+        f.write("**Hard Negatives** (change criterion, borrow themes):\n")
+        f.write(
+            "- **Tags**: Low similarity (0.0-0.4) - should differ from anchor's criterion\n"
+        )
+        f.write(
+            "- **Spurious Tags**: Variable similarity - may preserve some surface features from anchor\n\n"
+        )
+        f.write("### Quality Indicators\n\n")
+        f.write("- **Good hard positives**: Tags Jaccard > 0.7\n")
+        f.write("- **Good hard negatives**: Tags Jaccard < 0.3\n")
+        f.write(
+            "- **High spurious diversity**: Different spurious tags between synth and anchor\n"
+        )
+
+    logger.info("Saved Markdown validation report to %s", output_file)
     return output_file

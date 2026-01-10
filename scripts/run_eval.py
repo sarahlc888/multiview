@@ -17,6 +17,7 @@ from multiview.benchmark.artifacts import (
 from multiview.benchmark.benchmark import Benchmark
 from multiview.benchmark.task import Task
 from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
+from multiview.benchmark.validation import validate_synthesis
 from multiview.inference.cost_tracker import print_summary as print_cost_summary
 from multiview.utils.logging_utils import setup_logging_from_config
 
@@ -87,6 +88,18 @@ def main(cfg: DictConfig):
         cur_task.augment_with_synthetic_documents()
         if cur_task.triplet_style != "random":
             cur_task.annotate_documents()
+
+            # Validate synthetic annotations if synthesis was performed
+            if cur_task.add_synthetic_docs and cur_task.synthesis_metadata:
+                validation_dir = output_base / "validation"
+                validate_synthesis(
+                    documents=cur_task.documents,
+                    annotations=cur_task.document_annotations,
+                    synthesis_metadata=cur_task.synthesis_metadata,
+                    output_dir=validation_dir,
+                    task_name=cur_task.get_task_name(),
+                )
+
         cur_task.create_triplets()
 
         # Rate and filter triplet quality if enabled

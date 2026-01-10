@@ -15,15 +15,15 @@ def synthesize_documents(
     document_set: Any,
     criterion_name: str,
     num_synthetic_docs: int = 0,
-) -> tuple[list[Any], list[int]]:
+) -> tuple[list[Any], dict[str, Any]]:
     """Generate synthetic documents using LM-based remix strategy."""
     if len(documents) == 0:
         logger.warning("No documents to synthesize")
-        return [], []
+        return [], {}
 
     if num_synthetic_docs <= 0:
         logger.info("num_synthetic_docs <= 0; skipping synthesis")
-        return [], []
+        return [], {}
 
     num_remix_anchors = num_synthetic_docs // 2
     if num_synthetic_docs % 2 != 0:
@@ -69,6 +69,8 @@ def synthesize_documents(
     angle_a_doc2: list[str] = []
     angle_b_doc1: list[str] = []
     angle_b_doc2: list[str] = []
+    angle_a_reference_indices: list[int] = []
+    angle_b_reference_indices: list[int] = []
 
     for anchor_idx in remix_anchor_indices:
         if len(all_indices) > 1:
@@ -86,6 +88,8 @@ def synthesize_documents(
         angle_a_doc2.append(document_set.get_document_text(documents[decoy1]))
         angle_b_doc1.append(document_set.get_document_text(documents[decoy2]))
         angle_b_doc2.append(document_set.get_document_text(documents[anchor_idx]))
+        angle_a_reference_indices.append(decoy1)
+        angle_b_reference_indices.append(decoy2)
 
     remix_config = InferenceConfig(
         provider="gemini",
@@ -105,10 +109,22 @@ def synthesize_documents(
     synthetic_docs: list[Any] = []
     filtered_count = 0
     anchor_indices: list[int] = []
+    synthetic_docs_metadata: list[dict[str, Any]] = []
+    pairs_metadata: list[dict[str, Any]] = []
 
-    def _append_filtered(raw_outputs: list, anchors: list[int]) -> None:
+    def _append_filtered(
+        *,
+        raw_outputs: list,
+        anchors: list[int],
+        references: list[int],
+        doc_type: str,
+        mode: str,
+        pair_id_offset: int,
+    ) -> None:
         nonlocal filtered_count
-        for cleaned, anchor_idx in zip(raw_outputs, anchors, strict=False):
+        for pair_offset, (cleaned, anchor_idx, ref_idx) in enumerate(
+            zip(raw_outputs, anchors, references, strict=False)
+        ):
             if not isinstance(cleaned, str):
                 continue
             cleaned = cleaned.strip()
@@ -120,12 +136,48 @@ def synthesize_documents(
                 )
                 filtered_count += 1
                 continue
+
+            pair_id = pair_id_offset + pair_offset
+
             synthetic_docs.append(cleaned)
             anchor_indices.append(anchor_idx)
+            synthetic_docs_metadata.append(
+                {
+                    "synthetic_idx": len(synthetic_docs) - 1,
+                    "anchor_doc_idx": anchor_idx,
+                    "reference_doc_idx": ref_idx,
+                    "type": doc_type,
+                    "pair_id": pair_id,
+                    "mode": mode,
+                }
+            )
+            pairs_metadata.append(
+                {
+                    "pair_id": pair_id,
+                    "anchor_doc_idx": anchor_idx,
+                    "reference_doc_idx": ref_idx,
+                    "type": doc_type,
+                    "mode": mode,
+                }
+            )
 
-    for mode, d1, d2 in (
-        ("angle_a", angle_a_doc1, angle_a_doc2),
-        ("angle_b", angle_b_doc1, angle_b_doc2),
+    for mode, d1, d2, references, doc_type, pair_id_offset in (
+        (
+            "angle_a",
+            angle_a_doc1,
+            angle_a_doc2,
+            angle_a_reference_indices,
+            "hard_positive",
+            0,
+        ),
+        (
+            "angle_b",
+            angle_b_doc1,
+            angle_b_doc2,
+            angle_b_reference_indices,
+            "hard_negative",
+            len(remix_anchor_indices),
+        ),
     ):
         logger.info(
             f"Generating {len(remix_anchor_indices)} {mode} synthetic documents..."
@@ -141,11 +193,30 @@ def synthesize_documents(
         except Exception as e:
             logger.error(f"Error generating {mode} documents: {e}")
             raw_outputs = []
-        _append_filtered(raw_outputs, remix_anchor_indices)
+        _append_filtered(
+            raw_outputs=raw_outputs,
+            anchors=remix_anchor_indices,
+            references=references,
+            doc_type=doc_type,
+            mode=mode,
+            pair_id_offset=pair_id_offset,
+        )
 
     logger.info(
         f"Successfully generated {len(synthetic_docs)} synthetic documents "
         f"Filtered out {filtered_count} docs that were too long."
     )
 
-    return synthetic_docs, anchor_indices
+    # Build synthesis metadata dict
+    synthesis_metadata = {
+        "anchor_indices": anchor_indices,  # Backward compatibility
+        "num_original_docs": len(documents),
+        "num_pairs": len(pairs_metadata),
+        "num_filtered": filtered_count,
+        "pairs": pairs_metadata,
+        "synthetic_docs": synthetic_docs_metadata,
+        "num_requested": num_synthetic_docs,
+        "num_generated": len(synthetic_docs),
+    }
+
+    return synthetic_docs, synthesis_metadata

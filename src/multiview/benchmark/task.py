@@ -82,8 +82,9 @@ class Task:
             None  # List of quality ratings (1-4) for each triplet
         )
         self.synthesis_anchor_indices = (
-            None  # Indices of docs used as synthesis anchors
+            None  # Indices of docs used as synthesis anchors (backward compat)
         )
+        self.synthesis_metadata = None  # Full synthesis metadata dict
 
         # Warn if criterion is provided but meaningless
         if self.triplet_style == TRIPLET_STYLE_RANDOM:
@@ -151,7 +152,7 @@ class Task:
             logger.info("num_synthetic_docs <= 0; skipping synthetic generation")
             return
 
-        synthetic_docs, anchor_indices = synthesis_utils.synthesize_documents(
+        synthetic_docs, synthesis_metadata = synthesis_utils.synthesize_documents(
             documents=self.documents,
             document_set=self.document_set,
             criterion_name=self.criterion_name,
@@ -161,9 +162,11 @@ class Task:
         if synthetic_docs:
             logger.info(f"Added {len(synthetic_docs)} synthetic documents")
             self.documents.extend(synthetic_docs)
-            self.synthesis_anchor_indices = anchor_indices
+            self.synthesis_metadata = synthesis_metadata
+            # Backward compatibility: extract anchor_indices from metadata
+            self.synthesis_anchor_indices = synthesis_metadata.get("anchor_indices", [])
             logger.info(
-                f"Stored {len(anchor_indices)} anchor indices for triplet creation"
+                f"Stored synthesis metadata with {len(self.synthesis_anchor_indices)} anchor indices"
             )
         else:
             logger.info("No synthetic documents generated")
