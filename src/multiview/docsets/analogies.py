@@ -6,7 +6,7 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
+from multiview.docsets.base import BaseDocSet
 
 logger = logging.getLogger(__name__)
 
@@ -83,17 +83,14 @@ class AnalogiesDocSet(BaseDocSet):
                 # Example: "./cache/BATS_3.0/4_Lexicographic_semantics/L09 [antonyms - gradable].txt"
                 # Extract: "antonyms - gradable"
                 prefix = example.get("prefix", "")
-                match = re.search(r'\[([^\]]+)\]', prefix)
+                match = re.search(r"\[([^\]]+)\]", prefix)
                 analogy_type = match.group(1) if match else prefix
 
                 # Extract stem pair
                 stem = example.get("stem", [])
                 if len(stem) >= 2:
                     stem_text = " : ".join(stem)
-                    documents.append({
-                        "text": stem_text,
-                        "analogy_type": analogy_type
-                    })
+                    documents.append({"text": stem_text, "analogy_type": analogy_type})
 
                 # Extract answer pair
                 choices = example.get("choice", [])
@@ -102,10 +99,9 @@ class AnalogiesDocSet(BaseDocSet):
                     answer_choice = choices[int(answer_idx)]
                     if len(answer_choice) >= 2:
                         answer_text = " : ".join(answer_choice)
-                        documents.append({
-                            "text": answer_text,
-                            "analogy_type": analogy_type
-                        })
+                        documents.append(
+                            {"text": answer_text, "analogy_type": analogy_type}
+                        )
 
             except (KeyError, IndexError, ValueError, TypeError) as e:
                 logger.warning(f"Skipping malformed analogy at index {i}: {e}")

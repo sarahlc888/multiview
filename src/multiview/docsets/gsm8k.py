@@ -5,9 +5,9 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
-from multiview.benchmark.document_sets.criteria_metadata import GSM8K_CRITERIA
-from multiview.benchmark.document_sets.synthesis_configs import GSM8K_SYNTHESIS_CONFIGS
+from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import GSM8K_CRITERIA
+from multiview.docsets.synthesis_configs import GSM8K_SYNTHESIS_CONFIGS
 
 logger = logging.getLogger(__name__)
 

@@ -6,7 +6,6 @@ from multiview.benchmark.annotations import (
     annotate_with_known_criterion,
     annotate_with_lm_all,
 )
-from multiview.benchmark.document_sets import DOCSETS
 from multiview.benchmark.triplets.quality_assurance import (
     filter_triplets_by_quality,
     rate_triplet_quality,
@@ -16,6 +15,7 @@ from multiview.benchmark.triplets.triplet_utils import (
     create_random_triplets,
 )
 from multiview.benchmark.triplets.utils import build_triplet_dicts
+from multiview.docsets import DOCSETS
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ class Task:
         logger.info("Generating synthetic documents...")
 
         # Import here to avoid circular dependency
-        from multiview.benchmark import synthesis_utils
+        from multiview.benchmark.synthesis import synthesis_utils
 
         # Resolve desired synthetic doc count (absolute)
         if self.num_synthetic_docs <= 0:

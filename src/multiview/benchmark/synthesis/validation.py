@@ -109,17 +109,21 @@ def validate_synthesis(
             "tags_synth": sorted(tags_sim["synth_tags"]),
             "tags_anchor": sorted(tags_sim["anchor_tags"]),
             "tags_intersection": sorted(tags_sim["intersection"]),
+            "tags_union": sorted(tags_sim["union"]),
             "tags_num_synth": tags_sim["num_synth_tags"],
             "tags_num_anchor": tags_sim["num_anchor_tags"],
             "tags_num_intersection": tags_sim["num_intersection"],
+            "tags_num_union": tags_sim["num_union"],
             # Spurious tag similarities
             "spurious_jaccard": spurious_sim["similarity"],
             "spurious_synth": sorted(spurious_sim["synth_tags"]),
             "spurious_anchor": sorted(spurious_sim["anchor_tags"]),
             "spurious_intersection": sorted(spurious_sim["intersection"]),
+            "spurious_union": sorted(spurious_sim["union"]),
             "spurious_num_synth": spurious_sim["num_synth_tags"],
             "spurious_num_anchor": spurious_sim["num_anchor_tags"],
             "spurious_num_intersection": spurious_sim["num_intersection"],
+            "spurious_num_union": spurious_sim["num_union"],
         }
 
         validation_records.append(record)

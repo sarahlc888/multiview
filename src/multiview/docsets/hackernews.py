@@ -5,7 +5,7 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
+from multiview.docsets.base import BaseDocSet
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class HackerNewsDocSet(BaseDocSet):
 
         # Format and filter documents
         documents = []
-        for i, example in enumerate(dataset):
+        for _, example in enumerate(dataset):
             # Check score threshold
             score = example.get("score", 0)
             if score > min_score:

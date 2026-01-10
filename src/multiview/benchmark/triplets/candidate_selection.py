@@ -11,13 +11,13 @@ import logging
 
 import numpy as np
 
-from multiview.benchmark.bm25_utils import compute_bm25_scores
 from multiview.benchmark.triplets.utils import (
     annotation_final_summary,
     extract_active_tags,
     jaccard_similarity,
 )
 from multiview.inference.inference import run_inference
+from multiview.utils.bm25_utils import compute_bm25_scores
 
 logger = logging.getLogger(__name__)
 

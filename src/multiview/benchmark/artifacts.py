@@ -283,10 +283,12 @@ def _write_validation_report_markdown(
                 "|----------|-----------|--------------|------------------|--------------|------------------|\n"
             )
             for r in hard_pos:
-                tags_overlap = f"{r['tags_num_intersection']}/{r['tags_num_union']}"
-                spur_overlap = (
-                    f"{r['spurious_num_intersection']}/{r['spurious_num_union']}"
+                tags_union = r.get("tags_num_union", len(r.get("tags_union", [])))
+                spur_union = r.get(
+                    "spurious_num_union", len(r.get("spurious_union", []))
                 )
+                tags_overlap = f"{r.get('tags_num_intersection', 0)}/{tags_union}"
+                spur_overlap = f"{r.get('spurious_num_intersection', 0)}/{spur_union}"
                 f.write(
                     f"| {r['synthetic_doc_idx']} | {r['anchor_doc_idx']} | "
                     f"{r['tags_jaccard']:.3f} | {r['spurious_jaccard']:.3f} | "
@@ -303,10 +305,12 @@ def _write_validation_report_markdown(
                 "|----------|-----------|--------------|------------------|--------------|------------------|\n"
             )
             for r in hard_neg:
-                tags_overlap = f"{r['tags_num_intersection']}/{r['tags_num_union']}"
-                spur_overlap = (
-                    f"{r['spurious_num_intersection']}/{r['spurious_num_union']}"
+                tags_union = r.get("tags_num_union", len(r.get("tags_union", [])))
+                spur_union = r.get(
+                    "spurious_num_union", len(r.get("spurious_union", []))
                 )
+                tags_overlap = f"{r.get('tags_num_intersection', 0)}/{tags_union}"
+                spur_overlap = f"{r.get('spurious_num_intersection', 0)}/{spur_union}"
                 f.write(
                     f"| {r['synthetic_doc_idx']} | {r['anchor_doc_idx']} | "
                     f"{r['tags_jaccard']:.3f} | {r['spurious_jaccard']:.3f} | "

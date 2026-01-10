@@ -5,8 +5,8 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
 from multiview.constants import INFINITE_CHATS_DATASET_ID
+from multiview.docsets.base import BaseDocSet
 
 logger = logging.getLogger(__name__)
 

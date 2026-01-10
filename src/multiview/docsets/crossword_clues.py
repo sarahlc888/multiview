@@ -1,31 +1,31 @@
-"""ROCStories document_set loader."""
+"""Crossword clues document_set loader."""
 
 import logging
 from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
-from multiview.benchmark.document_sets.criteria_metadata import ROCSTORIES_CRITERIA
+from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import CROSSWORD_CRITERIA
 
 logger = logging.getLogger(__name__)
 
 
-class RocStoriesDocSet(BaseDocSet):
-    """ROCStories document_set."""
+class CrosswordCluesDocSet(BaseDocSet):
+    """Crossword clues document_set."""
 
-    DATASET_PATH = "mintujupally/ROCStories"
-    DESCRIPTION = "ROCStories short stories"
+    DATASET_PATH = "albertxu/CrosswordQA"
+    DESCRIPTION = "Crossword clues and answers"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = ROCSTORIES_CRITERIA
+    CRITERION_METADATA = CROSSWORD_CRITERIA
 
     def load_documents(self) -> list[Any]:
-        """Load ROCStories as documents from Hugging Face."""
-        logger.info(f"Loading ROCStories from Hugging Face: {self.DATASET_PATH}")
+        """Load crossword clues as documents from Hugging Face."""
+        logger.info(f"Loading Crossword clues from Hugging Face: {self.DATASET_PATH}")
 
         max_docs = self.config.get("max_docs")
         split = self.config.get("split", "train")
@@ -42,9 +42,11 @@ class RocStoriesDocSet(BaseDocSet):
 
         documents = []
         for _i, example in enumerate(dataset):
-            story = self._build_story(example)
-            if story:
-                documents.append(story)
+            clue = example.get("clue", "")
+            answer = example.get("answer", "")
+            if clue and answer:
+                documents.append(f"Clue: {clue}\nAnswer: {answer}")
+
             if (
                 not use_streaming
                 and max_docs is not None
@@ -52,21 +54,8 @@ class RocStoriesDocSet(BaseDocSet):
             ):
                 break
 
-        logger.debug(f"Loaded {len(documents)} documents from ROCStories")
+        logger.debug(f"Loaded {len(documents)} documents from Crossword clues")
         return documents
-
-    def _build_story(self, item: dict) -> str:
-        if "story" in item and item["story"]:
-            return item["story"]
-        if "text" in item and item["text"]:
-            return item["text"]
-
-        sentence_fields = [f"sentence{i}" for i in range(1, 6)]
-        if all(field in item for field in sentence_fields):
-            sentences = [item[field] for field in sentence_fields if item.get(field)]
-            return " ".join(sentences)
-
-        return ""
 
     def get_document_text(self, document: Any) -> str:
         return document if isinstance(document, str) else ""

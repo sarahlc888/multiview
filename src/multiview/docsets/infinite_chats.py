@@ -6,8 +6,8 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.benchmark.document_sets.base import BaseDocSet
 from multiview.constants import INFINITE_CHATS_DATASET_ID
+from multiview.docsets.base import BaseDocSet
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +128,7 @@ class InfiniteChatsDocSet(BaseDocSet):
 
         # Deduplicate responses per prompt
         prompt_to_responses = {
-            prompt: sorted(list(set(responses)))
+            prompt: sorted(set(responses))
             for prompt, responses in prompt_to_responses.items()
         }
 

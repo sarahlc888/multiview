@@ -7,7 +7,7 @@ similarity between documents in triplets.
 import logging
 from typing import Any
 
-from multiview.benchmark.bm25_utils import compute_bm25_matrix
+from multiview.utils.bm25_utils import compute_bm25_matrix
 
 logger = logging.getLogger(__name__)
 
