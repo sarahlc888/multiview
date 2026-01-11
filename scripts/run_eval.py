@@ -273,6 +273,10 @@ def main(cfg: DictConfig):
             correct = metrics.get("n_correct", 0)
             total = metrics.get("n_total", 0)
 
+            # Skip methods that were skipped (0/0)
+            if total == 0:
+                continue
+
             # For LM judge triplet methods, display out of 8 (half of 16 due to bidirectional eval)
             if "triplet" in method_name:
                 display_correct = correct / 2

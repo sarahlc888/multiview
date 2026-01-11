@@ -103,11 +103,21 @@ ROCSTORIES_CRITERIA = {
     "setting": {
         "description": "The setting or context where the story takes place (home, workplace, outdoor, travel, social, etc.).",
         "category_schema_hint": "Consider categories like: home/domestic, workplace/professional, outdoor/nature, travel, social/public, school/education, etc.",
-        "tag_schema_hint": "Create tags for settings: at_home, at_work, outdoors, traveling, at_social_event, at_school, in_public, etc.",
+        "tag_schema_hint": "Create tags for settings: at_home, at_work, outdoors, traveling, at_social_event, at_school, in_public, no_explicit_setting, implied_indoor_setting, vague_outdoor_setting, etc.",
     },
     "character_dynamics": {
         "description": "The types of character interactions and relationships in the story (solo, family, friends, strangers, etc.).",
         "category_schema_hint": "Consider categories like: solo protagonist, family interaction, friends, romantic, strangers/new relationships, professional colleagues, etc.",
         "tag_schema_hint": "Create tags for character elements: solo_protagonist, involves_family, involves_friends, involves_romance, involves_strangers, involves_colleagues, etc.",
+    },
+}
+
+# Abstract-Sim: Wikipedia sentences with abstract descriptions
+ABSTRACTSIM_CRITERIA = {
+    "abstract_similarity": {
+        "description": "The level of abstraction used to describe a concept. Sentences with similar abstraction levels use similar types of general or specific language, abstracting away from or focusing on particular details.",
+        "pairwise_sim_hint": "Two sentences are similar if they describe concepts at the same level of abstraction, using similarly general or specific language. Focus on whether both texts abstract away from details to the same degree, not whether they share the same topic.",
+        "category_schema_hint": "Consider categories based on abstraction level: highly specific (uses named entities, precise details, concrete examples), moderately specific (uses general categories with some detail), moderately abstract (uses broad concepts with minimal specifics), highly abstract (uses only general principles and abstract concepts).",
+        "tag_schema_hint": "Create tags for abstraction properties: uses_named_entities, uses_specific_details, uses_concrete_examples, uses_general_categories, uses_broad_concepts, uses_abstract_concepts, describes_specific_instance, describes_general_pattern, includes_numbers_or_quantities, includes_dates_or_times, describes_action, describes_state, describes_relationship.",
     },
 }

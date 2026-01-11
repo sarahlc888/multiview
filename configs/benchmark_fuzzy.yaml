@@ -1,6 +1,6 @@
 # Benchmark configuration for MoralFables evaluation
 # Goal: Test prelabeled triplet generation with all 4 moral criteria
-run_name: "benchmark_generalize"
+run_name: "benchmark_fuzzy"
 logging:
   level: DEBUG
   output_file: "temp.${run_name}.log"
@@ -11,8 +11,8 @@ step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 200  # Small dataset for quick testing
-    max_triplets: 10
+    max_docs: 100  # Small dataset for quick testing
+    max_triplets: 5
 
     num_synthetic_docs: 0
     triplet_style: "lm_all"
@@ -30,24 +30,8 @@ tasks:
 
   task_list:
     # Test all 4 moral criteria with prelabeled triplets
-    - document_set: moralfables
-      triplet_style: "prelabeled"
-      criterion: teaching
-      max_triplets: 10
-
-    - document_set: moralfables
-      triplet_style: "prelabeled"
+    - document_set: rocstories
       criterion: setting
-      max_triplets: 10
-
-    - document_set: moralfables
-      triplet_style: "prelabeled"
-      criterion: challenge
-      max_triplets: 10
-
-    - document_set: moralfables
-      triplet_style: "prelabeled"
-      criterion: outcome
       max_triplets: 10
 
 # Evaluation methods configuration

@@ -153,6 +153,9 @@ def create_prelabeled_triplets(
         logger.warning("Need at least 3 documents to create triplets")
         return []
 
+    # Store original documents before text extraction (to check for is_sentence markers)
+    original_documents = documents
+
     # Extract text from documents (handle both string and dict formats)
     document_texts = []
     for doc in documents:
@@ -205,7 +208,21 @@ def create_prelabeled_triplets(
         return len(classes1 & classes2) > 0
 
     # Select anchor documents
-    anchor_indices = list(doc_to_classes.keys())
+    # If documents have is_anchor markers, only use those as anchors
+    marked_anchor_indices = [
+        idx
+        for idx in doc_to_classes.keys()
+        if isinstance(original_documents[idx], dict)
+        and original_documents[idx].get("is_anchor", False)
+    ]
+
+    if marked_anchor_indices:
+        logger.info(
+            f"Found {len(marked_anchor_indices)} marked anchors, using only those"
+        )
+        anchor_indices = marked_anchor_indices
+    else:
+        anchor_indices = list(doc_to_classes.keys())
     if max_triplets is not None and max_triplets < len(anchor_indices):
         # Deterministic sampling of anchors
         anchor_indices = deterministic_sample(
@@ -617,8 +634,12 @@ def create_lm_triplets(
     This function:
     1. For each anchor, selects positive candidates (high similarity on summaries/tags)
     2. Uses LM judge to select best positive
-    3. Selects negative candidates (high similarity on raw docs, low similarity on tags)
+    3. Selects negative candidates (high BM25/low Jaccard on docs, spurious hard negs)
     4. Uses LM judge to select best negative (creates hard negatives)
+
+    IMPORTANT: To avoid evaluation bias, embeddings are ONLY used for positive candidate
+    selection (on summaries), NOT for negative selection. Negative candidates use BM25,
+    Jaccard, and spurious tags to avoid circular dependency with embedding evaluation.
 
     Args:
         documents: List of document strings
@@ -626,11 +647,11 @@ def create_lm_triplets(
         max_triplets: Maximum number of triplets to create (None = unlimited)
         candidate_strategy: Strategy for candidate selection:
             - "bm25": BM25 similarity (summaries for pos, raw docs for neg)
-            - "embedding": Embedding similarity (summaries for pos, raw docs for neg)
+            - "embedding": Embedding similarity on summaries for pos, BM25 for neg
             - "jaccard": Jaccard similarity over tags (high for pos, low for neg)
-            - "multi": Combine all strategies
+            - "multi": Combine BM25+embedding+Jaccard for pos, BM25+Jaccard+spurious for neg
         use_spurious_hard_negs: DEPRECATED - now ignored, negative strategy handles this
-        embedding_preset: Preset for embedding model (if using embedding strategy)
+        embedding_preset: Preset for embedding model (used ONLY for positive candidates)
         lm_judge_preset: Preset for LM judge when selecting positives
         lm_judge_preset_negative: Preset for LM judge when selecting negatives
         criterion: Criterion name (for LM judge prompt)
@@ -730,18 +751,14 @@ def create_lm_triplets(
 
     bm25_summary_matrix = None
     bm25_raw_matrix = None
-    if candidate_strategy in ["bm25", "multi"]:
+    if candidate_strategy in ["bm25", "multi", "embedding"]:
         bm25_summary_matrix = compute_bm25_matrix(summary_texts)
         bm25_raw_matrix = compute_bm25_matrix(documents)
 
     embedding_summary = None
-    embedding_raw = None
     if candidate_strategy in ["embedding", "multi"]:
         summary_cache_alias = (
             f"{cache_alias_prefix}_embedding_summary" if cache_alias_prefix else None
-        )
-        raw_cache_alias = (
-            f"{cache_alias_prefix}_embedding_raw" if cache_alias_prefix else None
         )
         summary_embeddings = run_inference(
             inputs={"document": summary_texts},
@@ -755,17 +772,9 @@ def create_lm_triplets(
         summary_norms[summary_norms == 0] = 1.0
         embedding_summary = embedding_summary / summary_norms
 
-        raw_embeddings = run_inference(
-            inputs={"document": documents},
-            config=embedding_preset,
-            cache_alias=raw_cache_alias,
-            run_name=run_name,
-            verbose=False,
-        )
-        embedding_raw = np.array(raw_embeddings, dtype=float)
-        raw_norms = np.linalg.norm(embedding_raw, axis=1, keepdims=True)
-        raw_norms[raw_norms == 0] = 1.0
-        embedding_raw = embedding_raw / raw_norms
+    # NOTE: We intentionally do NOT compute raw document embeddings for negative
+    # candidate selection to avoid evaluation bias. Using the same embedding model
+    # for both candidate selection and evaluation would create circular dependency.
 
     candidate_indices_by_anchor: dict[int, list[int]] = {}
     for i, anchor_idx in enumerate(anchors_to_process):
@@ -877,9 +886,10 @@ def create_lm_triplets(
             ]
 
         elif candidate_strategy == "embedding":
-            similarities = embedding_raw @ embedding_raw[anchor_idx]
-            similarities[anchor_idx] = -np.inf
-            top_k_indices = np.argsort(similarities)[::-1][: max_num_candidates * 2]
+            # Use BM25 on raw docs for negatives (avoid evaluation bias from embeddings)
+            scores = bm25_raw_matrix[anchor_idx].copy()
+            scores[anchor_idx] = -np.inf
+            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
             negative_candidate_indices = [
                 int(idx) for idx in top_k_indices if idx != positive_idx
             ]
@@ -894,26 +904,26 @@ def create_lm_triplets(
             ]
 
         elif candidate_strategy == "multi":
+            # For negatives, use BM25, Jaccard, and spurious (NO embeddings to avoid bias)
             bm25_scores = bm25_raw_matrix[anchor_idx].copy()
             bm25_scores[anchor_idx] = -np.inf
             bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
             bm25_neg = [(int(idx), float(bm25_scores[idx])) for idx in bm25_top_indices]
 
-            emb_scores = embedding_raw @ embedding_raw[anchor_idx]
-            emb_scores[anchor_idx] = -np.inf
-            emb_top_indices = np.argsort(emb_scores)[::-1][:max_num_candidates]
-            emb_neg = [(int(idx), float(emb_scores[idx])) for idx in emb_top_indices]
+            # Get low Jaccard similarity (dissimilar documents)
             all_jaccard = select_candidates_jaccard(
                 annotations, anchor_idx, k=len(documents) - 1, use_spurious=False
             )
             low_jaccard = list(reversed(all_jaccard))[:max_num_candidates]
 
+            # Get spurious hard negatives (high spurious sim, low true sim)
             spurious_negs = select_spurious_hard_negatives(
                 annotations, anchor_idx, k=max_num_candidates
             )
 
+            # Merge using RRF (no embedding component for negatives)
             negative_candidate_indices = merge_candidate_pools(
-                bm25_neg, emb_neg, low_jaccard, spurious_negs, use_rrf=True
+                bm25_neg, low_jaccard, spurious_negs, use_rrf=True
             )
             negative_candidate_indices = [
                 idx for idx in negative_candidate_indices if idx != positive_idx
