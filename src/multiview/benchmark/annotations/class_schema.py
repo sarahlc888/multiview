@@ -150,6 +150,10 @@ def classify_documents_batch(
                 reasoning = result.get("reasoning", "")
             else:
                 # Fallback for old format (plain text)
+                logger.warning(
+                    f"⚠️  FALLBACK TRIGGERED: Received non-dict result from LM (type={type(result)}). "
+                    f"Expected dict with 'category' and 'reasoning' keys. Treating as plain text category name."
+                )
                 category_name = result.strip() if isinstance(result, str) else None
                 reasoning = ""
 
@@ -167,6 +171,10 @@ def classify_documents_batch(
 
             # Fallback to first category
             if matched is None and categories:
+                logger.error(
+                    f"⚠️  FALLBACK TRIGGERED: Could not match category '{category_name}' to any valid category. "
+                    f"Defaulting to '{categories[0]['name']}'. Valid categories: {[c['name'] for c in categories]}"
+                )
                 matched = categories[0]["name"]
 
             annotations.append({"category": matched, "category_reasoning": reasoning})

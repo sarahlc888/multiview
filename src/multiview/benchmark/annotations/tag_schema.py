@@ -189,6 +189,10 @@ def apply_tags_batch(
                 reasoning = result.get("reasoning", "")
             else:
                 # Fallback for old format (plain dict of tags)
+                logger.warning(
+                    f"⚠️  FALLBACK TRIGGERED: Received unexpected format from LM (type={type(result)}). "
+                    f"Expected dict with 'tags' and 'reasoning' keys. Treating entire result as tags dict."
+                )
                 tags_dict = result if isinstance(result, dict) else {}
                 reasoning = ""
 

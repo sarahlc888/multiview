@@ -412,6 +412,77 @@ class TestEmbeddingInstructions:
             # Note: May be similar but shouldn't be identical
             assert results_query[0] != results_doc[0]
 
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN"),
+        reason="HF_TOKEN not set",
+    )
+    @pytest.mark.external
+    def test_embeddings_change_with_instructions(self):
+        """Test that embeddings actually differ when instructions are added.
+
+        This test verifies that adding embedding instructions produces
+        different embeddings, confirming instructions are being applied.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Get embedding without instruction
+            config_no_instr = InferenceConfig(
+                provider="hf_api",
+                model_name="Qwen/Qwen3-Embedding-8B",
+                prompt_template="{text}",
+                embed_query_instr_template=None,
+                is_embedding=True,
+                parser="vector",
+            )
+
+            results_no_instr = run_inference(
+                inputs={"text": ["machine learning"]},
+                config=config_no_instr,
+                cache_path=str(Path(tmpdir) / "cache1.json"),
+            )
+
+            # Get embedding with instruction
+            config_with_instr = InferenceConfig(
+                provider="hf_api",
+                model_name="Qwen/Qwen3-Embedding-8B",
+                prompt_template="{text}",
+                embed_query_instr_template="Represent this query for retrieval: ",
+                is_embedding=True,
+                parser="vector",
+            )
+
+            results_with_instr = run_inference(
+                inputs={"text": ["machine learning"]},
+                config=config_with_instr,
+                cache_path=str(Path(tmpdir) / "cache2.json"),
+            )
+
+            # Embeddings should be different
+            vec1 = results_no_instr[0]
+            vec2 = results_with_instr[0]
+
+            assert isinstance(vec1, list)
+            assert isinstance(vec2, list)
+            assert len(vec1) == len(vec2)
+
+            # Vectors should not be identical
+            assert vec1 != vec2, "Embeddings are identical; instructions may not be applied"
+
+            # Check that cosine similarity is reasonable (similar but not identical)
+            import numpy as np
+
+            similarity = np.dot(vec1, vec2) / (
+                np.linalg.norm(vec1) * np.linalg.norm(vec2)
+            )
+
+            # If instructions work, similarity should be less than 1.0 (not identical)
+            # But still reasonably similar (> 0.5) since same base text
+            assert (
+                similarity < 0.99
+            ), f"Embeddings too similar ({similarity}), instructions may not be applied"
+            assert (
+                similarity > 0.5
+            ), f"Embeddings too different ({similarity}), something may be wrong"
+
 
 class TestVectorParser:
     """Test that vector parser correctly extracts embeddings."""

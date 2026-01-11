@@ -119,18 +119,22 @@ def rate_triplet_quality(
 
     # Count ratings
     counts = {1: 0, 2: 0, 3: 0, 4: 0}
+    n_invalid = 0
     for rating in ratings:
         if rating in counts:
             counts[rating] += 1
         else:
-            logger.warning(
-                f"Unexpected quality rating: {rating}, treating as 2 (ambiguous)"
+            logger.error(
+                f"⚠️  PARSING FAILED: Unexpected quality rating: {rating}. "
+                f"This should not happen - check LM judge output format!"
             )
-            counts[2] += 1
+            n_invalid += 1
 
     n_total = len(ratings)
+    n_valid = n_total - n_invalid
+    # Calculate percentages based on valid ratings only
     percentages = {
-        k: (v / n_total * 100) if n_total > 0 else 0.0 for k, v in counts.items()
+        k: (v / n_valid * 100) if n_valid > 0 else 0.0 for k, v in counts.items()
     }
 
     # Create triplets with ratings attached
@@ -138,12 +142,12 @@ def rate_triplet_quality(
     for triplet, rating in zip(triplets, ratings, strict=False):
         triplet_with_rating = triplet.copy()
         triplet_with_rating["quality_rating"] = rating
-        triplet_with_rating["quality_label"] = QUALITY_SCALE.get(rating, {}).get(
-            "label", "unknown"
+        # If rating is not in scale (already warned above), use "unknown" labels
+        quality_info = QUALITY_SCALE.get(
+            rating, {"label": "unknown", "class": "Unknown"}
         )
-        triplet_with_rating["quality_class"] = QUALITY_SCALE.get(rating, {}).get(
-            "class", "Unknown"
-        )
+        triplet_with_rating["quality_label"] = quality_info.get("label", "unknown")
+        triplet_with_rating["quality_class"] = quality_info.get("class", "Unknown")
         triplets_with_ratings.append(triplet_with_rating)
 
     # Log summary
@@ -153,12 +157,18 @@ def rate_triplet_quality(
         count = counts[level]
         pct = percentages[level]
         logger.info(f"  {level} ({label:10s}): {count:4d} ({pct:5.1f}%)")
+    if n_invalid > 0:
+        logger.warning(
+            f"  Invalid/None ratings: {n_invalid} ({n_invalid/n_total*100:.1f}%) - parsing failed"
+        )
 
     return {
         "ratings": ratings,
         "counts": counts,
         "percentages": percentages,
         "n_total": n_total,
+        "n_valid": n_valid,
+        "n_invalid": n_invalid,
         "triplets_with_ratings": triplets_with_ratings,
     }
 
@@ -190,6 +200,15 @@ def filter_triplets_by_quality(
         for t in triplets
         if (min_quality is None or t.get("quality_rating", 0) >= min_quality)
     ]
+
+    # Check if any triplets were missing quality ratings
+    n_missing_ratings = sum(1 for t in triplets if "quality_rating" not in t)
+    if n_missing_ratings > 0:
+        logger.error(
+            f"⚠️  FALLBACK TRIGGERED: {n_missing_ratings}/{len(triplets)} triplets missing 'quality_rating' key. "
+            f"These will be treated as quality=0 and filtered out. "
+            f"Did you forget to call rate_triplet_quality() before filtering?"
+        )
 
     n_total = len(triplets)
     n_kept = len(filtered_triplets)

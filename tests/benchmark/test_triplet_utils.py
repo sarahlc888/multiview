@@ -5,7 +5,7 @@ import pytest
 from multiview.benchmark.task import Task
 
 
-@pytest.mark.parametrize("dataset", ["gsm8k", "rocstories", "crossword_clues", "hackernews", "analogies", "infinite_prompts", "infinite_chats"])
+@pytest.mark.parametrize("dataset", ["gsm8k", "rocstories", "crossword_clues", "hackernews", "analogies", "infinite_prompts", "infinite_chats", "dickinson", "moralfables"])
 def test_create_random_triplets(dataset):
     """Test random triplet creation across different datasets."""
     # Create a task with random triplets
@@ -27,10 +27,22 @@ def test_create_random_triplets(dataset):
 
     print(f"\n=== Testing {dataset} ===")
     print(f"Created {len(task.triplets)} triplets:")
+
+    def format_doc(doc):
+        """Format document for display, handling both string and dict formats."""
+        if isinstance(doc, str):
+            return doc
+        elif isinstance(doc, dict):
+            return str(doc)
+        else:
+            return str(doc)
+
     for i, triplet in enumerate(task.triplets):
+        anchor_idx, positive_idx, negative_idx = triplet
         print(f"\nTriplet {i}:")
-        for j, doc in enumerate(triplet):
-            print(f"  [{j}] {doc}")
+        print(f"  [Anchor {anchor_idx}] {format_doc(task.documents[anchor_idx])}")
+        print(f"  [Positive {positive_idx}] {format_doc(task.documents[positive_idx])}")
+        print(f"  [Negative {negative_idx}] {format_doc(task.documents[negative_idx])}")
 
     # Basic assertions
     assert len(task.triplets) == 5

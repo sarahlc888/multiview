@@ -51,10 +51,14 @@ methods_to_evaluate:
 
   # Method 2: LM Judge Triplet (Gemini direct comparison)
   lm_judge_triplet:
-    - name: gemini_flash_triplet_with_annotation
+    - name: gemini_flash_lite__triplet_with_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini
-    - name: gemini_flash_triplet_no_annotation
+    - name: gemini_flash_lite_triplet_no_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_gemini
+    - name: gemini_flash_triplet_with_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
+    - name: gemini_flash_triplet_no_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
 
   # Method 3 & 4: Embeddings with/without instructions
   embeddings:

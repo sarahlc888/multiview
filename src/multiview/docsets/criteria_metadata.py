@@ -51,15 +51,25 @@ GSM8K_CRITERIA = {
 
 # Crossword Clues
 CROSSWORD_CRITERIA = {
-    "clue_type": {
-        "description": "The type of or technique used in the crossword clue. The method the clue uses to hint at the answer.",
-        "category_schema_hint": "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, etc.",
-        "tag_schema_hint": "Create tags for very specific clue properties: e.g. uses_wordplay, uses_abbreviation, requires_trivia, uses_definition, is_cryptic, is_themed, uses_anagram, is_playful_tone, is_serious_tone, is_simple, is_complicated, references_highly_obscure_fact, requires_domain_knowledge, etc.",
+    "wow_factor": {
+        "description": "Crosswords are an indication of being tuned into arts and culture, general knowledge, and trivia. What 'bragging rights' would a person win for being able to solve this clue?",
     },
-    "domain": {
-        "description": "The subject domain or topic of the clue (geography, history, pop culture, science, sports, etc.).",
+    "clue_type": {
+        "description": "The type of crossword clue (independent of the topic). The archetype or prototype of the clue type. The kinds of strategies or 'moves' that clue writers might pull.",
+        "category_schema_hint": "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, and more.",
+        # "Create tags for very specific clue properties: e.g. uses_wordplay, uses_abbreviation, requires_trivia, uses_definition, is_cryptic, is_themed, uses_anagram, is_playful_tone, is_serious_tone, is_simple, is_complicated, references_highly_obscure_fact, requires_domain_knowledge, etc.",
+        "tag_schema_hint": "Create tags for a bunch of different types of clues: e.g. direct_definition (provides a standard definition or synonym for the word that is the answer), oblique_definition (provides a definition of the word that is the answer, but in a way that is very cryptic), direct_reference (refers directly to a notable person/event/object/place via their claim to fame), niche_reference (refers to a trivia factoid that would make the answer obvious, if known), anagram (uses an anagram of the answer), cross_reference (references to other parts of the puzzle), needs_letter (extremely hard and probably not able to be solved without knowing some of the letters), answer_is_word, answer_is_proper_noun, answer_is_abbrev, answer_is_phrase, answer_is_fragment, etc.",
+    },
+    "difficulty_factor": {
+        "description": "What makes the clue difficult to solve? What is the source of uncertainty/ambiguity?",
+        "category_schema_hint": "Consider categories like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?)",
+        "tag_schema_hint": "Consider tags like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?). Also consider tags like is_a_thinker (you might be able to get it by thinking harder about it), know_it_or_dont (more time would not help solve); clear_clue (it's obvious what the clue says, you just don't know the answer), ambiguous_clue (it's not clear what the clue itself is even saying), misleading_clue (the clue is actively misleading in some way).",
+    },
+    # "description": "The method that the clue uses to hint at the answer. The way in which the answer is non obvious from just the clue, and what aspect of the necessary information is concealed.",
+    "answer_domain": {
+        "description": "The subject domain or topic of the answer (geography, history, pop culture, science, sports, etc.).",
         "category_schema_hint": "Consider categories like: geography, history, pop culture, science, sports, arts, politics, literature, general knowledge, etc.",
-        "tag_schema_hint": "Create tags for different domains: geography, history, pop_culture, science, sports, arts, politics, literature, etc.",
+        "tag_schema_hint": "Create tags for different domains: geography, history, pop_culture, science, sports, arts, politics, literature, etc. Also consider properties like is_word, is_person, is_proper_noun.",
     },
     "difficulty": {
         "description": "The difficulty level of the clue based on obscurity and wordplay complexity.",

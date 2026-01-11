@@ -1,9 +1,9 @@
-# Benchmark configuration for GSM8K arithmetic evaluation
-# Goal: Generate 256 triplets and evaluate with 4 methods
-run_name: "benchmark_debug_cw"
+# Benchmark configuration for MoralFables evaluation
+# Goal: Test prelabeled triplet generation with all 4 moral criteria
+run_name: "benchmark_generalize"
 logging:
   level: DEBUG
-  output_file: "temp.${run_name}.log"  # Log to console only
+  output_file: "temp.${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false
@@ -11,41 +11,44 @@ step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 100  # Need more docs than triplets for good sampling
+    max_docs: 200  # Small dataset for quick testing
     max_triplets: 10
-    num_synthetic_docs: 0
 
-    triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
+    num_synthetic_docs: 0
+    triplet_style: "lm_all"
     add_synthetic_docs: false
 
-    # Triplet creation parameters for lm_all style
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
     use_spurious_hard_negs: true   # Include spurious hard negatives in candidate pool
     embedding_preset: "hf_qwen3_embedding_8b"
     max_num_candidates: 10  # Max candidates shown to LM judge (per strategy for 'multi')
     n_schema_samples: 10
-
-    # Quality filtering parameters
-    rate_triplet_quality: true  # Enable LM-based quality rating
-                                # When annotations exist, automatically compares
-                                # ratings with/without annotations for insight
-    # NOTE: IMPORTANT: drop "invalid" triplets
+    rate_triplet_quality: true
     min_triplet_quality: 2 # 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
-                            # 1=invalid, 2=ambiguous, 3=trivial, 4=ideal
-                            # Set to null to rate but not filter
+
+    prelabeled_selection: "hard_negatives"  # BM25-based selection
 
   task_list:
-    - document_set: crossword_clues
-      criterion: clue_type
-      add_synthetic_docs: false
-    - document_set: crossword_clues
-      criterion: difficulty_factor
-      add_synthetic_docs: false
-    - document_set: crossword_clues
-      criterion: answer_domain
-      add_synthetic_docs: false
+    # Test all 4 moral criteria with prelabeled triplets
+    - document_set: moralfables
+      triplet_style: "prelabeled"
+      criterion: teaching
+      max_triplets: 10
 
+    - document_set: moralfables
+      triplet_style: "prelabeled"
+      criterion: setting
+      max_triplets: 10
 
+    - document_set: moralfables
+      triplet_style: "prelabeled"
+      criterion: challenge
+      max_triplets: 10
+
+    - document_set: moralfables
+      triplet_style: "prelabeled"
+      criterion: outcome
+      max_triplets: 10
 
 # Evaluation methods configuration
 methods_to_evaluate:
@@ -55,10 +58,14 @@ methods_to_evaluate:
 
   # Method 2: LM Judge Triplet (Gemini direct comparison)
   lm_judge_triplet:
+    # - name: gemini_flash_lite_triplet_with_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini
+    # - name: gemini_flash_lite_triplet_no_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_gemini
     - name: gemini_flash_triplet_with_annotation
-      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
     - name: gemini_flash_triplet_no_annotation
-      preset: lmjudge_triplet_plaintext_binaryhard_gemini
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
 
   # Method 3 & 4: Embeddings with/without instructions
   embeddings:

@@ -17,6 +17,8 @@ Given a description of the criteria, your task is to rate the quality of this tr
 
 Each text is accompanied by a summary that highlights relevant aspects based on the similarity criteria.
 
+IMPORTANT: These summary annotations are noisy. Always verify against actual document content as a sanity check.
+
 ### Similarity criteria
 
 {similarity_criteria}

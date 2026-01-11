@@ -109,29 +109,62 @@ def main(cfg: DictConfig):
             min_quality = cfg.tasks.defaults.get("min_triplet_quality")
 
             if cur_task.document_annotations is not None:
-                # Automatic comparison mode
+                # Automatic comparison mode - rate with both methods
                 comparison = cur_task.compare_quality_ratings_with_without_annotations()
-                quality_stats = comparison["ratings_with_annotations"]
 
+                # Filter conservatively: keep only triplets that pass threshold in BOTH cases
                 if min_quality is not None:
-                    from multiview.benchmark.triplets.quality_assurance import (
-                        filter_triplets_by_quality,
+                    ratings_without = comparison["ratings_without_annotations"][
+                        "ratings"
+                    ]
+                    ratings_with = comparison["ratings_with_annotations"]["ratings"]
+
+                    # Keep triplet only if BOTH ratings >= min_quality
+                    keep_mask = [
+                        (r_w is not None and r_w >= min_quality)
+                        and (r_a is not None and r_a >= min_quality)
+                        for r_w, r_a in zip(ratings_without, ratings_with, strict=False)
+                    ]
+
+                    n_total = len(cur_task.triplets)
+                    filtered_triplets = [
+                        triplet
+                        for i, triplet in enumerate(cur_task.triplets)
+                        if keep_mask[i]
+                    ]
+                    filtered_ratings = [
+                        rating for i, rating in enumerate(ratings_with) if keep_mask[i]
+                    ]
+
+                    n_kept = len(filtered_triplets)
+                    n_filtered = n_total - n_kept
+
+                    logger.info(
+                        f"Filtered triplets requiring BOTH ratings >= {min_quality}"
+                    )
+                    logger.info(
+                        f"  Kept: {n_kept}/{n_total} ({n_kept/n_total*100:.1f}%)"
+                    )
+                    logger.info(
+                        f"  Filtered out: {n_filtered}/{n_total} ({n_filtered/n_total*100:.1f}%)"
                     )
 
-                    triplets_with_ratings = quality_stats["triplets_with_ratings"]
-                    filtered_triplets, filter_stats = filter_triplets_by_quality(
-                        triplets_with_ratings, min_quality=min_quality
+                    cur_task.triplets = filtered_triplets
+                    cur_task.triplet_quality_ratings = filtered_ratings
+
+                    # Use the "with annotations" stats for logging, but add filter info
+                    quality_stats = comparison["ratings_with_annotations"]
+                    quality_stats.update(
+                        {
+                            "n_filtered": n_filtered,
+                            "n_kept": n_kept,
+                            "filter_mode": "both_must_pass",
+                        }
                     )
-                    cur_task.triplets = [
-                        (t["anchor_id"], t["positive_id"], t["negative_id"])
-                        for t in filtered_triplets
-                    ]
-                    cur_task.triplet_quality_ratings = [
-                        t["quality_rating"] for t in filtered_triplets
-                    ]
-                    quality_stats.update(filter_stats)
+                else:
+                    quality_stats = comparison["ratings_with_annotations"]
             else:
-                # No annotations: standard rating
+                # No annotations: standard rating with filtering
                 quality_stats = cur_task.rate_triplet_quality(min_quality=min_quality)
 
             log_triplet_quality_distribution(
@@ -239,7 +272,18 @@ def main(cfg: DictConfig):
             acc = metrics.get("accuracy", 0)
             correct = metrics.get("n_correct", 0)
             total = metrics.get("n_total", 0)
-            logger.info(f"  {method_name:35s}: {acc:6.2%} ({correct}/{total} correct)")
+
+            # For LM judge triplet methods, display out of 8 (half of 16 due to bidirectional eval)
+            if "triplet" in method_name:
+                display_correct = correct / 2
+                display_total = total // 2
+                logger.info(
+                    f"  {method_name:35s}: {acc:6.2%} ({display_correct:.1f}/{display_total} correct)"
+                )
+            else:
+                logger.info(
+                    f"  {method_name:35s}: {acc:6.2%} ({correct}/{total} correct)"
+                )
     logger.info("=" * 80 + "\n")
 
     # Print API cost summary

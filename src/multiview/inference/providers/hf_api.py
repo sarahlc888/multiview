@@ -53,6 +53,10 @@ def hf_embedding_completions(
     embed_query_instrs = kwargs.pop("embed_query_instrs", None)
     embed_doc_instrs = kwargs.pop("embed_doc_instrs", None)
 
+    logger.debug(f"embed_query_instrs: {embed_query_instrs}")
+    logger.debug(f"embed_doc_instrs: {embed_doc_instrs}")
+    logger.debug(f"prompts (before prepending): {prompts}")
+
     final_prompts = []
     for i, prompt in enumerate(prompts):
         final_prompt = prompt
@@ -61,6 +65,28 @@ def hf_embedding_completions(
         if embed_doc_instrs and i < len(embed_doc_instrs):
             final_prompt = embed_doc_instrs[i] + final_prompt
         final_prompts.append(final_prompt)
+
+    logger.debug(f"final_prompts (after prepending): {final_prompts}")
+
+    # Validate instructions were applied correctly
+    if embed_query_instrs or embed_doc_instrs:
+        for i, (original, final) in enumerate(
+            zip(prompts, final_prompts, strict=False)
+        ):
+            if (
+                embed_query_instrs
+                and i < len(embed_query_instrs)
+                and embed_query_instrs[i]
+            ):
+                assert final != original, f"Query instruction not applied to prompt {i}"
+                assert (
+                    embed_query_instrs[i] in final
+                ), f"Query instruction not in final prompt {i}"
+            if embed_doc_instrs and i < len(embed_doc_instrs) and embed_doc_instrs[i]:
+                assert final != original, f"Doc instruction not applied to prompt {i}"
+                assert (
+                    embed_doc_instrs[i] in final
+                ), f"Doc instruction not in final prompt {i}"
 
     # Batch embeddings for efficiency (process all prompts at once)
     try:

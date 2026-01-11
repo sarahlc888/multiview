@@ -121,10 +121,16 @@ class Benchmark:
                             for k, v in method_results.items()
                             if k != "triplet_logs"
                         }
-                        logger.info(
-                            f"      Result: {task_results[method_name]['accuracy']:.2%} accuracy "
-                            f"({task_results[method_name]['n_correct']}/{task_results[method_name]['n_total']} correct)"
-                        )
+
+                        # Check if method was skipped before trying to log accuracy
+                        if method_results.get("skipped"):
+                            reason = method_results.get("reason", "Unknown reason")
+                            logger.info(f"      Skipped: {reason}")
+                        else:
+                            logger.info(
+                                f"      Result: {task_results[method_name]['accuracy']:.2%} accuracy "
+                                f"({task_results[method_name]['n_correct']}/{task_results[method_name]['n_total']} correct)"
+                            )
 
                     except Exception as e:
                         logger.error(

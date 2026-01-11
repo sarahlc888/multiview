@@ -28,7 +28,7 @@ class AnalogiesDocSet(BaseDocSet):
         - Each question produces 2 word pairs: stem and answer
         - max_docs applies to total pairs, so max_docs=100 loads ~50 questions
         - Streaming disabled due to datasets 2.x split compatibility issues
-        - Documents are dicts with 'text' and 'analogy_type' fields
+        - Documents are simple strings (word pairs)
         - analogy_type is a known criterion extracted from prefix field (e.g., "antonyms - gradable")
         - Category names are extracted from file paths using regex pattern
         - Robust error handling for malformed records
@@ -57,11 +57,11 @@ class AnalogiesDocSet(BaseDocSet):
         1. The stem pair: "word1 : word2"
         2. The answer pair: "word3 : word4"
 
-        Documents are dicts with 'text' and 'analogy_type' keys to support
-        analogy_type as a known criterion.
+        Documents are simple strings (the word pairs).
+        Metadata is stored separately in PRECOMPUTED_ANNOTATIONS.
 
         Returns:
-            List of document dicts: {"text": "word : word", "analogy_type": "country-capital"}
+            List of word pair strings: ["word1 : word2", "word3 : word4", ...]
         """
         logger.info(f"Loading Analogies from HuggingFace: {self.DATASET_PATH}")
 
@@ -91,6 +91,8 @@ class AnalogiesDocSet(BaseDocSet):
 
         # Extract word pairs with analogy type
         documents = []
+        metadata_list = []  # Store metadata separately for annotation building
+
         for i, example in enumerate(dataset):
             try:
                 # Get analogy type (prefix) and extract category name from path
@@ -104,7 +106,10 @@ class AnalogiesDocSet(BaseDocSet):
                 stem = example.get("stem", [])
                 if len(stem) >= 2:
                     stem_text = " : ".join(stem)
-                    documents.append({"text": stem_text, "analogy_type": analogy_type})
+                    documents.append(stem_text)
+                    metadata_list.append(
+                        {"text": stem_text, "analogy_type": analogy_type}
+                    )
 
                 # Extract answer pair
                 choices = example.get("choice", [])
@@ -113,7 +118,8 @@ class AnalogiesDocSet(BaseDocSet):
                     answer_choice = choices[int(answer_idx)]
                     if len(answer_choice) >= 2:
                         answer_text = " : ".join(answer_choice)
-                        documents.append(
+                        documents.append(answer_text)
+                        metadata_list.append(
                             {"text": answer_text, "analogy_type": analogy_type}
                         )
 
@@ -128,18 +134,20 @@ class AnalogiesDocSet(BaseDocSet):
         # Final max_docs enforcement
         if max_docs is not None and len(documents) > max_docs:
             documents = documents[:max_docs]
+            metadata_list = metadata_list[:max_docs]
 
         logger.debug(f"Loaded {len(documents)} word pair documents from Analogies")
 
         # Build precomputed annotations for analogy_type criterion
-        self._build_precomputed_annotations(documents)
+        self._build_precomputed_annotations(metadata_list)
 
         return documents
 
     def get_document_text(self, document: Any) -> str:
-        """Extract text from a document."""
-        if isinstance(document, dict):
-            return document.get("text", "")
+        """Extract text from a document.
+
+        Documents are simple strings (word pairs).
+        """
         return document if isinstance(document, str) else ""
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -147,11 +155,14 @@ class AnalogiesDocSet(BaseDocSet):
 
         Supports:
         - word_count: from base class
-        - analogy_type: the prefix field (e.g., "country-capital")
+        - analogy_type: the prefix field (from PRECOMPUTED_ANNOTATIONS)
+
+        Note: Documents are strings, so criterion values come from PRECOMPUTED_ANNOTATIONS.
+        Use get_precomputed_annotation() to access these.
         """
         if criterion == "analogy_type":
-            if isinstance(document, dict):
-                return document.get("analogy_type")
+            # Criterion values are stored in PRECOMPUTED_ANNOTATIONS
+            # The caller should use get_precomputed_annotation() instead
             return None
 
         # Fall back to base class for word_count

@@ -32,7 +32,7 @@ class InfiniteChatsDocSet(BaseDocSet):
 
     DATASET_PATH = INFINITE_CHATS_DATASET_ID
     DESCRIPTION = "Full conversations from infinite-chats grouped by prompt"
-    KNOWN_CRITERIA = ["categories", "conversation_length"]
+    KNOWN_CRITERIA = []  # Documents are strings; no metadata extracted
 
     def __init__(self, config: dict | None = None):
         """Initialize infinite-chats dataset.
@@ -197,14 +197,14 @@ class InfiniteChatsDocSet(BaseDocSet):
     def get_document_text(self, document: Any) -> str:
         """Extract text from a document.
 
+        Documents are simple strings (full conversation text).
+
         Args:
-            document: A document dict or string
+            document: A document string
 
         Returns:
             The text content of the document
         """
-        if isinstance(document, dict):
-            return document.get("text", "")
         return document if isinstance(document, str) else ""
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -212,18 +212,8 @@ class InfiniteChatsDocSet(BaseDocSet):
 
         Supports:
         - word_count: from base class
-        - categories: comma-separated category tags
-        - conversation_length: number of messages in conversation
+
+        Note: Documents are strings with no metadata extracted.
         """
-        if not isinstance(document, dict):
-            return super().get_known_criterion_value(document, criterion)
-
-        if criterion == "categories":
-            categories = document.get("categories", [])
-            return ", ".join(categories) if categories else ""
-
-        if criterion == "conversation_length":
-            return document.get("conversation_length")
-
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
