@@ -103,6 +103,10 @@ def setup_logging_from_config(cfg) -> None:
     Args:
         cfg: Hydra config with logging settings
     """
-    level = getattr(cfg.logging, "level", "INFO")
-    output_file = getattr(cfg.logging, "output_file", None)
+    if hasattr(cfg, "logging"):
+        level = getattr(cfg.logging, "level", "INFO")
+        output_file = getattr(cfg.logging, "output_file", None)
+    else:
+        level = "INFO"
+        output_file = None
     setup_logging(level=level, output_file=output_file)

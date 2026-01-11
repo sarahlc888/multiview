@@ -1,4 +1,4 @@
-We are finding documents that are DIFFERENT based on specific criteria.
+Given an anchor document, please find a document that is DISSIMILAR to the anchor based on the specified criteria.
 
 CRITERIA:
 {criterion}
@@ -6,6 +6,12 @@ CRITERIA:
 CRITERIA DESCRIPTION:
 {criterion_description}
 
+INSTRUCTIONS:
+- An ideal candidate is DIFFERENT from the anchor, based on the criterion, but LOOKS SIMILAR on the surface. Prefer candidates with high Lexical similarity (bm25) and/or high spurious tag similarity but low criterion similarity. This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters.
+- Don't pick documents with "subtle" differences on the criterion -- we want clear criterion differences with superficial similarities
+- NOTE: Each candidate is annotated with  "Criterion" (similarity on what matters), "Spurious" (similarity on surface features), and "Lexical" (BM25 word overlap)
+- IMPORTANT: Annotations are noisy. Always verify against actual document content.
+{triplet_example_section}
 ANCHOR DOCUMENT:
 {anchor_doc}
 
@@ -14,22 +20,11 @@ ANCHOR ANNOTATION:
 
 CANDIDATES:
 {candidates}
-{triplet_example_section}
-INSTRUCTIONS:
-- Select a document that is CLEARLY DIFFERENT on the criterion (look for LOW Criterion similarity, ideally < 0.5)
-- But LOOKS SIMILAR on surface features (look for HIGH Spurious similarity, ideally > 0.5)
-- The "Spurious tags" show surface-level features that are NOT part of the criterion but might confuse simple models
-- IMPORTANT: Prefer candidates with HIGH Lexical similarity (>30). High BM25 word overlap indicates the document shares many words with the anchor, making it a harder negative for lexical models to distinguish.
-- This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters
-- Don't pick documents with "subtle" differences on the criterion - we want clear criterion differences with superficial similarities
 
-NOTE: Each candidate shows "Criterion" (similarity on what matters), "Spurious" (similarity on surface features), and "Lexical" (BM25 word overlap).
-We want low Criterion, high Spurious, AND high Lexical for the best hard negatives.
-
-However, Annotations are noisy predictions -- always verify against actual content.
-
-Explain your reasoning briefly, then respond with valid JSON in this exact format:
+Think out loud, then respond with valid JSON in this exact format:
 {
-  "reasoning": "Your brief explanation here",
+  "reasoning": <thinking>,
   "chosen_negative": [number]
 }
+
+IMPORTANT: make sure to response in JSON format.

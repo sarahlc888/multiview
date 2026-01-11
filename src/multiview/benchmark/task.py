@@ -157,10 +157,12 @@ class Task:
             logger.info(f"Added {len(synthetic_docs)} synthetic documents")
             self.documents.extend(synthetic_docs)
             self.synthesis_metadata = synthesis_metadata
-            # Backward compatibility: extract anchor_indices from metadata
-            self.synthesis_anchor_indices = synthesis_metadata.get("anchor_indices", [])
+            # Use unique remix anchor indices
+            self.synthesis_anchor_indices = synthesis_metadata.get(
+                "remix_anchor_indices", []
+            )
             logger.info(
-                f"Stored synthesis metadata with {len(self.synthesis_anchor_indices)} anchor indices"
+                f"Stored synthesis metadata with {len(self.synthesis_anchor_indices)} remix anchor indices"
             )
         else:
             logger.info("No synthetic documents generated")

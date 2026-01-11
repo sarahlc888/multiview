@@ -172,7 +172,9 @@ def filter_triplets_by_quality(
         }
 
     filtered_triplets = [
-        t for t in triplets if t.get("quality_rating", 0) >= min_quality
+        t
+        for t in triplets
+        if (min_quality is None or t.get("quality_rating", 0) >= min_quality)
     ]
 
     n_total = len(triplets)

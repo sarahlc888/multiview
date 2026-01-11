@@ -74,7 +74,9 @@ def main(cfg: DictConfig):
         logger.debug(f"Set STEP_THROUGH to {cfg.step_through}")
 
     logger.info(f"Running benchmark: {cfg.run_name}")
-    set_seed(cfg.seed)
+    seed = getattr(cfg, "seed", 42)  # Default to 42 if not specified
+    logger.debug(f"Using seed from config: {seed}")
+    set_seed(seed)
 
     # Setup output directories
     output_base = Path("outputs") / cfg.run_name

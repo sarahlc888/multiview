@@ -3,7 +3,7 @@
 run_name: "benchmark_debug"
 logging:
   level: DEBUG
-  output_file: null  # Log to console only
+  output_file: temp.log  # Log to console only
 seed: 42
 use_cache: true
 step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)
@@ -11,8 +11,8 @@ step_through: false # true  # Enable breakpoints for debugging (set to true to s
 # Task configuration
 tasks:
   defaults:
-    max_docs: 50  # Need more docs than triplets for good sampling
-    max_triplets: 5
+    max_docs: 100  # Need more docs than triplets for good sampling
+    max_triplets: 20
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false
@@ -29,7 +29,7 @@ tasks:
     rate_triplet_quality: true  # Enable LM-based quality rating
                                 # When annotations exist, automatically compares
                                 # ratings with/without annotations for insight
-    min_triplet_quality: 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
+    min_triplet_quality: null # 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
                             # 1=invalid, 2=ambiguous, 3=trivial, 4=ideal
                             # Set to null to rate but not filter
 

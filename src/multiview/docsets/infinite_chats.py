@@ -8,6 +8,7 @@ from datasets import load_dataset
 
 from multiview.constants import INFINITE_CHATS_DATASET_ID
 from multiview.docsets.base import BaseDocSet
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -182,12 +183,11 @@ class InfiniteChatsDocSet(BaseDocSet):
         # Apply max_docs limit
         max_docs = self.config.get("max_docs")
         if max_docs is not None and len(documents) > max_docs:
-            import random
-
-            rng = random.Random(42)
-            documents = documents.copy()
-            rng.shuffle(documents)
-            documents = documents[:max_docs]
+            # Deterministically sample max_docs from the documents
+            sampled_documents = deterministic_sample(
+                documents, k=max_docs, seed_base="infinite_chats_max_docs"
+            )
+            documents = sampled_documents
 
         logger.debug(f"Returning {len(documents)} full conversation documents")
         return documents

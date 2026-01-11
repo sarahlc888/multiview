@@ -15,7 +15,6 @@ Related modules:
 """
 
 import logging
-import random
 
 from multiview.benchmark.triplets.utils import (
     extract_active_tags,
@@ -24,6 +23,7 @@ from multiview.benchmark.triplets.utils import (
 )
 from multiview.inference.inference import run_inference
 from multiview.utils.prompt_utils import read_or_return
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,11 @@ def create_random_triplets(
     triplets = []
     num_triplets = max_triplets if max_triplets is not None else len(documents)
 
-    for _ in range(num_triplets):
-        # Sample 3 random distinct indices
-        sampled_indices = random.sample(range(len(documents)), 3)
+    for i in range(num_triplets):
+        # Sample 3 random distinct indices deterministically
+        sampled_indices = deterministic_sample(
+            list(range(len(documents))), 3, seed_base=f"random_triplet_{i}"
+        )
         triplets.append(tuple(sampled_indices))
 
     return triplets
@@ -221,20 +223,20 @@ def select_positive(
     # Get parsed selection number (1-indexed)
     selected_num = results[0] if results else None
 
+    # Handle both int and list formats (e.g., 5 or [5])
+    if isinstance(selected_num, list) and len(selected_num) == 1:
+        selected_num = selected_num[0]
+
     # Convert to document index
-    positive_idx = None
-    parse_success = True
     if isinstance(selected_num, int) and 1 <= selected_num <= len(candidate_indices):
         positive_idx = candidate_indices[selected_num - 1]
+        return positive_idx, True
     else:
         logger.error(
             f"CRITICAL: Failed to parse positive selection from LM response. "
-            f"Got: {selected_num}. Using first candidate as fallback."
+            f"Got: {selected_num}. Skipping triplet."
         )
-        positive_idx = candidate_indices[0]
-        parse_success = False
-
-    return positive_idx, parse_success
+        return None, False
 
 
 def select_negative(
@@ -329,28 +331,27 @@ def select_negative(
     # Get parsed selection number (1-indexed)
     selected_num = results[0] if results else None
 
+    # Handle both int and list formats (e.g., 5 or [5])
+    if isinstance(selected_num, list) and len(selected_num) == 1:
+        selected_num = selected_num[0]
+
     # Convert to document index
-    negative_idx = None
-    parse_success = True
     if isinstance(selected_num, int) and 1 <= selected_num <= len(candidate_indices):
         negative_idx = candidate_indices[selected_num - 1]
+        # Ensure negative is different from positive
+        if negative_idx == positive_idx and len(candidate_indices) > 1:
+            negative_idx = (
+                candidate_indices[1]
+                if candidate_indices[0] == positive_idx
+                else candidate_indices[0]
+            )
+        return negative_idx, True
     else:
         logger.error(
             f"CRITICAL: Failed to parse negative selection from LM response. "
-            f"Got: {selected_num}. Using last candidate as fallback."
+            f"Got: {selected_num}. Skipping triplet."
         )
-        negative_idx = candidate_indices[-1]
-        parse_success = False
-
-    # Ensure negative is different from positive
-    if negative_idx == positive_idx and len(candidate_indices) > 1:
-        negative_idx = (
-            candidate_indices[1]
-            if candidate_indices[0] == positive_idx
-            else candidate_indices[0]
-        )
-
-    return negative_idx, parse_success
+        return None, False
 
 
 def create_lm_triplets(
@@ -408,6 +409,7 @@ def create_lm_triplets(
         select_candidates_bm25,
         select_candidates_embedding,
         select_candidates_jaccard,
+        select_spurious_hard_negatives,
     )
 
     if len(documents) < 3:
@@ -416,16 +418,54 @@ def create_lm_triplets(
 
     # Determine anchor indices to use
     if anchor_indices is not None:
-        # Use provided anchor indices (e.g., from synthesis)
-        anchors_to_process = anchor_indices
-        # Respect max_triplets if provided
-        if max_triplets is not None:
+        # Use provided anchor indices from synthesis (should be unique remix_anchor_indices)
+        anchors_to_process = anchor_indices.copy()
+
+        # If max_triplets is specified and we need MORE triplets than provided anchors,
+        # randomly sample additional documents (excluding the provided anchors)
+        if max_triplets is not None and len(anchors_to_process) < max_triplets:
+            # Calculate how many more we need
+            num_additional = max_triplets - len(anchors_to_process)
+
+            # Find all available document indices (excluding anchors already used)
+            used_anchors = set(anchors_to_process)
+            available_indices = [
+                i for i in range(len(documents)) if i not in used_anchors
+            ]
+
+            # Randomly sample additional indices (can be original or synthetic docs)
+            # Use deterministic sampling for reproducibility
+            num_to_add = min(num_additional, len(available_indices))
+            if num_to_add > 0:
+                additional_anchors = deterministic_sample(
+                    available_indices,
+                    num_to_add,
+                    seed_base="lm_triplets_additional_anchors",
+                )
+                anchors_to_process.extend(additional_anchors)
+                logger.info(
+                    f"Extended anchor indices from {len(anchor_indices)} synthesis anchors "
+                    f"to {len(anchors_to_process)} total anchors (added {num_to_add} random documents) "
+                    f"to meet max_triplets={max_triplets}"
+                )
+        elif max_triplets is not None and len(anchors_to_process) > max_triplets:
+            # If we have too many, limit to max_triplets
             anchors_to_process = anchors_to_process[:max_triplets]
+            logger.info(
+                f"Limited anchor indices from {len(anchor_indices)} to {len(anchors_to_process)} "
+                f"to meet max_triplets={max_triplets}"
+            )
     else:
         # Default: sequential indices
         num_triplets = max_triplets if max_triplets is not None else len(documents)
         num_triplets = min(num_triplets, len(documents))
         anchors_to_process = list(range(num_triplets))
+
+    # Log final anchor selection
+    logger.info(
+        f"Selected {len(anchors_to_process)} anchor documents for triplet creation "
+        f"(from {len(documents)} total documents)"
+    )
 
     # Check if annotations are needed
     needs_annotations = candidate_strategy in ["multi", "jaccard", "bm25", "embedding"]
@@ -541,6 +581,7 @@ def create_lm_triplets(
 
         if not pos_parse_success:
             parse_failures += 1
+            continue  # Skip this triplet
 
         # Step 3: Retrieve negative candidates using DIFFERENT strategy
         # Negatives should be lexically/semantically similar (raw text) but structurally different (tags)
@@ -589,7 +630,7 @@ def create_lm_triplets(
             ]
 
         elif candidate_strategy == "multi":
-            # Combine: high BM25/embedding on raw docs + low Jaccard
+            # Combine: high BM25/embedding on raw docs + low Jaccard + high spurious similarity
             bm25_neg = select_candidates_bm25(
                 documents,
                 annotations,
@@ -609,14 +650,19 @@ def create_lm_triplets(
                 use_summary=False,  # Use raw documents
                 cache_alias=cache_alias,
             )
-            # Get low Jaccard candidates
+            # Get low Jaccard candidates (low true similarity)
             all_jaccard = select_candidates_jaccard(
                 annotations, anchor_idx, k=len(documents) - 1, use_spurious=False
             )
             low_jaccard = list(reversed(all_jaccard))[:max_num_candidates]
 
+            # Get spurious hard negatives (high spurious sim, low true sim)
+            spurious_negs = select_spurious_hard_negatives(
+                annotations, anchor_idx, k=max_num_candidates
+            )
+
             negative_candidate_indices = merge_candidate_pools(
-                bm25_neg, emb_neg, low_jaccard, use_rrf=True
+                bm25_neg, emb_neg, low_jaccard, spurious_negs, use_rrf=True
             )
             # Remove positive if present
             negative_candidate_indices = [
@@ -658,6 +704,7 @@ def create_lm_triplets(
 
         if not neg_parse_success:
             parse_failures += 1
+            continue  # Skip this triplet
 
         # Create triplet (IDs only, not text)
         triplet = (anchor_idx, positive_idx, negative_idx)
@@ -665,10 +712,12 @@ def create_lm_triplets(
 
     logger.info(f"Created {len(triplets)} triplets")
     if parse_failures > 0:
+        total_attempted = len(triplets) + parse_failures
+        logger.error("=" * 80)
         logger.error(
-            f"CRITICAL: LM judge parsing failed for {parse_failures}/{len(triplets)} triplets "
-            f"({100*parse_failures/len(triplets):.1f}%). "
-            f"These triplets used fallback heuristics instead of intelligent selection. "
-            f"Check logs above for full LM responses."
+            f"⚠️  CRITICAL: Skipped {parse_failures}/{total_attempted} triplets due to LM parse failures "
+            f"({100*parse_failures/total_attempted:.1f}%)"
         )
+        logger.error("Check logs above for details on what went wrong.")
+        logger.error("=" * 80)
     return triplets

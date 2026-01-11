@@ -214,5 +214,11 @@ def record_cache_hit(model_name: str, input_tokens: int = 0, output_tokens: int 
 
 
 def print_summary():
-    """Print usage summary to console."""
-    print(_global_tracker.get_summary())
+    """Print usage summary using logger (appears in both console and log file)."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+    summary = _global_tracker.get_summary()
+    # Use logger instead of print() so it appears in both console and log file
+    # Log the entire summary as one message to preserve formatting
+    logger.info("\n" + summary)

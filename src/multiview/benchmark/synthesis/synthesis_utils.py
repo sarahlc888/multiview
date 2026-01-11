@@ -6,6 +6,7 @@ from typing import Any
 
 from multiview.inference.inference import run_inference
 from multiview.inference.presets import InferenceConfig
+from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +45,25 @@ def synthesize_documents(
             f"Synthesis config for criterion '{criterion_name}' must define 'remix_prompt'."
         )
 
-    rng = random.Random(42)
     all_indices = list(range(len(documents)))
 
+    # Initialize RNG for decoy selection (used later in the loop)
+    import hashlib
+
+    seed = int(hashlib.md5(b"synthesis_decoy_selection").hexdigest(), 16) % (2**31)
+    rng = random.Random(seed)
+
     if num_remix_anchors <= len(all_indices):
-        remix_anchor_indices = rng.sample(all_indices, k=num_remix_anchors)
+        # Sample without replacement
+        remix_anchor_indices = deterministic_sample(
+            all_indices, k=num_remix_anchors, seed_base="synthesis_remix_anchors"
+        )
     else:
+        # Sample with replacement using deterministic seeding
+        seed = int(
+            hashlib.md5(b"synthesis_remix_anchors_replacement").hexdigest(), 16
+        ) % (2**31)
+        rng = random.Random(seed)
         remix_anchor_indices = [
             rng.choice(all_indices) for _ in range(num_remix_anchors)
         ]
@@ -209,7 +223,8 @@ def synthesize_documents(
 
     # Build synthesis metadata dict
     synthesis_metadata = {
-        "anchor_indices": anchor_indices,  # Backward compatibility
+        "anchor_indices": anchor_indices,  # Backward compatibility - has duplicates
+        "remix_anchor_indices": remix_anchor_indices,  # Unique anchors used for remix
         "num_original_docs": len(documents),
         "num_pairs": len(pairs_metadata),
         "num_filtered": filtered_count,
