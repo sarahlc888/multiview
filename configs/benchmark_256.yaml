@@ -6,6 +6,7 @@ logging:
   output_file: null  # Log to console only
 seed: 42
 use_cache: true
+step_through: false  # Enable breakpoints for debugging (set to true to step through code)
 
 # Task configuration
 tasks:
@@ -20,6 +21,7 @@ tasks:
     # Triplet creation parameters for lm_all style
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
     use_spurious_hard_negs: true
+    max_num_candidates: 10  # Max candidates shown to LM judge (per strategy for 'multi')
     n_schema_samples: 10
 
   task_list:

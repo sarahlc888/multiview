@@ -1,30 +1,28 @@
-You are designing annotation guidance for free-text summaries.
+Create guidelines for annotating how documents relate to a criterion.
 
-CRITERION: {criterion}
+CRITERIA:
+{criterion}
 
-CRITERION DESCRIPTION:
+CRITERIA DESCRIPTION:
 {criterion_description}
-
-SUMMARY HINT (optional):
-{guidance_hint}
-
-DESIRED FORMAT (optional):
-{format_hint}
-
+{summary_hint}
 SAMPLE DOCUMENTS:
 {sample_documents}
 
-The summary should include two sections:
-1) Annotation trace: freeform text with justification and references to the document.
-2) Final summary: concise, structured, high lexical overlap for similar documents; invariant to spurious factors; should not reference the specifics of the document unless there's no other way to illustrate the point.
+Your task is to create a demonstration for how to annotate a document with respect to the criterion.
 
-If a desired format is specified above, the final summary should follow that format.
+The annotation should include two sections:
+1) Annotation trace: freeform text with justification and references to the document
+2) Final summary: concise, structured summary
+  - Try to use as structured of a format as possible. Prefer not to use prose. If the hint specifies a desired format, the final summary should follow that format.
+  - Should not reference the specifics of the document unless there's no other way to illustrate the point
+  - Should be invariant to spurious factors
+  - If two documents are similar with respect to the criterion, their final summaries should have high lexical overlap
 
-Include a short demonstration showing how to produce both fields for one example document.
+Include a demonstration showing both sections for one example document.
 
-Think through multiple candidate guidance options, then choose the single best option.
-Return valid JSON with reasoning:
+Output valid JSON:
 {
-  "reasoning": "Explain what guidance options you considered and why this approach best helps annotators create useful summaries",
+  "reasoning": "<thinking out loud about how to provide a good demonstration>",
   "summary_guidance": "..."
 }

@@ -177,9 +177,6 @@ def run_inference(
         **config.to_completion_kwargs(),
     )
 
-    if len(raw_completions) > 0:
-        logger.debug(f"Example raw completion: {raw_completions[0]}")
-
     # Log prompts and responses for auditing
     # Extract prompts for logging
     prompt_texts = []
@@ -205,13 +202,16 @@ def run_inference(
     parser_kwargs = config.parser_kwargs or {}
 
     parsed_completions = []
-    for raw_completion in raw_completions:
+    for idx, raw_completion in enumerate(raw_completions):
         try:
             parsed = parser_fn(raw_completion, **parser_kwargs)
             parsed_completions.append(parsed)
         except Exception as e:
             # Error details already logged by parser
-            logger.debug(f"Parse error (details logged by parser): {type(e).__name__}")
+            logger.warning(
+                f"Parse error for completion {idx+1}/{len(raw_completions)}: "
+                f"{type(e).__name__}: {e}"
+            )
             # Return None or empty on parse error
             parsed_completions.append(None)
 

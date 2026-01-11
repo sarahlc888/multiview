@@ -9,15 +9,16 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig
 
+import multiview.constants
 from multiview.benchmark.artifacts import (
     save_task_annotations,
     save_task_documents,
     save_task_triplets,
 )
 from multiview.benchmark.benchmark import Benchmark
+from multiview.benchmark.synthesis.validation import validate_synthesis
 from multiview.benchmark.task import Task
 from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
-from multiview.benchmark.validation import validate_synthesis
 from multiview.inference.cost_tracker import print_summary as print_cost_summary
 from multiview.utils.logging_utils import setup_logging_from_config
 
@@ -67,6 +68,11 @@ def set_seed(seed: int):
 def main(cfg: DictConfig):
     setup_logging_from_config(cfg)
 
+    # Apply step_through config to constants module
+    if hasattr(cfg, "step_through"):
+        multiview.constants.STEP_THROUGH = cfg.step_through
+        logger.debug(f"Set STEP_THROUGH to {cfg.step_through}")
+
     logger.info(f"Running benchmark: {cfg.run_name}")
     set_seed(cfg.seed)
 
@@ -103,9 +109,36 @@ def main(cfg: DictConfig):
         cur_task.create_triplets()
 
         # Rate and filter triplet quality if enabled
+        # When annotations exist, automatically compares with/without for insights
         if cfg.tasks.defaults.get("rate_triplet_quality", False):
             min_quality = cfg.tasks.defaults.get("min_triplet_quality")
-            quality_stats = cur_task.rate_triplet_quality(min_quality=min_quality)
+
+            if cur_task.document_annotations is not None:
+                # Automatic comparison mode
+                comparison = cur_task.compare_quality_ratings_with_without_annotations()
+                quality_stats = comparison["ratings_with_annotations"]
+
+                if min_quality is not None:
+                    from multiview.benchmark.triplets.quality_assurance import (
+                        filter_triplets_by_quality,
+                    )
+
+                    triplets_with_ratings = quality_stats["triplets_with_ratings"]
+                    filtered_triplets, filter_stats = filter_triplets_by_quality(
+                        triplets_with_ratings, min_quality=min_quality
+                    )
+                    cur_task.triplets = [
+                        (t["anchor_id"], t["positive_id"], t["negative_id"])
+                        for t in filtered_triplets
+                    ]
+                    cur_task.triplet_quality_ratings = [
+                        t["quality_rating"] for t in filtered_triplets
+                    ]
+                    quality_stats.update(filter_stats)
+            else:
+                # No annotations: standard rating
+                quality_stats = cur_task.rate_triplet_quality(min_quality=min_quality)
+
             log_triplet_quality_distribution(
                 stats=quality_stats,
                 task_name=cur_task.get_task_name(),
@@ -117,7 +150,8 @@ def main(cfg: DictConfig):
         if cur_task.document_annotations is not None:
             save_task_annotations(cur_task, annotations_dir)
 
-        save_task_triplets(cur_task, triplets_dir)
+        triplets_file = save_task_triplets(cur_task, triplets_dir)
+        logger.info(f"✓ Saved triplets to {triplets_file}")
         tasks.append(cur_task)
 
     # create benchmark object

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from multiview.benchmark.bm25_utils import (
+from multiview.utils.bm25_utils import (
     LUCENE_STOPWORDS,
     compute_bm25_matrix,
     compute_bm25_scores,

@@ -228,30 +228,60 @@ def select_spurious_hard_negatives(
 def merge_candidate_pools(
     *candidate_lists: list[tuple[int, float]],
     deduplicate: bool = True,
+    use_rrf: bool = True,
+    rrf_k: int = 60,
 ) -> list[int]:
-    """Merge multiple candidate pools.
+    """Merge multiple candidate pools using Reciprocal Rank Fusion or simple concatenation.
+
+    Reciprocal Rank Fusion (RRF) is a robust method for combining rankings that:
+    - Treats all retrieval strategies equally (no bias toward first list)
+    - Rewards consensus (documents appearing in multiple lists score higher)
+    - Uses reciprocal rank scoring: score = sum(1/(k + rank)) across all lists
+
+    Example with k=60:
+        - Doc 42 appears at rank 1 in BM25, rank 3 in embedding → score = 1/61 + 1/63 = 0.032
+        - Doc 17 appears at rank 2 in BM25 only → score = 1/62 = 0.016
+        - Doc 42 ranks higher due to consensus across strategies
 
     Args:
         *candidate_lists: Variable number of candidate lists (each is list of (index, score))
-        deduplicate: If True, remove duplicates (keeping first occurrence)
+        deduplicate: If True, remove duplicates (only used for simple merge, not RRF)
+        use_rrf: If True, use Reciprocal Rank Fusion; otherwise simple concatenation
+        rrf_k: Constant for RRF scoring (default 60 is standard from literature)
 
     Returns:
-        List of candidate indices (merged and optionally deduplicated)
+        List of candidate indices sorted by RRF score (or concatenated if use_rrf=False)
     """
-    merged = []
+    if use_rrf:
+        # Reciprocal Rank Fusion: score = sum(1 / (k + rank)) across all lists
+        rrf_scores = {}
 
-    for candidates in candidate_lists:
-        for idx, _ in candidates:
-            merged.append(idx)
+        for candidates in candidate_lists:
+            for rank, (idx, _) in enumerate(candidates, start=1):
+                if idx not in rrf_scores:
+                    rrf_scores[idx] = 0.0
+                rrf_scores[idx] += 1.0 / (rrf_k + rank)
 
-    if deduplicate:
-        # Preserve order, remove duplicates
-        seen = set()
-        deduplicated = []
-        for idx in merged:
-            if idx not in seen:
-                deduplicated.append(idx)
-                seen.add(idx)
-        return deduplicated
+        # Sort by RRF score descending
+        sorted_candidates = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)
+        return [idx for idx, _ in sorted_candidates]
 
-    return merged
+    else:
+        # Simple concatenation (old behavior)
+        merged = []
+
+        for candidates in candidate_lists:
+            for idx, _ in candidates:
+                merged.append(idx)
+
+        if deduplicate:
+            # Preserve order, remove duplicates
+            seen = set()
+            deduplicated = []
+            for idx in merged:
+                if idx not in seen:
+                    deduplicated.append(idx)
+                    seen.add(idx)
+            return deduplicated
+
+        return merged

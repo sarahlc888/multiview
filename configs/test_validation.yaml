@@ -5,6 +5,7 @@ logging:
   output_file: null
 seed: 42
 use_cache: true
+step_through: false  # Enable breakpoints for debugging (set to true to step through code)
 
 # Task configuration
 tasks:

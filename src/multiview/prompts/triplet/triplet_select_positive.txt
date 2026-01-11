@@ -1,0 +1,32 @@
+We are finding documents that are similar based on specific criteria.
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+ANCHOR DOCUMENT:
+{anchor_doc}
+
+ANCHOR ANNOTATION:
+{anchor_annotation}
+
+CANDIDATES:
+{candidates}
+{triplet_example_section}
+INSTRUCTIONS:
+- Select a document similar to the anchor on the criterion (look for HIGH Criterion similarity)
+- Look for meaningful similarity on the criterion, not superficial matches
+- Avoid trivial duplicates or near-identical documents. If two candidates are equally similar to the anchor with respect to the criteria, break the tie by selecting the candidate that is LESS similar with respect to non-criteria-related attributes
+- NOTE: Each candidate shows "Criterion" (similarity on what matters), "Spurious" (similarity on surface features), and "Lexical" (BM25 word overlap)
+- IMPORTANT: Avoid selecting positives with very high Lexical similarity (>50). High lexical overlap often indicates surface-level copying rather than genuine semantic similarity on the criterion.
+- Focus on Criterion similarity for this task, but be wary of high Lexical scores
+
+Annotations are noisy predictions - verify against actual content.
+
+Explain your reasoning briefly, then respond with valid JSON in this exact format:
+{
+  "reasoning": "Your brief explanation here",
+  "chosen_positive": [number]
+}

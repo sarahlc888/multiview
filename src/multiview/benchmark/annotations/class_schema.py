@@ -44,14 +44,20 @@ def generate_category_schema(
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
+    sample_docs_str = "\n\n".join(
+        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+    )
+
+    # Format schema_hint with heading if provided
+    schema_hint_formatted = (
+        f"\nSCHEMA HINT (optional):\n{schema_hint}\n" if schema_hint else ""
+    )
 
     # Prepare inputs with template variables
-    # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
         "criterion": [criterion],
         "criterion_description": [criterion_description or ""],
-        "schema_hint": [schema_hint or ""],
+        "schema_hint": [schema_hint_formatted],
         "sample_documents": [sample_docs_str],
     }
 

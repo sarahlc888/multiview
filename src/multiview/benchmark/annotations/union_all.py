@@ -17,7 +17,7 @@ from multiview.benchmark.annotations.class_schema import (
     generate_category_schema,
 )
 from multiview.benchmark.annotations.open_ended import (
-    generate_criteria_description,
+    generate_pairwise_sim_hint,
     generate_summaries_batch,
     generate_summary_guidance,
 )
@@ -35,10 +35,10 @@ def annotate_with_lm_all(
     criterion: str,
     criterion_description: str | None = None,
     n_schema_samples: int = 10,
+    pairwise_sim_hint: str | None = None,
     category_schema_hint: str | None = None,
     tag_schema_hint: str | None = None,
-    summary_guidance_hint: str | None = None,
-    summary_format_hint: str | None = None,
+    summary_hint: str | None = None,
     include_debug: bool = False,
     cache_alias_prefix: str | None = None,
 ) -> list[dict]:
@@ -54,10 +54,10 @@ def annotate_with_lm_all(
         criterion: Criterion name (e.g., "arithmetic_operations")
         criterion_description: Description of what the criterion means
         n_schema_samples: Number of documents to sample for schema generation
+        pairwise_sim_hint: Optional hint for pairwise similarity comparisons
         category_schema_hint: Optional hint for category schema generation
         tag_schema_hint: Optional hint for tag schema generation
-        summary_guidance_hint: Optional hint for summary guidance
-        summary_format_hint: Optional hint for summary format
+        summary_hint: Optional combined hint for summary guidance (may include desired format)
         include_debug: If True, include debug/reasoning info
         cache_alias_prefix: Prefix for cache aliases
 
@@ -116,27 +116,32 @@ def annotate_with_lm_all(
         cache_alias=f"{schema_cache_prefix}_spurious" if schema_cache_prefix else None,
     )
 
-    # Generate enhanced criteria description for summaries
-    enhanced_criteria = generate_criteria_description(
-        documents=documents,
-        criterion=criterion,
-        criterion_description=criterion_description or "",
-        n_samples=n_schema_samples,
-        cache_alias=f"{schema_cache_prefix}_criteria_desc"
-        if schema_cache_prefix
-        else None,
-    )
-    summary_criteria_desc = (
-        enhanced_criteria.get("description") or criterion_description or ""
-    )
+    # Generate pairwise similarity hint for summaries
+    # If a hint was provided, use it as the base; otherwise generate from samples
+    if pairwise_sim_hint:
+        # Use the provided hint directly
+        summary_criterion_desc = pairwise_sim_hint
+    else:
+        # Generate pairwise similarity hint from sample documents
+        generated_hint = generate_pairwise_sim_hint(
+            documents=documents,
+            criterion=criterion,
+            criterion_description=criterion_description or "",
+            n_samples=n_schema_samples,
+            cache_alias=f"{schema_cache_prefix}_pairwise_sim_hint"
+            if schema_cache_prefix
+            else None,
+        )
+        summary_criterion_desc = (
+            generated_hint.get("pairwise_sim_hint") or criterion_description or ""
+        )
 
     summary_guidance = generate_summary_guidance(
         documents=documents,
         criterion=criterion,
-        criterion_description=summary_criteria_desc,  # Use enhanced description
+        criterion_description=summary_criterion_desc,  # Use pairwise similarity hint
         n_samples=n_schema_samples,
-        guidance_hint=summary_guidance_hint,
-        format_hint=summary_format_hint,
+        summary_hint=summary_hint,
         cache_alias=f"{schema_cache_prefix}_guidance" if schema_cache_prefix else None,
     )
 
@@ -177,7 +182,7 @@ def annotate_with_lm_all(
     summary_annotations = generate_summaries_batch(
         documents,
         criterion,
-        summary_criteria_desc,  # Use enhanced description
+        summary_criterion_desc,  # Use pairwise similarity hint
         summary_guidance,
         cache_alias=summ_alias,
     )

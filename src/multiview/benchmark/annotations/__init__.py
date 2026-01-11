@@ -17,7 +17,7 @@ Module Organization:
         - apply_tags_batch(): Apply tags to multiple documents
 
     open_ended.py: Open-ended summary generation
-        - generate_criteria_description(): Enhance criterion description
+        - generate_pairwise_sim_hint(): Generate pairwise similarity hint
         - generate_summary_guidance(): Generate summary guidance from samples
         - generate_summaries_batch(): Generate summaries for multiple documents
 
@@ -37,7 +37,7 @@ from multiview.benchmark.annotations.class_schema import (
     generate_category_schema,
 )
 from multiview.benchmark.annotations.open_ended import (
-    generate_criteria_description,
+    generate_pairwise_sim_hint,
     generate_summaries_batch,
     generate_summary_guidance,
 )
@@ -85,7 +85,7 @@ __all__ = [
     "generate_category_schema",
     "generate_tag_schema",
     "generate_spurious_tag_schema",
-    "generate_criteria_description",
+    "generate_pairwise_sim_hint",
     "generate_summary_guidance",
     # Batch annotation
     "classify_documents_batch",

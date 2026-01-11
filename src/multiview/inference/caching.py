@@ -397,7 +397,21 @@ def cached_fn_completions(
         )
 
     # Return completions in requested format
-    logger.debug(
-        f"Example result:\n{completion_cache[completion_field_name][prompt_hashes[0]]['prompt']}"
-    )
+    if len(prompt_hashes) > 0:
+        example_cached_entry = completion_cache[completion_field_name][prompt_hashes[0]]
+        example_result = example_cached_entry["result"]
+
+        from multiview.constants import STEP_THROUGH
+
+        if isinstance(example_result, dict) and "text" in example_result:
+            logger.debug(f"Example result:\n{example_result['text']}")
+            if STEP_THROUGH:
+                __builtins__["breakpoint"]()  # Safe debug hook bypass
+        elif isinstance(example_result, dict) and "vector" in example_result:
+            logger.debug(f"Example result: {len(example_result['vector'])=}")
+        else:
+            logger.debug(f"Example result:\n{example_result}")
+            if STEP_THROUGH:
+                __builtins__["breakpoint"]()  # Safe debug hook bypass
+
     return [completion_cache[completion_field_name][h]["result"] for h in prompt_hashes]

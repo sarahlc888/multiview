@@ -1,33 +1,25 @@
-You are designing a tagging schema to annotate documents based on a specific lens/criteria.
+Design a tagging schema to annotate how documents relate to a criterion.
 
-CRITERIA: {criterion}
+CRITERIA:
+{criterion}
 
 CRITERIA DESCRIPTION:
 {criterion_description}
-
-TAG SCHEMA HINT (optional):
 {schema_hint}
-
-Here are {n_samples} randomly sampled documents from the corpus (showing all fields):
-
+SAMPLE DOCUMENTS:
 {sample_documents}
 
-Your task: Create a tagging schema with tags that capture different aspects of how documents relate to the criteria "{criterion}".
-
-IMPORTANT: Tags are NOT mutually exclusive. A document can have multiple tags or no tags. Think of tags as binary attributes.
-
 GUIDELINES:
-- Tags should be relevant to the criteria
-- Each tag should represent a single, clear attribute that either does or does not apply to a given document
-- There is no limit on the number of tags. Use as many as seems reasonable. A little bit of redundancy is OK, but use your judgement. The priority is to capture the range of variation across documents as much as possible.
-- If there is a finite, enumerable set of options or prototypes, enumerate them. For example, color -> [red, yellow, green, ...]
-- If the decision space can be factorized into independent attributes, do so. For example, weather -> [temperature_hot, temperature_mild, temperature_cold, precipitation_rain, precipitation_none, precipitation_snow, ...]. Another example: sports team records for a 10-game season -> [game1_win, game1_loss, game2_win, game2_loss, ...]. Another example: action_sequence with actions {A,B,C,None} → [step1_A, step1_B, step1_C, step1_None, step2_A, ...]
+- Each tag is a boolean attribute that either applies or doesn't
+- Documents can have multiple tags, one tag, or no tags
+- Be comprehensive — capture the full range of variation you see
+- If there's a finite set of values, enumerate them (e.g., color → red, blue, green...)
+- If the criterion has independent dimensions, factorize them (e.g., weather → temperature_cold, temperature_hot, precipitation_rain, precipitation_snow...)
+- Use as many tags as seems reasonable
 
-Think through multiple candidate tag schemas before choosing the final one.
-
-Output valid JSON with reasoning:
+Think through your options, then output valid JSON:
 {
-  "reasoning": "Explain what tag options you considered and why you chose these specific tags to capture variation along the criteria",
+  "reasoning": "How do documents relate to the criterion? What is the range of variation? What kinds of tags were considered? Why these tags capture variation along the criterion",
   "tags": [
     {"name": "tag_name", "description": "when this tag applies"},
     ...

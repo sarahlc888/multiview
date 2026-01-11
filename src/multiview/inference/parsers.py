@@ -101,7 +101,6 @@ def vector_parser(completion: dict, **kwargs) -> Any:
 def json_parser(
     completion: str | dict,
     annotation_key: str | None = None,
-    wrap_singletons: bool = False,
     **kwargs,
 ) -> Any:
     """Parse JSON from completion text.
@@ -115,9 +114,6 @@ def json_parser(
         completion: Completion text (may be wrapped in markdown) or dict with "text" key
         annotation_key: If provided, extract this key from the JSON
             If None, return the full parsed JSON
-        wrap_singletons: If True and annotation_key is None, wrap a parsed JSON dict
-            in a length-1 list. This preserves the legacy behavior where
-            json_parser(...) always returned a list in the no-annotation_key case.
 
     Returns:
         Parsed JSON value (or specific key if annotation_key provided)
@@ -225,21 +221,25 @@ def json_parser(
     if json_loaded is None:
         # Log first strategy error for debugging (most informative)
         first_error = strategy_errors[0] if strategy_errors else "All strategies failed"
-        logger.error(
-            f"Failed to parse JSON: {first_error}. " f"Preview: {completion[:150]}..."
-        )
+        logger.error(f"Failed to parse JSON: {first_error}. Preview: {completion=}...")
         raise ValueError(f"Invalid JSON in completion: {last_error}") from last_error
 
     # Extract annotation key if requested
     if annotation_key is None:
-        if wrap_singletons:
-            # Legacy behavior: always return a list in the no-annotation_key case
-            return json_loaded if isinstance(json_loaded, list) else [json_loaded]
-        # Default: return parsed JSON as-is (dict or list)
+        # Return parsed JSON as-is (dict or list)
         return json_loaded
 
     # Extract key from dict or list of dicts
     if isinstance(json_loaded, dict):
+        if annotation_key not in json_loaded:
+            logger.error(
+                f"Key '{annotation_key}' not found in parsed JSON. "
+                f"Available keys: {list(json_loaded.keys())}"
+            )
+            raise KeyError(
+                f"Key '{annotation_key}' not found in JSON. "
+                f"Available keys: {list(json_loaded.keys())}"
+            )
         return json_loaded[annotation_key]
     elif isinstance(json_loaded, list):
         return [item[annotation_key] for item in json_loaded]
@@ -415,6 +415,10 @@ def delimiter_parser(completion: str | dict, delimiter: str = "###", **kwargs) -
         >>> delimiter_parser(completion, delimiter="###")
         "Final answer here"
     """
+    # Handle list input (from some APIs)
+    if isinstance(completion, list):
+        raise ValueError(f"Unexpected completion format: {type(completion[0])}")
+
     # Extract text from dict if needed
     if isinstance(completion, dict):
         if "text" in completion:
@@ -425,16 +429,16 @@ def delimiter_parser(completion: str | dict, delimiter: str = "###", **kwargs) -
             raise ValueError(f"No text/content in completion: {completion.keys()}")
     else:
         text = completion
-
     # Split by delimiter and take everything after the last occurrence
     if delimiter in text:
         parts = text.split(delimiter)
         result = parts[-1].strip()
-        return result
     else:
-        logger.warning(f"Delimiter '{delimiter}' not found in completion")
-        # Return full text if delimiter not found
-        return text.strip()
+        logger.warning(
+            f"Delimiter '{delimiter}' not found in completion. Try increasing max tokens and running with force_refresh=True (or deleting the cache file). {text=}"
+        )
+        result = None
+    return result
 
 
 # Registry for parser lookup

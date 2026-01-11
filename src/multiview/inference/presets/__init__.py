@@ -29,9 +29,6 @@ from .basic_lm_models import (
     GPT41_MINI,
 )
 
-# Criteria description generation
-from .criteria_description import CRITERIA_DESCRIPTION_GENERATION_GEMINI
-
 # Embedding presets
 from .embeddings import (
     EMBED_PLAINTEXT_HFAPI,
@@ -56,6 +53,9 @@ from .lm_judge_triplet import (
     LMJUDGE_TRIPLET_WITH_ANNOTATION_GEMINI,
 )
 
+# Pairwise similarity hint generation
+from .pairwise_sim_hint import PAIRWISE_SIM_HINT_GENERATION_GEMINI
+
 # Quality rating presets
 from .quality_rating import (
     LMJUDGE_QUALITY_RATING_GEMINI,
@@ -66,7 +66,10 @@ from .quality_rating import (
 from .rewrite import REWRITE_PLAINTEXT_FREEFORM_GEMINI
 
 # Triplet selection
-from .triplet_selection import TRIPLET_SELECTION_GEMINI
+from .triplet_selection import (
+    TRIPLET_SELECT_NEGATIVE_GEMINI,
+    TRIPLET_SELECT_POSITIVE_GEMINI,
+)
 
 # ============================================================================
 # PRESET REGISTRY
@@ -104,11 +107,12 @@ PRESET_REGISTRY = {
     "tag_schema_generation_gemini": TAG_SCHEMA_GENERATION_GEMINI,
     "spurious_tag_schema_generation_gemini": SPURIOUS_TAG_SCHEMA_GENERATION_GEMINI,
     "summary_guidance_generation_gemini": SUMMARY_GUIDANCE_GENERATION_GEMINI,
-    "criteria_description_generation_gemini": CRITERIA_DESCRIPTION_GENERATION_GEMINI,
+    "pairwise_sim_hint_generation_gemini": PAIRWISE_SIM_HINT_GENERATION_GEMINI,
     "category_classify_gemini": CATEGORY_CLASSIFY_GEMINI,
     "tag_apply_gemini": TAG_APPLY_GEMINI,
     "summary_generate_gemini": SUMMARY_GENERATE_GEMINI,
-    "triplet_selection_gemini": TRIPLET_SELECTION_GEMINI,
+    "triplet_select_positive_gemini": TRIPLET_SELECT_POSITIVE_GEMINI,
+    "triplet_select_negative_gemini": TRIPLET_SELECT_NEGATIVE_GEMINI,
 }
 
 
@@ -175,9 +179,10 @@ __all__ = [
     "TAG_SCHEMA_GENERATION_GEMINI",
     "SPURIOUS_TAG_SCHEMA_GENERATION_GEMINI",
     "SUMMARY_GUIDANCE_GENERATION_GEMINI",
-    "CRITERIA_DESCRIPTION_GENERATION_GEMINI",
+    "PAIRWISE_SIM_HINT_GENERATION_GEMINI",
     "CATEGORY_CLASSIFY_GEMINI",
     "TAG_APPLY_GEMINI",
     "SUMMARY_GENERATE_GEMINI",
-    "TRIPLET_SELECTION_GEMINI",
+    "TRIPLET_SELECT_POSITIVE_GEMINI",
+    "TRIPLET_SELECT_NEGATIVE_GEMINI",
 ]

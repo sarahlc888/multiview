@@ -3,23 +3,32 @@
 This module contains metadata for LM-based criteria annotations across different
 document sets. Each criterion includes:
 - description: What the criterion measures
+- pairwise_sim_hint: Hint for generating pairwise similarity comparisons (optional)
 - category_schema_hint: Guidance for creating category-based schemas
 - tag_schema_hint: Guidance for creating tag-based schemas
-- summary_guidance_hint: Guidance for summarizing the criterion (optional)
-- summary_format_hint: Format hints for summary output (optional)
+- summary_hint: Combined guidance + desired format for summaries (optional)
+- triplet_example_hint: Example triplet guidance for LM triplet selection (optional)
 """
 
 # GSM8K: Math word problems
 GSM8K_CRITERIA = {
     "arithmetic": {
         "description": "The exact sequence of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem.",
+        "pairwise_sim_hint": "Two problems are similar if they require the same sequence of arithmetic operations, even if the problem context or numbers differ. Focus on the operation sequence (e.g., multiply then add vs. divide then subtract) rather than the story context.",
         "category_schema_hint": None,
-        "tag_schema_hint": None,
-        "summary_guidance_hint": "List the exact sequence of arithmetic operations needed.",
-        "summary_format_hint": "Return a list of operation types in order, e.g., ['multiplication', 'addition', 'division']",
+        "tag_schema_hint": "Consider tags like step1_add, step1_sub, step1_mul, step1_div, step2_add, etc.",
+        "summary_hint": "List the exact sequence of arithmetic operations in order, formatted as e.g. ['multiplication', 'addition', 'division']",
+        # Optional: default example triplet guidance for the LM triplet judge.
+        # Can be overridden per-task via Task config / YAML.
+        "triplet_example_hint": {
+            "anchor": "Question: Bill walks 0.5 mile south, then 0.75 mile east, and finally 0.5 mile south. How many miles is he, in a direct line, from his starting point?\nAnswer: Bill walks 0.5 mile south and then another 0.5 mile south. The total distance south is 0.5 + 0.5 = <<0.5+0.5=1>>1 mile. He also walks 0.75 mile east.\nThe square of the southward distance is 1 × 1 = <<1*1=1>>1. The square of the eastward distance is 0.75 × 0.75 = <<0.75*0.75=0.5625>>0.5625. The sum of the squares is 1 + 0.5625 = <<1+0.5625=1.5625>>1.5625.\nThe square root of 1.5625 is <<sqrt(1.5625)=1.25>>1.25.\n#### 1.25",
+            "pos": "Question: A subway route is planned to run 1.9 km north, then 2.5 km west, and finally 0.3 km south. How far is the subway from its original position?\nAnswer: The subway moves 1.9 km north and then 0.3 km south. The net northward distance is 1.9 − 0.3 = <<1.9-0.3=1.6>>1.6 km. It also moves 2.5 km west.\nThe square of the northward distance is 1.6 × 1.6 = <<1.6*1.6=2.56>>2.56. The square of the westward distance is 2.5 × 2.5 = <<2.5*2.5=6.25>>6.25. The sum of the squares is 2.56 + 6.25 = <<2.56+6.25=8.81>>8.81.\nThe square root of 8.81 is <<sqrt(8.81)=2.97>>2.97.\n#### 2.97",
+            "neg": "Question: Bill walks to his school located 0.5 miles south from his house. If the walk took 12 minutes, how fast was Bill, in miles per hour?\nAnswer: Bill walks 0.5 miles in 12 minutes. There are 60 minutes in an hour. The time in hours is 12 ÷ 60 = <<12/60=0.2>>0.2 hours.\nSpeed is distance divided by time. Bill's speed is 0.5 ÷ 0.2 = <<0.5/0.2=2.5>>2.5 miles per hour.\n#### 2.5",
+        },
     },
     "problem_type": {
         "description": "The domain or context of the word problem (money, time, measurement, rates, probability, geometry, etc.).",
+        "pairwise_sim_hint": "Two problems are similar if they share the same domain or real-world context (e.g., both about money/shopping, both about time/scheduling). Consider the setting and concepts involved rather than the specific numbers or operations.",
         "category_schema_hint": "Consider categories like: money/finance, time/scheduling, distance/speed, measurement/units, ratios/proportions, geometry/area, probability, combinatorics, etc.",
         "tag_schema_hint": "Create tags for different problem domains that may overlap: involves_money, involves_time, involves_distance, involves_measurement, involves_rates, involves_geometry, involves_probability, etc.",
     },
@@ -43,9 +52,15 @@ GSM8K_CRITERIA = {
 # Crossword Clues
 CROSSWORD_CRITERIA = {
     "clue_type": {
-        "description": "The type or style of the crossword clue (definition, wordplay, cryptic, fill-in-the-blank, trivia, etc.).",
+        "description": "The type of or technique used in the crossword clue (definition, wordplay, cryptic, fill-in-the-blank, trivia, etc.).",
         "category_schema_hint": "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, etc.",
         "tag_schema_hint": "Create tags for clue properties: uses_wordplay, uses_abbreviation, requires_trivia, uses_definition, is_cryptic, is_themed, etc.",
+        # Tag specific techniques:
+        # - Uses anagram
+        # - Uses abbreviation
+        # - Uses pun or homophone
+        # - References pop culture
+        # - Requires domain knowledge (science, history, etc.)
     },
     "domain": {
         "description": "The subject domain or topic of the clue (geography, history, pop culture, science, sports, etc.).",

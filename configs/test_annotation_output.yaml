@@ -1,0 +1,25 @@
+# Test configuration for annotation output in triplets
+run_name: "test_annotation_output"
+logging:
+  level: INFO
+  output_file: null
+seed: 42
+use_cache: true
+step_through: false
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 3  # Minimal for quick testing
+    max_triplets: 1
+    triplet_style: "lm_all"  # Will trigger annotation
+    add_synthetic_docs: false
+
+  task_list:
+    - document_set: gsm8k
+      criterion: arithmetic
+
+# Minimal evaluation for testing
+methods_to_evaluate:
+  bm25:
+    - name: bm25_lexical

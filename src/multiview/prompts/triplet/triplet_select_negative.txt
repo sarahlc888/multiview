@@ -1,0 +1,35 @@
+We are finding documents that are DIFFERENT based on specific criteria.
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+ANCHOR DOCUMENT:
+{anchor_doc}
+
+ANCHOR ANNOTATION:
+{anchor_annotation}
+
+CANDIDATES:
+{candidates}
+{triplet_example_section}
+INSTRUCTIONS:
+- Select a document that is CLEARLY DIFFERENT on the criterion (look for LOW Criterion similarity, ideally < 0.5)
+- But LOOKS SIMILAR on surface features (look for HIGH Spurious similarity, ideally > 0.5)
+- The "Spurious tags" show surface-level features that are NOT part of the criterion but might confuse simple models
+- IMPORTANT: Prefer candidates with HIGH Lexical similarity (>30). High BM25 word overlap indicates the document shares many words with the anchor, making it a harder negative for lexical models to distinguish.
+- This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters
+- Don't pick documents with "subtle" differences on the criterion - we want clear criterion differences with superficial similarities
+
+NOTE: Each candidate shows "Criterion" (similarity on what matters), "Spurious" (similarity on surface features), and "Lexical" (BM25 word overlap).
+We want low Criterion, high Spurious, AND high Lexical for the best hard negatives.
+
+However, Annotations are noisy predictions -- always verify against actual content.
+
+Explain your reasoning briefly, then respond with valid JSON in this exact format:
+{
+  "reasoning": "Your brief explanation here",
+  "chosen_negative": [number]
+}

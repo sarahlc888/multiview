@@ -1,23 +1,23 @@
-You have a set of unlabeled documents and a criterion of interest. Your task is to design a category schema that captures how the documents vary with respect to the criterion.
+Design a category schema that captures how documents vary with respect to a criterion.
 
-CRITERION: {criterion}
+CRITERIA:
+{criterion}
 
-CRITERION DESCRIPTION:
+CRITERIA DESCRIPTION:
 {criterion_description}
-
-SCHEMA HINT (optional):
 {schema_hint}
-
 SAMPLE DOCUMENTS:
 {sample_documents}
 
-Think about what kind of candidate schemas are possible.
-- The ideal candidate schema partitions the output space into discrete categories.
-- If there is a way to enumerate a closed set of categories, that would be best, but if not, it's OK to include an 'other' category.
-- Try to choose a number of categories that reflects the range of variation within the sample documents.
+GUIDELINES:
+- Each document should belong to exactly one category
+- Use 5-10 categories (more or fewer with good reason)
+- Be comprehensive — reflect the full range of variation in the sample
+- If there's a natural closed set, enumerate it (e.g., color → red, yellow, green...). Otherwise, include an 'other' category
+- Avoid categories that are too broad or too narrow
 
-Choose the single best schema strategy and return it in valid JSON with reasoning:
+Think through your options, then output valid JSON:
 {
-  "reasoning": "Explain your schema choice: what alternatives you considered and why this schema best captures variation along the criteria",
+  "reasoning": "How do documents relate to the criterion? What is the range of variation? What categories are needed to capture how documents vary with respect to the criterion?",
   "categories": [{"name": "...", "description": "..."}, ...]
 }

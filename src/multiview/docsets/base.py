@@ -26,7 +26,10 @@ class BaseDocSet(ABC):
 
     # Optional: Metadata for LM-based criteria (schema hints, descriptions, etc.)
     # Format: {criterion_name: {description: str, category_schema_hint: str, ...}}
-    CRITERION_METADATA: dict[str, dict[str, str]] = {}
+    #
+    # Note: values may be non-strings (e.g., dicts for structured hints like
+    # triplet_example_hint), so we type this as Any.
+    CRITERION_METADATA: dict[str, dict[str, Any]] = {}
     # Synthesis prompts for criterion-specific document generation
     # Maps criterion name → {remix_prompt}
     # Subclasses can override to provide custom synthesis logic per criterion
@@ -89,6 +92,6 @@ class BaseDocSet(ABC):
 
         return None
 
-    def get_criterion_metadata(self, criterion: str) -> dict[str, str]:
+    def get_criterion_metadata(self, criterion: str) -> dict[str, Any]:
         """Get metadata for a criterion (description, schema hints, etc.)."""
         return self.CRITERION_METADATA.get(criterion, {})

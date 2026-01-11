@@ -66,39 +66,50 @@ def save_triplets_jsonl(
     output_dir: str | Path,
     task_name: str,
     triplet_quality_ratings: list[int] | None = None,
+    document_annotations: list[dict] | None = None,
 ) -> Path:
-    """Save triplets as JSONL to `{output_dir}/{task_name}/triplets.jsonl`."""
+    """Save triplets as JSON array to `{output_dir}/{task_name}/triplets.json`."""
     task_dir = _task_dir(output_dir, task_name)
-    output_file = task_dir / "triplets.jsonl"
+    output_file = task_dir / "triplets.json"
 
     quality_ratings = triplet_quality_ratings
     if quality_ratings is not None:
         # Local import to avoid a hard dependency chain (Task imports stay lean).
         from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
 
+    triplet_records = []
+    for i, (anchor_id, positive_id, negative_id) in enumerate(triplets):
+        payload: dict[str, Any] = {
+            "triplet_id": i,
+            "anchor_id": anchor_id,
+            "positive_id": positive_id,
+            "negative_id": negative_id,
+            "anchor": documents[anchor_id],
+            "positive": documents[positive_id],
+            "negative": documents[negative_id],
+        }
+
+        if quality_ratings is not None and i < len(quality_ratings):
+            rating = quality_ratings[i]
+            payload["quality_rating"] = rating
+            payload["quality_label"] = QUALITY_SCALE.get(rating, {}).get(
+                "label", "unknown"
+            )
+            payload["quality_class"] = QUALITY_SCALE.get(rating, {}).get(
+                "class", "Unknown"
+            )
+
+        # Include annotations if available
+        if document_annotations is not None:
+            payload["anchor_annotation"] = document_annotations[anchor_id]
+            payload["positive_annotation"] = document_annotations[positive_id]
+            payload["negative_annotation"] = document_annotations[negative_id]
+
+        triplet_records.append(payload)
+
+    # Write as formatted JSON array for easy browsing
     with open(output_file, "w") as f:
-        for i, (anchor_id, positive_id, negative_id) in enumerate(triplets):
-            payload: dict[str, Any] = {
-                "triplet_id": i,
-                "anchor_id": anchor_id,
-                "positive_id": positive_id,
-                "negative_id": negative_id,
-                "anchor": documents[anchor_id],
-                "positive": documents[positive_id],
-                "negative": documents[negative_id],
-            }
-
-            if quality_ratings is not None and i < len(quality_ratings):
-                rating = quality_ratings[i]
-                payload["quality_rating"] = rating
-                payload["quality_label"] = QUALITY_SCALE.get(rating, {}).get(
-                    "label", "unknown"
-                )
-                payload["quality_class"] = QUALITY_SCALE.get(rating, {}).get(
-                    "class", "Unknown"
-                )
-
-            f.write(json.dumps(payload) + "\n")
+        json.dump(triplet_records, f, indent=2)
 
     return output_file
 
@@ -138,6 +149,7 @@ def save_task_triplets(task: _TaskLike, output_dir: str | Path) -> Path:
         output_dir=output_dir,
         task_name=task.get_task_name(),
         triplet_quality_ratings=task.triplet_quality_ratings,
+        document_annotations=task.document_annotations,
     )
 
 

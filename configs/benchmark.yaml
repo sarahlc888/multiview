@@ -1,29 +1,34 @@
 # Benchmark configuration for GSM8K arithmetic evaluation
 # Goal: Generate 256 triplets and evaluate with 4 methods
-run_name: "gsm8k_arithmetic_256_4methods"
+run_name: "benchmark_debug"
 logging:
   level: DEBUG
   output_file: null  # Log to console only
 seed: 42
 use_cache: true
+step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)
 
 # Task configuration
 tasks:
   defaults:
-    max_docs: 10 # 50  # Need more docs than triplets for good sampling
-    max_triplets: 2 # 4
+    max_docs: 50  # Need more docs than triplets for good sampling
+    max_triplets: 5
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false
-    num_synthetic_docs: 4    # Absolute number of synthetic docs to generate
+    num_synthetic_docs: 10    # Absolute number of synthetic docs to generate
 
     # Triplet creation parameters for lm_all style
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
-    use_spurious_hard_negs: true
+    use_spurious_hard_negs: true   # Include spurious hard negatives in candidate pool
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 5  # Max candidates shown to LM judge (per strategy for 'multi')
     n_schema_samples: 4
 
     # Quality filtering parameters
     rate_triplet_quality: true  # Enable LM-based quality rating
+                                # When annotations exist, automatically compares
+                                # ratings with/without annotations for insight
     min_triplet_quality: 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
                             # 1=invalid, 2=ambiguous, 3=trivial, 4=ideal
                             # Set to null to rate but not filter

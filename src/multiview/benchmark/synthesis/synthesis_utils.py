@@ -98,7 +98,7 @@ def synthesize_documents(
         parser="delimiter",
         parser_kwargs={"delimiter": "---FINAL OUTPUT---"},
         temperature=0.7,
-        max_tokens=2048,
+        max_tokens=8192,
     )
 
     max_original_length = max(
@@ -180,13 +180,13 @@ def synthesize_documents(
         ),
     ):
         logger.info(
-            f"Generating {len(remix_anchor_indices)} {mode} synthetic documents..."
+            f"Generating {len(remix_anchor_indices)} {mode} synthetic documents with {remix_config=}"
         )
         try:
             raw_outputs = run_inference(
                 inputs={"document1": d1, "document2": d2},
                 config=remix_config,
-                cache_alias=f"synth_remix_{mode}_{criterion_name}",
+                cache_alias=f"synth_remix_{criterion_name}",
                 force_refresh=False,
                 verbose=True,
             )

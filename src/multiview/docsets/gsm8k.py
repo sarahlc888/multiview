@@ -62,7 +62,6 @@ class GSM8KDocSet(BaseDocSet):
             if not use_streaming and max_docs is not None and i + 1 >= max_docs:
                 break
 
-        logger.debug(f"Loaded {len(documents)} documents from GSM8K")
         return documents
 
     def get_document_text(self, document: Any) -> str:

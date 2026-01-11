@@ -45,6 +45,10 @@ INFERENCE_CACHE_PATH_TEMPLATE = str(
 # Can be overridden per-call with force_refresh or by setting USE_CACHE env var
 USE_CACHE = os.environ.get("USE_CACHE", "true").lower() in ("true", "1", "yes")
 
+# Global flag to enable/disable breakpoints for debugging
+# Set STEP_THROUGH=true in environment to enable breakpoints
+STEP_THROUGH = os.environ.get("STEP_THROUGH", "false").lower() in ("true", "1", "yes")
+
 # ============================================================================
 # Output Directories
 # ============================================================================

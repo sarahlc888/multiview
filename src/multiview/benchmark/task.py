@@ -108,21 +108,16 @@ class Task:
         return {
             "criterion_description": self.config.get("criterion_description")
             or meta.get("description"),
+            "pairwise_sim_hint": self.config.get("pairwise_sim_hint")
+            or meta.get("pairwise_sim_hint"),
             "category_schema_hint": self.config.get("category_schema_hint")
             or meta.get("category_schema_hint"),
             "tag_schema_hint": self.config.get("tag_schema_hint")
             or meta.get("tag_schema_hint"),
-            "summary_guidance_hint": self.config.get("summary_guidance_hint")
-            or meta.get("summary_guidance_hint"),
-            "summary_format_hint": self.config.get("summary_format_hint")
-            or meta.get("summary_format_hint"),
+            "summary_hint": self.config.get("summary_hint") or meta.get("summary_hint"),
+            "triplet_example_hint": self.config.get("triplet_example_hint")
+            or meta.get("triplet_example_hint"),
         }
-
-    def _resolved_criterion_description(self) -> str | None:
-        return self._resolved_criterion_hints()["criterion_description"]
-
-    def _triplet_dicts(self) -> list[dict]:
-        return build_triplet_dicts(self.documents, self.triplets)
 
     def load_documents(self):
         """Load documents from the document_set."""
@@ -190,10 +185,10 @@ class Task:
                 criterion=self.criterion_name,
                 criterion_description=hints["criterion_description"],
                 n_schema_samples=self.config.get("n_schema_samples", 10),
+                pairwise_sim_hint=hints["pairwise_sim_hint"],
                 category_schema_hint=hints["category_schema_hint"],
                 tag_schema_hint=hints["tag_schema_hint"],
-                summary_guidance_hint=hints["summary_guidance_hint"],
-                summary_format_hint=hints["summary_format_hint"],
+                summary_hint=hints["summary_hint"],
                 include_debug=self.config.get("include_annotation_debug", False),
                 cache_alias_prefix=f"{self.get_task_name()}_annotation",
             )
@@ -220,6 +215,7 @@ class Task:
                 max_triplets=self.max_triplets,
             )
         elif self.triplet_style in LM_TRIPLET_STYLES:
+            hints = self._resolved_criterion_hints()
             self.triplets = create_lm_triplets(
                 documents=self.documents,
                 annotations=self.document_annotations,
@@ -230,13 +226,14 @@ class Task:
                     "embedding_preset", "hf_qwen3_embedding_8b"
                 ),
                 lm_judge_preset=self.config.get(
-                    "lm_judge_preset", "triplet_selection_gemini"
+                    "lm_judge_preset", "triplet_select_positive_gemini"
                 ),
                 criterion=self.criterion_name,
-                criterion_description=self._resolved_criterion_description(),
+                criterion_description=hints["criterion_description"],
                 cache_alias_prefix=f"{self.get_task_name()}_triplets",
-                triplet_example=self.config.get("triplet_example"),
+                triplet_example_hint=hints["triplet_example_hint"],
                 anchor_indices=self.synthesis_anchor_indices,
+                max_num_candidates=self.config.get("max_num_candidates", 10),
             )
         else:
             raise ValueError(f"Unknown triplet_style: {self.triplet_style}")
@@ -245,7 +242,7 @@ class Task:
 
     def rate_triplet_quality(
         self,
-        lm_judge_preset: str = "lmjudge_quality_rating_gemini",
+        lm_judge_preset: str | None = None,
         min_quality: int | None = None,
     ) -> dict:
         """Rate the quality of triplets using an LM judge and optionally filter.
@@ -254,7 +251,13 @@ class Task:
         1 = invalid, 2 = ambiguous, 3 = trivial, 4 = ideal
 
         Args:
-            lm_judge_preset: Preset for quality rating LM judge
+            lm_judge_preset: Preset for quality rating LM judge. If None, automatically
+                selects based on whether annotations exist:
+                - With annotations: "lmjudge_quality_rating_with_annotation_gemini"
+                - Without annotations: "lmjudge_quality_rating_gemini"
+                To force a specific mode, pass the preset explicitly:
+                - "lmjudge_quality_rating_gemini" (no annotations)
+                - "lmjudge_quality_rating_with_annotation_gemini" (with annotations)
             min_quality: If provided, filter triplets to keep only those with
                 quality >= min_quality (1-4). If None, no filtering is applied.
 
@@ -263,31 +266,54 @@ class Task:
 
         Example:
             >>> task.create_triplets()
+            >>> # Auto-detect (uses annotations if available)
             >>> stats = task.rate_triplet_quality(min_quality=3)
-            >>> print(f"Kept {stats['n_kept']} ideal/trivial triplets")
+            >>> # Force without annotations
+            >>> stats = task.rate_triplet_quality(
+            ...     lm_judge_preset="lmjudge_quality_rating_gemini",
+            ...     min_quality=3
+            ... )
         """
         self._require_documents(caller="rate_triplet_quality")
         self._require_triplets(caller="rate_triplet_quality")
 
         logger.info("Rating triplet quality...")
 
-        triplet_dicts = self._triplet_dicts()
+        triplet_dicts = build_triplet_dicts(self.documents, self.triplets)
+        criterion_description = self._resolved_criterion_hints()[
+            "criterion_description"
+        ]
 
-        criterion_description = self._resolved_criterion_description()
-
+        # Determine whether to use annotations based on preset
         has_annotations = self.document_annotations is not None
-        if has_annotations and "with_annotation" not in lm_judge_preset:
-            lm_judge_preset = "lmjudge_quality_rating_with_annotation_gemini"
-            logger.info(f"Using annotation-aware preset: {lm_judge_preset}")
 
-        cache_alias = f"{self.get_task_name()}_quality_rating"
+        # Auto-select preset if not provided
+        if lm_judge_preset is None:
+            if has_annotations:
+                lm_judge_preset = "lmjudge_quality_rating_with_annotation_gemini"
+            else:
+                lm_judge_preset = "lmjudge_quality_rating_gemini"
+            logger.info(f"Auto-selected preset: {lm_judge_preset}")
+
+        # Determine whether preset uses annotations
+        use_annotations = "with_annotation" in lm_judge_preset
+
+        # Validate that annotations exist if preset requires them
+        if use_annotations and not has_annotations:
+            raise ValueError(
+                f"Preset '{lm_judge_preset}' requires annotations but task has none"
+            )
+
+        cache_suffix = "_with_annotation" if use_annotations else "_no_annotation"
+        cache_alias = f"{self.get_task_name()}_quality_rating{cache_suffix}"
+
         results = rate_triplet_quality(
             triplets=triplet_dicts,
             criterion=self.criterion_name,
             criterion_description=criterion_description,
             lm_judge_preset=lm_judge_preset,
             cache_alias=cache_alias,
-            annotations=self.document_annotations if has_annotations else None,
+            annotations=self.document_annotations if use_annotations else None,
         )
 
         self.triplet_quality_ratings = results["ratings"]
@@ -315,6 +341,117 @@ class Task:
             return {**results, **filter_stats}
 
         return results
+
+    def compare_quality_ratings_with_without_annotations(self) -> dict:
+        """Compare quality ratings with and without annotations.
+
+        Rates triplets twice (without/with annotations) to assess annotation utility.
+        Runs automatically in run_eval.py when annotations exist.
+
+        Returns:
+            Dict with ratings_without_annotations, ratings_with_annotations,
+            agreement stats, and differences list.
+        """
+        self._require_documents(
+            caller="compare_quality_ratings_with_without_annotations"
+        )
+        self._require_triplets(
+            caller="compare_quality_ratings_with_without_annotations"
+        )
+        if self.document_annotations is None:
+            raise ValueError("Task must have annotations to run comparison")
+
+        # Rate both ways
+        logger.info("=" * 60)
+        logger.info("COMPARING QUALITY RATINGS WITH/WITHOUT ANNOTATIONS")
+        logger.info("=" * 60)
+        results_without = self.rate_triplet_quality(
+            lm_judge_preset="lmjudge_quality_rating_gemini", min_quality=None
+        )
+        results_with = self.rate_triplet_quality(
+            lm_judge_preset="lmjudge_quality_rating_with_annotation_gemini",
+            min_quality=None,
+        )
+
+        # Calculate agreement
+        ratings_without, ratings_with = (
+            results_without["ratings"],
+            results_with["ratings"],
+        )
+        n = len(ratings_without)
+
+        # Filter out pairs with None values for comparison
+        valid_pairs = [
+            (r1, r2)
+            for r1, r2 in zip(ratings_without, ratings_with, strict=True)
+            if r1 is not None and r2 is not None
+        ]
+        n_valid = len(valid_pairs)
+        n_invalid = n - n_valid
+
+        exact_matches = sum(r1 == r2 for r1, r2 in valid_pairs)
+        within_1 = sum(abs(r1 - r2) <= 1 for r1, r2 in valid_pairs)
+
+        # Find differences
+        differences = [
+            {
+                "triplet_idx": i,
+                "anchor_id": self.triplets[i][0],
+                "positive_id": self.triplets[i][1],
+                "negative_id": self.triplets[i][2],
+                "rating_without_annotation": r_w,
+                "rating_with_annotation": r_a,
+                "difference": (r_a - r_w)
+                if (r_w is not None and r_a is not None)
+                else None,
+            }
+            for i, (r_w, r_a) in enumerate(
+                zip(ratings_without, ratings_with, strict=True)
+            )
+            if r_w != r_a
+        ]
+
+        # Log summary
+        logger.info("=" * 60)
+        logger.info("COMPARISON RESULTS")
+        logger.info("=" * 60)
+        if n_invalid > 0:
+            logger.warning(f"Skipped {n_invalid}/{n} pairs with None ratings")
+        logger.info(f"Valid pairs: {n_valid}/{n}")
+        logger.info(
+            f"Exact matches: {exact_matches}/{n_valid} ({exact_matches/n_valid:.1%})"
+            if n_valid > 0
+            else "Exact matches: 0/0"
+        )
+        logger.info(
+            f"Within 1 level: {within_1}/{n_valid} ({within_1/n_valid:.1%})"
+            if n_valid > 0
+            else "Within 1 level: 0/0"
+        )
+        if differences:
+            logger.info(f"\nDifferences: {len(differences)}")
+            for diff_val in [-3, -2, -1, 1, 2, 3]:
+                count = sum(1 for d in differences if d.get("difference") == diff_val)
+                if count > 0:
+                    logger.info(
+                        f"  {abs(diff_val)} level(s) {'higher' if diff_val > 0 else 'lower'}: {count}"
+                    )
+        logger.info("=" * 60)
+
+        return {
+            "ratings_without_annotations": results_without,
+            "ratings_with_annotations": results_with,
+            "agreement": {
+                "n_triplets": n,
+                "n_valid_pairs": n_valid,
+                "n_invalid_pairs": n_invalid,
+                "exact_matches": exact_matches,
+                "exact_match_rate": exact_matches / n_valid if n_valid > 0 else 0.0,
+                "within_1_matches": within_1,
+                "within_1_rate": within_1 / n_valid if n_valid > 0 else 0.0,
+            },
+            "differences": differences,
+        }
 
     def get_task_name(self) -> str:
         """Get the name of this task.

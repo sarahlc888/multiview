@@ -26,9 +26,13 @@ def test_save_triplets_includes_quality_class_when_available(tmp_path):
 
     save_task_triplets(task, tmp_path)
 
-    triplet_file = tmp_path / task.get_task_name() / "triplets.jsonl"
-    line = triplet_file.read_text().strip()
-    payload = json.loads(line)
+    triplet_file = tmp_path / task.get_task_name() / "triplets.json"
+    content = json.loads(triplet_file.read_text())
+
+    assert isinstance(content, list)
+    assert len(content) == 1
+
+    payload = content[0]
 
     assert payload["quality_rating"] == 4
     assert payload["quality_label"] == "ideal"

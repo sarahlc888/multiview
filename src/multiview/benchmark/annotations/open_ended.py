@@ -1,7 +1,7 @@
 """Summary guidance generation and open-ended annotation.
 
 This module handles open-ended summary annotation (similar to lm_open_ended.py):
-- Generate enhanced criteria descriptions from sample documents
+- Generate pairwise similarity hints from sample documents
 - Generate summary guidance from sample documents
 - Create structured summaries based on guidance
 """
@@ -16,17 +16,17 @@ from multiview.utils.sampling_utils import deterministic_sample
 logger = logging.getLogger(__name__)
 
 
-def generate_criteria_description(
+def generate_pairwise_sim_hint(
     documents: list[str],
     criterion: str,
     criterion_description: str,
     n_samples: int = 10,
     cache_alias: str | None = None,
 ) -> dict:
-    """Generate an enhanced criteria description from sample documents.
+    """Generate a pairwise similarity hint from sample documents.
 
     Takes a brief criterion name and description, samples documents, and generates
-    a more detailed description that helps compare documents for similarity.
+    a more detailed hint that helps compare documents for pairwise similarity.
 
     Args:
         documents: List of document strings to sample from
@@ -38,12 +38,14 @@ def generate_criteria_description(
     Returns:
         Dict with structure:
         {
-            "description": "Enhanced criteria description (str)",
+            "pairwise_sim_hint": "Pairwise similarity hint (str)",
         }
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
+    sample_docs_str = "\n\n".join(
+        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+    )
 
     # Prepare inputs
     inputs = {
@@ -52,23 +54,23 @@ def generate_criteria_description(
         "sample_documents": [sample_docs_str],
     }
 
-    # Generate enhanced description using inference
+    # Generate hint using inference
     results = run_inference(
         inputs=inputs,
-        config="criteria_description_generation_gemini",
+        config="pairwise_sim_hint_generation_gemini",
         cache_alias=cache_alias,
         verbose=True,
     )
 
-    description = results[0]
-    if description is None:
-        description = criterion_description or ""
+    hint = results[0]
+    if hint is None:
+        hint = criterion_description or ""
     else:
         # Parsing (e.g., delimiter extraction) is handled by the inference preset.
-        description = str(description).strip()
+        hint = str(hint).strip()
 
-    logger.info("Generated enhanced criteria description")
-    return {"description": description}
+    logger.info("Generated pairwise similarity hint")
+    return {"pairwise_sim_hint": hint}
 
 
 def generate_summary_guidance(
@@ -76,8 +78,7 @@ def generate_summary_guidance(
     criterion: str,
     criterion_description: str,
     n_samples: int = 10,
-    guidance_hint: str | None = None,
-    format_hint: str | None = None,
+    summary_hint: str | None = None,
     cache_alias: str | None = None,
 ) -> dict:
     """Generate summary guidance from sample documents.
@@ -87,8 +88,7 @@ def generate_summary_guidance(
         criterion: Criterion name
         criterion_description: Description of what the criterion means
         n_samples: Number of documents to sample
-        guidance_hint: Optional hint about what to include in summaries
-        format_hint: Optional hint about summary format/structure
+        summary_hint: Optional combined hint (may include desired format)
         cache_alias: Optional cache alias for inference calls
 
     Returns:
@@ -99,17 +99,22 @@ def generate_summary_guidance(
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(f"[{i+1}] {doc}" for i, doc in enumerate(sample_docs))
+    sample_docs_str = "\n\n".join(
+        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+    )
 
     criterion_description = (criterion_description or "").strip()
 
+    # Format summary_hint with heading if provided
+    summary_hint_formatted = (
+        f"\nSUMMARY HINT (optional):\n{summary_hint}\n" if summary_hint else ""
+    )
+
     # Prepare inputs with template variables
-    # Pass empty strings for optional fields - presets handle this gracefully
     inputs = {
         "criterion": [criterion],
         "criterion_description": [criterion_description],
-        "guidance_hint": [guidance_hint or ""],
-        "format_hint": [format_hint or ""],
+        "summary_hint": [summary_hint_formatted],
         "sample_documents": [sample_docs_str],
     }
 

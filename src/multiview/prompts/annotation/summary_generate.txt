@@ -1,19 +1,19 @@
-We are analyzing documents through this criteria: "{criterion}"
+We are analyzing documents based on specific criteria.
 
-Criteria description: {criterion_description}
+CRITERIA:
+{criterion}
 
-Document:
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+DOCUMENT:
 {document}
 
 Summarize how this document relates to the criteria. Focus only on aspects relevant to the criteria. Be specific and concrete.
 
-Return JSON with two keys:
-- "annotation_trace": Your step-by-step reasoning (for debugging/logging only)
-- "final_summary": The actual summary in the format specified below
-
 ADDITIONAL SUMMARY GUIDANCE:
 {summary_guidance}
 
-IMPORTANT: The final_summary MUST follow the exact format specified in the guidance above. Do not write prose descriptions.
-
-ANNOTATION:
+Return JSON with two keys:
+- "annotation_trace": Your step-by-step reasoning (for debugging/logging only)
+- "final_summary": The actual summary in the style/format specified below. Do not write prose descriptions.

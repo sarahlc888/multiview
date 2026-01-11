@@ -182,11 +182,12 @@ def jaccard_similarity(a: set, b: set) -> float:
     return len(intersection) / len(union)
 
 
-def format_annotation_for_display(ann: dict) -> str:
+def format_annotation_for_display(ann: dict, include_spurious: bool = False) -> str:
     """Format annotation dict for display in LM judge prompts.
 
     Args:
         ann: Annotation dict with category, tags, spurious_tags, summary
+        include_spurious: If True, include spurious_tags in the output
 
     Returns:
         Formatted string with annotation details
@@ -201,6 +202,12 @@ def format_annotation_for_display(ann: dict) -> str:
     active_tags = extract_active_tags(ann, "tags")
     if active_tags:
         parts.append(f"Tags: {', '.join(sorted(active_tags))}")
+
+    # Spurious tags (if requested)
+    if include_spurious:
+        spurious_tags = extract_active_tags(ann, "spurious_tags")
+        if spurious_tags:
+            parts.append(f"Spurious tags: {', '.join(sorted(spurious_tags))}")
 
     # Summary - ONLY use final_summary, never annotation_trace
     final_summary = annotation_final_summary(ann)

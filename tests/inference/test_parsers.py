@@ -30,16 +30,6 @@ class TestJSONParser:
         assert isinstance(result, dict)
         assert result == {"key": "value", "number": 42}
 
-    def test_json_parser_wrap_singletons_legacy_behavior(self):
-        """Test legacy behavior: wrap dict in list when wrap_singletons=True."""
-        completion = '{"key": "value", "number": 42}'
-
-        result = json_parser(completion, wrap_singletons=True)
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert result[0] == {"key": "value", "number": 42}
-
     def test_json_parser_preserves_list(self):
         """Test that JSON parser preserves lists."""
         completion = '[{"a": 1}, {"a": 2}]'
