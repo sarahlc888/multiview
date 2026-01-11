@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from multiview.inference import InferenceConfig, get_preset, list_presets, run_inference
+import multiview.inference.inference as inference_module
 
 
 @pytest.mark.dev
@@ -175,6 +176,59 @@ class TestCaching:
             with open(cache_path) as f:
                 cache_data = json.load(f)
             assert len(cache_data["completions"]) == initial_cache_size
+
+
+class TestChunking:
+    """Test chunking behavior for inference calls."""
+
+    def test_chunking_preserves_outputs_and_call_sizes(self, monkeypatch, tmp_path):
+        """Chunking should not change output ordering or values."""
+        call_sizes = []
+
+        def fake_completion_fn(*, prompts, **kwargs):
+            call_sizes.append(len(prompts))
+            return {"completions": [{"text": f"out:{p}"} for p in prompts]}
+
+        def fake_get_completion_fn(provider, is_embedding=False):
+            return fake_completion_fn
+
+        monkeypatch.setattr(inference_module, "get_completion_fn", fake_get_completion_fn)
+
+        texts = [f"text-{i}" for i in range(10)]
+        config = InferenceConfig(
+            provider="openai",
+            model_name="gpt-4.1-mini",
+            prompt_template="Echo: {text}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=10,
+        )
+        inputs = {"text": texts}
+        expected_prompts = [config.prompt_template.format(text=t) for t in texts]
+        expected_outputs = [f"out:{p}" for p in expected_prompts]
+
+        results = run_inference(
+            inputs=inputs,
+            config=config,
+            cache_path=str(tmp_path / "cache_chunked.json"),
+            force_refresh=True,
+            chunk_size=3,
+        )
+
+        assert results == expected_outputs
+        assert call_sizes == [3, 3, 3, 1]
+
+        call_sizes.clear()
+        results = run_inference(
+            inputs=inputs,
+            config=config,
+            cache_path=str(tmp_path / "cache_single.json"),
+            force_refresh=True,
+            chunk_size=100,
+        )
+
+        assert results == expected_outputs
+        assert call_sizes == [10]
 
     @pytest.mark.skipif(
         not os.getenv("OPENAI_API_KEY"),

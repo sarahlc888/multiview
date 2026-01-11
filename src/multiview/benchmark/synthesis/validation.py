@@ -63,6 +63,8 @@ def validate_synthesis(
     synthesis_metadata: dict,
     output_dir: str | Path,
     task_name: str,
+    triplets: list[tuple] | None = None,
+    quality_ratings: list[int] | None = None,
 ) -> dict:
     """Validate synthetic document quality via tag similarity analysis.
 
@@ -72,6 +74,8 @@ def validate_synthesis(
         synthesis_metadata: Metadata from synthesize_documents()
         output_dir: Directory to save validation reports
         task_name: Name of the task
+        triplets: Optional list of triplets (anchor_idx, pos_idx, neg_idx)
+        quality_ratings: Optional list of quality ratings (1-4) for each triplet
 
     Returns:
         Dict with validation statistics
@@ -131,6 +135,16 @@ def validate_synthesis(
     # Compute aggregate statistics
     stats = compute_validation_statistics(validation_records)
 
+    # Compute triplet quality statistics if provided
+    triplet_stats = None
+    if triplets is not None and quality_ratings is not None:
+        triplet_stats = analyze_triplet_quality_by_synthesis(
+            triplets=triplets,
+            quality_ratings=quality_ratings,
+            num_original_docs=num_original,
+        )
+        stats["triplet_quality"] = triplet_stats
+
     # Write reports (artifact IO lives in artifacts.py)
     from multiview.benchmark.artifacts import save_synthesis_validation_reports
 
@@ -146,6 +160,84 @@ def validate_synthesis(
     )
 
     return stats
+
+
+def analyze_triplet_quality_by_synthesis(
+    triplets: list[tuple],
+    quality_ratings: list[int],
+    num_original_docs: int,
+) -> dict:
+    """Analyze triplet quality ratings by whether triplets involve synthetic documents.
+
+    Args:
+        triplets: List of (anchor_idx, pos_idx, neg_idx) tuples
+        quality_ratings: List of quality ratings (1-4) for each triplet
+        num_original_docs: Number of original (non-synthetic) documents
+
+    Returns:
+        Dict with quality rating distributions for triplets with/without synthetic docs
+    """
+    with_synthetic = []
+    without_synthetic = []
+
+    for triplet, rating in zip(triplets, quality_ratings, strict=True):
+        if rating is None:
+            # Skip triplets without ratings
+            continue
+
+        anchor_idx, pos_idx, neg_idx = triplet
+        # Check if any document in the triplet is synthetic
+        has_synthetic = (
+            anchor_idx >= num_original_docs
+            or pos_idx >= num_original_docs
+            or neg_idx >= num_original_docs
+        )
+
+        if has_synthetic:
+            with_synthetic.append(rating)
+        else:
+            without_synthetic.append(rating)
+
+    def compute_rating_distribution(ratings: list[int]) -> dict:
+        """Compute distribution of quality ratings."""
+        if not ratings:
+            return {
+                "count": 0,
+                "rating_1": 0,
+                "rating_2": 0,
+                "rating_3": 0,
+                "rating_4": 0,
+                "rating_1_pct": 0.0,
+                "rating_2_pct": 0.0,
+                "rating_3_pct": 0.0,
+                "rating_4_pct": 0.0,
+                "mean": 0.0,
+                "median": 0.0,
+            }
+
+        total = len(ratings)
+        rating_counts = {i: ratings.count(i) for i in range(1, 5)}
+
+        return {
+            "count": total,
+            "rating_1": rating_counts[1],
+            "rating_2": rating_counts[2],
+            "rating_3": rating_counts[3],
+            "rating_4": rating_counts[4],
+            "rating_1_pct": float(rating_counts[1] / total * 100),
+            "rating_2_pct": float(rating_counts[2] / total * 100),
+            "rating_3_pct": float(rating_counts[3] / total * 100),
+            "rating_4_pct": float(rating_counts[4] / total * 100),
+            "mean": float(np.mean(ratings)),
+            "median": float(np.median(ratings)),
+        }
+
+    return {
+        "with_synthetic": compute_rating_distribution(with_synthetic),
+        "without_synthetic": compute_rating_distribution(without_synthetic),
+        "total_with_synthetic": len(with_synthetic),
+        "total_without_synthetic": len(without_synthetic),
+    }
 
 
 def compute_validation_statistics(records: list[dict]) -> dict:
@@ -176,11 +268,19 @@ def compute_validation_statistics(records: list[dict]) -> dict:
             f"{metric_prefix}_tags_std": float(np.std(tags_jaccards)),
             f"{metric_prefix}_tags_min": float(np.min(tags_jaccards)),
             f"{metric_prefix}_tags_max": float(np.max(tags_jaccards)),
+            f"{metric_prefix}_tags_p25": float(np.percentile(tags_jaccards, 25)),
+            f"{metric_prefix}_tags_p75": float(np.percentile(tags_jaccards, 75)),
             f"{metric_prefix}_spurious_mean": float(np.mean(spurious_jaccards)),
             f"{metric_prefix}_spurious_median": float(np.median(spurious_jaccards)),
             f"{metric_prefix}_spurious_std": float(np.std(spurious_jaccards)),
             f"{metric_prefix}_spurious_min": float(np.min(spurious_jaccards)),
             f"{metric_prefix}_spurious_max": float(np.max(spurious_jaccards)),
+            f"{metric_prefix}_spurious_p25": float(
+                np.percentile(spurious_jaccards, 25)
+            ),
+            f"{metric_prefix}_spurious_p75": float(
+                np.percentile(spurious_jaccards, 75)
+            ),
         }
 
     stats = {

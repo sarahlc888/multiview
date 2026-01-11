@@ -23,6 +23,7 @@ def generate_tag_schema(
     schema_hint: str | None = None,
     is_spurious: bool = False,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> dict:
     """Generate a tag schema from sample documents.
 
@@ -34,6 +35,7 @@ def generate_tag_schema(
         schema_hint: Optional hint about what tags to create
         is_spurious: If True, generate spurious tags (surface-level properties)
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         Tag schema dict with structure:
@@ -77,6 +79,7 @@ def generate_tag_schema(
         inputs=inputs,
         config=preset_name,
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=True,
     )
 
@@ -99,6 +102,7 @@ def generate_spurious_tag_schema(
     criterion_description: str,
     n_samples: int = 10,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> dict:
     """Generate spurious tag schema (surface-level properties).
 
@@ -110,6 +114,7 @@ def generate_spurious_tag_schema(
         criterion_description: Description of what the criterion means
         n_samples: Number of documents to sample for schema generation
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         Spurious tag schema dict
@@ -122,6 +127,7 @@ def generate_spurious_tag_schema(
         schema_hint="Focus on surface-level properties independent of the criterion",
         is_spurious=True,
         cache_alias=cache_alias,
+        run_name=run_name,
     )
 
 
@@ -131,6 +137,7 @@ def apply_tags_batch(
     criterion_description: str,
     tag_schema: dict,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> list[dict]:
     """Apply binary tags to multiple documents.
 
@@ -140,6 +147,7 @@ def apply_tags_batch(
         criterion_description: Criterion description
         tag_schema: Tag schema dict
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of annotation dicts:
@@ -165,6 +173,7 @@ def apply_tags_batch(
         inputs=inputs,
         config="tag_apply_gemini",
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 

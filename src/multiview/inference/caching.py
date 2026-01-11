@@ -221,6 +221,7 @@ def cached_fn_completions(
     completion_cache: dict,
     completion_cache_path: str | None = None,
     force_refresh: bool = False,
+    chunk_size: int | None = 2048,
     verbose: bool = False,
     mute_if_cache_hit: bool = False,
     **fn_completions_kwargs,
@@ -237,6 +238,7 @@ def cached_fn_completions(
         completion_cache: Cache dictionary (will be modified in-place)
         completion_cache_path: Path to cache file on disk
         force_refresh: If True, ignore cache and recompute all
+        chunk_size: Optional max number of prompts per provider call
         verbose: Whether to log verbose output
         mute_if_cache_hit: If True, don't log when all prompts are cached
         **fn_completions_kwargs: Additional kwargs to pass to fn_completions
@@ -356,33 +358,59 @@ def cached_fn_completions(
 
     # Run completions for uncached prompts
     if len(uncached_prompts) > 0:
-        # Use non-packed prompts (base prompts without instructions/prefills)
-        # Instructions and prefills are passed separately via fn_completions_kwargs
-        # Packed prompts are only used as cache keys
-        uncached_completions = fn_completions(
-            prompts=uncached_non_packed,
-            **fn_completions_kwargs,
-        )
+        if chunk_size is None or chunk_size <= 0:
+            chunk_size = len(uncached_prompts)
 
-        # Validate output
-        assert len(uncached_non_packed) == len(
-            uncached_completions[completion_field_name]
-        ), (
-            f"Length mismatch: {len(uncached_non_packed)} prompts but "
-            f"{len(uncached_completions[completion_field_name])} completions"
-        )
+        if chunk_size < len(uncached_prompts):
+            logger.info(
+                f"Chunking {len(uncached_prompts)} uncached prompts into "
+                f"{(len(uncached_prompts) + chunk_size - 1) // chunk_size} batches "
+                f"of size {chunk_size}"
+            )
 
-        # Update cache with hashed keys and full prompts for debugging
-        for prompt, prompt_hash, result in zip(
-            uncached_prompts,
-            uncached_hashes,
-            uncached_completions[completion_field_name],
-            strict=False,
-        ):
-            completion_cache[completion_field_name][prompt_hash] = {
-                "result": result,
-                "prompt": prompt,  # Store full prompt for debugging
-            }
+        for start in range(0, len(uncached_prompts), chunk_size):
+            end = min(start + chunk_size, len(uncached_prompts))
+            chunk_prompts = uncached_prompts[start:end]
+            chunk_hashes = uncached_hashes[start:end]
+            chunk_non_packed = uncached_non_packed[start:end]
+
+            chunk_kwargs = fn_completions_kwargs.copy()
+            for key in [
+                "force_prefills",
+                "embed_query_instrs",
+                "embed_doc_instrs",
+                "images",
+            ]:
+                if key in chunk_kwargs:
+                    chunk_kwargs[key] = chunk_kwargs[key][start:end]
+
+            # Use non-packed prompts (base prompts without instructions/prefills)
+            # Instructions and prefills are passed separately via fn_completions_kwargs
+            # Packed prompts are only used as cache keys
+            uncached_completions = fn_completions(
+                prompts=chunk_non_packed,
+                **chunk_kwargs,
+            )
+
+            # Validate output
+            assert len(chunk_non_packed) == len(
+                uncached_completions[completion_field_name]
+            ), (
+                f"Length mismatch: {len(chunk_non_packed)} prompts but "
+                f"{len(uncached_completions[completion_field_name])} completions"
+            )
+
+            # Update cache with hashed keys and full prompts for debugging
+            for prompt, prompt_hash, result in zip(
+                chunk_prompts,
+                chunk_hashes,
+                uncached_completions[completion_field_name],
+                strict=False,
+            ):
+                completion_cache[completion_field_name][prompt_hash] = {
+                    "result": result,
+                    "prompt": prompt,  # Store full prompt for debugging
+                }
 
     # Validate cache has all prompts
     for prompt_hash in prompt_hashes:

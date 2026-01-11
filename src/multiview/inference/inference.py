@@ -30,11 +30,21 @@ def generate_cache_path_if_needed(
     config,
     cache_path: str | None,
     cache_alias: str | None,
+    run_name: str | None = None,
 ) -> str | None:
     """Generate a cache_path based on config + cache_alias, if needed.
 
     This is a thin wrapper around `get_cache_hash()` that keeps cache naming logic
     out of the main inference loop.
+
+    Args:
+        config: InferenceConfig object
+        cache_path: Explicit cache path (if provided, returned as-is)
+        cache_alias: Human-readable cache alias for naming
+        run_name: Optional experiment/run name for subdirectory organization
+
+    Returns:
+        Cache path string, or None if caching is disabled
     """
     if cache_path is not None or cache_alias is None:
         return cache_path
@@ -53,7 +63,15 @@ def generate_cache_path_if_needed(
         "parser_kwargs": config.parser_kwargs,
     }
     cache_hash = get_cache_hash(config_dict, cache_alias)
-    return str(INFERENCE_CACHE_DIR / f"{cache_hash}.json")
+
+    # Use run_name as subdirectory if provided (for experiment isolation)
+    # Otherwise use flat directory structure (backward compatible)
+    if run_name:
+        cache_dir = INFERENCE_CACHE_DIR / run_name
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return str(cache_dir / f"{cache_hash}.json")
+    else:
+        return str(INFERENCE_CACHE_DIR / f"{cache_hash}.json")
 
 
 def run_inference(
@@ -61,7 +79,9 @@ def run_inference(
     config: InferenceConfig | str,
     cache_path: str | None = None,
     cache_alias: str | None = None,
+    run_name: str | None = None,
     force_refresh: bool = False,
+    chunk_size: int | None = 2048,
     verbose: bool = False,
     return_raw: bool = False,
     **config_overrides,
@@ -82,7 +102,9 @@ def run_inference(
         config: InferenceConfig or preset name (e.g., "openai_embedding_large")
         cache_path: Path to cache file. If None, generates from config hash.
         cache_alias: Human-readable alias for cache file naming.
+        run_name: Optional experiment/run name for cache subdirectory organization.
         force_refresh: If True, ignore cache and recompute all.
+        chunk_size: Optional max number of prompts per provider call.
         verbose: Whether to log verbose output.
         return_raw: If True, return (parsed, raw) tuple instead of just parsed.
         **config_overrides: Override config fields (e.g., temperature=0.5)
@@ -131,6 +153,7 @@ def run_inference(
         config=config,
         cache_path=cache_path,
         cache_alias=cache_alias,
+        run_name=run_name,
     )
 
     # Respect global USE_CACHE flag
@@ -172,6 +195,7 @@ def run_inference(
         completion_cache_path=cache_path,
         force_refresh=force_refresh,
         verbose=verbose,
+        chunk_size=chunk_size,
         # Pass remaining prompt collection fields and model params to fn_completions
         **prompt_dict,
         **config.to_completion_kwargs(),

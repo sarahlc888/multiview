@@ -80,6 +80,7 @@ def select_candidates_embedding(
     embedding_preset: str = "hf_qwen3_embedding_8b",
     use_summary: bool = True,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> list[tuple[int, float]]:
     """Select candidates using embedding similarity.
 
@@ -91,6 +92,7 @@ def select_candidates_embedding(
         embedding_preset: Preset name for embedding model
         use_summary: If True, use summaries; otherwise use raw documents
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of (index, score) tuples, sorted by score descending
@@ -105,6 +107,7 @@ def select_candidates_embedding(
         inputs=inputs,
         config=embedding_preset,
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 

@@ -29,9 +29,20 @@ def evaluate_with_lm_judge_triplet(
     criterion_description: str | None = None,
     lm_judge_preset: str = "lmjudge_triplet_plaintext_binaryhard_gemini",
     cache_alias: str | None = None,
+    run_name: str | None = None,
     annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate triplets using an LM judge."""
+    """Evaluate triplets using an LM judge.
+
+    Args:
+        triplets: List of triplet dictionaries
+        criterion: Name of the similarity criterion
+        criterion_description: Optional detailed description
+        lm_judge_preset: Inference preset to use
+        cache_alias: Optional cache identifier
+        run_name: Optional experiment/run name for cache organization
+        annotations: Optional document annotations
+    """
     if not triplets:
         logger.warning("No triplets provided for evaluation")
         return {
@@ -68,6 +79,7 @@ def evaluate_with_lm_judge_triplet(
         inputs=inputs,
         config=lm_judge_preset,
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
         return_raw=True,
     )

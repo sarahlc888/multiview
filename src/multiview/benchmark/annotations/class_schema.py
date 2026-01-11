@@ -22,6 +22,7 @@ def generate_category_schema(
     n_samples: int = 10,
     schema_hint: str | None = None,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> dict:
     """Generate a category schema from sample documents.
 
@@ -32,6 +33,7 @@ def generate_category_schema(
         n_samples: Number of documents to sample for schema generation
         schema_hint: Optional hint about what categories to create
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         Category schema dict with structure:
@@ -66,6 +68,7 @@ def generate_category_schema(
         inputs=inputs,
         config="category_schema_generation_gemini",
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=True,
     )
 
@@ -93,6 +96,7 @@ def classify_documents_batch(
     criterion_description: str,
     category_schema: dict,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> list[dict]:
     """Classify multiple documents into categories.
 
@@ -102,6 +106,7 @@ def classify_documents_batch(
         criterion_description: Criterion description
         category_schema: Category schema dict
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of annotation dicts:
@@ -129,6 +134,7 @@ def classify_documents_batch(
         inputs=inputs,
         config="category_classify_gemini",
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 

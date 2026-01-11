@@ -1,9 +1,9 @@
 # Benchmark configuration for GSM8K arithmetic evaluation
 # Goal: Generate 256 triplets and evaluate with 4 methods
-run_name: "benchmark_debug"
+run_name: "benchmark_debug_cw"
 logging:
   level: DEBUG
-  output_file: temp.log  # Log to console only
+  output_file: temp.{run_name}.log  # Log to console only
 seed: 42
 use_cache: true
 step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)
@@ -37,19 +37,9 @@ tasks:
                             # Set to null to rate but not filter
 
   task_list:
-    - document_set: gsm8k
-      criterion: arithmetic
-      add_synthetic_docs: true  # Enable synthetic document generation for GSM8K
-      # Optional per-task overrides:
-      # max_docs: 500
-      # max_triplets: 100
-      # triplet_style: random
-    # - document_set: gsm8k
-    #   criterion: final_answer_units
-    # - document_set: crossword_clues
-    #   criterion: clue_type
-    # - document_set: rocstories
-    #   criterion: num_character_entities
+    - document_set: crossword_clues
+      criterion: clue_type
+      add_synthetic_docs: false
 
 # Evaluation methods configuration
 methods_to_evaluate:

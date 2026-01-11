@@ -47,6 +47,7 @@ def rate_triplet_quality(
     criterion_description: str | None = None,
     lm_judge_preset: str = "lmjudge_quality_rating_gemini",
     cache_alias: str | None = None,
+    run_name: str | None = None,
     annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Rate the quality of triplets using an LM judge.
@@ -56,6 +57,18 @@ def rate_triplet_quality(
     2. Ambiguous - arguably closer but very ambiguous
     3. Trivial - obviously closer, not challenging
     4. Ideal - good hard negative triplet
+
+    Args:
+        triplets: List of triplet dicts with anchor/positive/negative
+        criterion: Criterion name for similarity assessment
+        criterion_description: Optional detailed description of criterion
+        lm_judge_preset: Preset for LM judge
+        cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
+        annotations: Optional list of annotations for triplet documents
+
+    Returns:
+        Dict with ratings, counts, percentages, and triplets_with_ratings
     """
     if not triplets:
         logger.warning("No triplets provided for quality rating")
@@ -100,6 +113,7 @@ def rate_triplet_quality(
         inputs=inputs,
         config=lm_judge_preset,
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 

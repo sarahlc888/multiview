@@ -32,9 +32,19 @@ def evaluate_with_embeddings(
     triplet_ids: list[tuple[int, int, int]],
     embedding_preset: str = "openai_embedding_small",
     cache_alias: str | None = None,
+    run_name: str | None = None,
     preset_overrides: dict | None = None,
 ) -> dict[str, Any]:
-    """Evaluate triplets using embedding-based cosine similarity."""
+    """Evaluate triplets using embedding-based cosine similarity.
+
+    Args:
+        documents: List of document texts
+        triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
+        embedding_preset: Inference preset to use
+        cache_alias: Optional cache identifier
+        run_name: Optional experiment/run name for cache organization
+        preset_overrides: Optional preset configuration overrides
+    """
     if not triplet_ids:
         logger.warning("No triplets provided for evaluation")
         return {
@@ -57,6 +67,7 @@ def evaluate_with_embeddings(
         inputs={"document": documents},
         config=embedding_preset,
         cache_alias=cache_alias,
+        run_name=run_name,
         **inference_kwargs,
     )
 

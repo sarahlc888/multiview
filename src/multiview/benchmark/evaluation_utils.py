@@ -78,6 +78,7 @@ def evaluate_method(
             criterion_description=_resolved_criterion_description(task),
             lm_judge_preset=preset,
             cache_alias=cache_alias,
+            run_name=task.run_name,
             annotations=annotations,
         )
         return finalize_method_results(raw)
@@ -95,6 +96,7 @@ def evaluate_method(
             criterion_description=_resolved_criterion_description(task),
             lm_judge_preset=preset,
             cache_alias=cache_alias,
+            run_name=task.run_name,
             annotations=annotations,
         )
         return finalize_method_results(raw)
@@ -111,6 +113,7 @@ def evaluate_method(
             triplet_ids=task.triplets,
             embedding_preset=preset,
             cache_alias=cache_alias,
+            run_name=task.run_name,
             preset_overrides=preset_overrides,
         )
         return finalize_method_results(raw)

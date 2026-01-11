@@ -5,9 +5,9 @@ This module contains the main triplet creation logic:
     - create_lm_triplets(): LM-based triplet creation with candidate selection
       * Positive candidates: high similarity on summaries/tags (BM25/embedding/Jaccard)
       * Negative candidates: high similarity on raw docs, low similarity on tags (hard negatives)
-      * Uses two-stage LM judge: select_positive() then select_negative()
-    - select_positive(): LM judge that selects positive from candidates
-    - select_negative(): LM judge that selects negative from candidates (sees positive)
+      * Uses two-stage LM judge: select_positive_batch() then select_negative_batch()
+    - select_positive_batch(): LM judge that selects positives from candidates
+    - select_negative_batch(): LM judge that selects negatives from candidates (sees positive)
 
 Related modules:
     - candidate_selection.py: BM25, embedding, Jaccard retrieval strategies
@@ -16,12 +16,16 @@ Related modules:
 
 import logging
 
+import numpy as np
+
 from multiview.benchmark.triplets.utils import (
+    annotation_final_summary,
     extract_active_tags,
     format_annotation_for_display,
     jaccard_similarity,
 )
 from multiview.inference.inference import run_inference
+from multiview.utils.bm25_utils import compute_bm25_matrix
 from multiview.utils.prompt_utils import read_or_return
 from multiview.utils.sampling_utils import deterministic_sample
 
@@ -63,6 +67,7 @@ def _format_candidates_text(
     annotations: list[dict],
     anchor_idx: int,
     anchor_ann: dict,
+    bm25_scores: np.ndarray | None = None,
     include_spurious_tags: bool = False,
 ) -> str:
     """Format candidates with similarity scores for display.
@@ -73,6 +78,7 @@ def _format_candidates_text(
         annotations: List of all annotations
         anchor_idx: Index of anchor document (for BM25 computation)
         anchor_ann: Anchor document annotation
+        bm25_scores: Optional precomputed BM25 scores for the anchor
         include_spurious_tags: If True, include spurious tags in annotations
 
     Returns:
@@ -83,8 +89,8 @@ def _format_candidates_text(
     anchor_tags = extract_active_tags(anchor_ann, "tags")
     anchor_spurious = extract_active_tags(anchor_ann, "spurious_tags")
 
-    # Compute BM25 lexical similarity scores for all documents
-    bm25_scores = compute_bm25_scores(documents, anchor_idx)
+    if bm25_scores is None:
+        bm25_scores = compute_bm25_scores(documents, anchor_idx)
 
     candidates_text_parts = []
     for i, cand_idx in enumerate(candidate_indices):
@@ -153,205 +159,212 @@ def _format_triplet_example_section(
         return section_template.format(triplet_example=triplet_example_hint)
 
 
-def select_positive(
-    anchor_idx: int,
-    candidate_indices: list[int],
+def _coerce_selected_num(selected_num: object) -> object:
+    if isinstance(selected_num, list) and len(selected_num) == 1:
+        return selected_num[0]
+    return selected_num
+
+
+def select_positive_batch(
+    anchor_indices: list[int],
+    candidate_indices_by_anchor: list[list[int]],
     documents: list[str],
     annotations: list[dict],
     criterion: str,
     criterion_description: str,
     triplet_example_hint: dict | str | None = None,
     lm_judge_preset: str = "triplet_select_positive_gemini",
+    bm25_scores_by_anchor: dict[int, np.ndarray] | None = None,
     cache_alias: str | None = None,
-) -> tuple[int, bool]:
-    """Use LM judge to select positive from candidates.
+    run_name: str | None = None,
+) -> tuple[list[int | None], list[bool]]:
+    """Use LM judge to select positives for multiple anchors in one batch."""
+    if not anchor_indices:
+        return [], []
 
-    Args:
-        anchor_idx: Index of anchor document
-        candidate_indices: List of candidate document indices
-        documents: List of all documents
-        annotations: List of all annotations
-        criterion: Criterion name
-        criterion_description: Criterion description
-        triplet_example_hint: Optional example guidance (dict or string)
-        lm_judge_preset: Preset for LM judge
-        cache_alias: Cache alias for LM calls
-
-    Returns:
-        Tuple of (positive_idx, parse_success)
-    """
-    if len(candidate_indices) < 1:
-        return candidate_indices[0] if candidate_indices else anchor_idx, False
-
-    # Get anchor info
-    anchor_doc = documents[anchor_idx]
-    anchor_ann = annotations[anchor_idx]
-    anchor_annotation = format_annotation_for_display(anchor_ann)
-
-    # Format candidates
-    candidates_text = _format_candidates_text(
-        candidate_indices, documents, annotations, anchor_idx, anchor_ann
-    )
-
-    # Format triplet example section
     triplet_example_section = _format_triplet_example_section(
         triplet_example_hint, selection_type="positive"
     )
 
-    # Prepare inputs for LM judge
-    inputs = {
-        "criterion": [criterion],
-        "criterion_description": [criterion_description or criterion],
-        "triplet_example_section": [triplet_example_section],
-        "anchor_doc": [anchor_doc],
-        "anchor_annotation": [anchor_annotation],
-        "candidates": [candidates_text],
-    }
+    anchor_docs = []
+    anchor_annotations = []
+    candidates_texts = []
 
-    # Run LM judge (preset handles JSON parsing and field extraction)
-    logger.debug(
-        f"Running LM judge for positive selection (anchor_idx={anchor_idx}, "
-        f"candidates={len(candidate_indices)}, cache_alias={cache_alias})"
-    )
-    results = run_inference(
-        inputs=inputs,
-        config=lm_judge_preset,
-        cache_alias=cache_alias,
-        verbose=False,
-    )
-
-    # Get parsed selection number (1-indexed)
-    selected_num = results[0] if results else None
-
-    # Handle both int and list formats (e.g., 5 or [5])
-    if isinstance(selected_num, list) and len(selected_num) == 1:
-        selected_num = selected_num[0]
-
-    # Convert to document index
-    if isinstance(selected_num, int) and 1 <= selected_num <= len(candidate_indices):
-        positive_idx = candidate_indices[selected_num - 1]
-        return positive_idx, True
-    else:
-        logger.error(
-            f"CRITICAL: Failed to parse positive selection from LM response. "
-            f"Got: {selected_num}. Skipping triplet."
+    for anchor_idx, candidate_indices in zip(
+        anchor_indices, candidate_indices_by_anchor, strict=False
+    ):
+        anchor_docs.append(documents[anchor_idx])
+        anchor_ann = annotations[anchor_idx]
+        anchor_annotations.append(format_annotation_for_display(anchor_ann))
+        bm25_scores = (
+            bm25_scores_by_anchor.get(anchor_idx) if bm25_scores_by_anchor else None
         )
-        return None, False
+        candidates_texts.append(
+            _format_candidates_text(
+                candidate_indices,
+                documents,
+                annotations,
+                anchor_idx,
+                anchor_ann,
+                bm25_scores=bm25_scores,
+            )
+        )
 
-
-def select_negative(
-    anchor_idx: int,
-    positive_idx: int,
-    candidate_indices: list[int],
-    documents: list[str],
-    annotations: list[dict],
-    criterion: str,
-    criterion_description: str,
-    triplet_example_hint: dict | str | None = None,
-    lm_judge_preset: str = "triplet_select_negative_gemini",
-    cache_alias: str | None = None,
-) -> tuple[int, bool]:
-    """Use LM judge to select negative from candidates.
-
-    Args:
-        anchor_idx: Index of anchor document
-        positive_idx: Index of already-selected positive document
-        candidate_indices: List of candidate document indices (should exclude positive)
-        documents: List of all documents
-        annotations: List of all annotations
-        criterion: Criterion name
-        criterion_description: Criterion description
-        triplet_example_hint: Optional example guidance (dict or string)
-        lm_judge_preset: Preset for LM judge
-        cache_alias: Cache alias for LM calls
-
-    Returns:
-        Tuple of (negative_idx, parse_success)
-    """
-    if len(candidate_indices) < 1:
-        # Need at least one candidate for negative
-        # Find any document that isn't anchor or positive
-        for idx in range(len(documents)):
-            if idx != anchor_idx and idx != positive_idx:
-                return idx, False
-        return anchor_idx, False
-
-    # Get anchor and positive info
-    anchor_doc = documents[anchor_idx]
-    anchor_ann = annotations[anchor_idx]
-    # Include spurious tags for negative selection to help identify hard negatives
-    anchor_annotation = format_annotation_for_display(anchor_ann, include_spurious=True)
-
-    positive_doc = documents[positive_idx]
-    positive_ann = annotations[positive_idx]
-    positive_annotation = format_annotation_for_display(
-        positive_ann, include_spurious=True
-    )
-
-    # Format candidates with spurious tags visible
-    candidates_text = _format_candidates_text(
-        candidate_indices,
-        documents,
-        annotations,
-        anchor_idx,
-        anchor_ann,
-        include_spurious_tags=True,
-    )
-
-    # Format triplet example section
-    triplet_example_section = _format_triplet_example_section(
-        triplet_example_hint, selection_type="negative"
-    )
-
-    # Prepare inputs for LM judge
     inputs = {
-        "criterion": [criterion],
-        "criterion_description": [criterion_description or criterion],
-        "triplet_example_section": [triplet_example_section],
-        "anchor_doc": [anchor_doc],
-        "anchor_annotation": [anchor_annotation],
-        "positive_doc": [positive_doc],
-        "positive_annotation": [positive_annotation],
-        "candidates": [candidates_text],
+        "criterion": [criterion] * len(anchor_indices),
+        "criterion_description": [criterion_description or criterion]
+        * len(anchor_indices),
+        "triplet_example_section": [triplet_example_section] * len(anchor_indices),
+        "anchor_doc": anchor_docs,
+        "anchor_annotation": anchor_annotations,
+        "candidates": candidates_texts,
     }
 
-    # Run LM judge (preset handles JSON parsing and field extraction)
     logger.debug(
-        f"Running LM judge for negative selection (anchor_idx={anchor_idx}, "
-        f"positive_idx={positive_idx}, candidates={len(candidate_indices)}, "
+        f"Running LM judge for positive selection (batch_size={len(anchor_indices)}, "
         f"cache_alias={cache_alias})"
     )
     results = run_inference(
         inputs=inputs,
         config=lm_judge_preset,
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 
-    # Get parsed selection number (1-indexed)
-    selected_num = results[0] if results else None
+    positive_indices = []
+    parse_successes = []
 
-    # Handle both int and list formats (e.g., 5 or [5])
-    if isinstance(selected_num, list) and len(selected_num) == 1:
-        selected_num = selected_num[0]
-
-    # Convert to document index
-    if isinstance(selected_num, int) and 1 <= selected_num <= len(candidate_indices):
-        negative_idx = candidate_indices[selected_num - 1]
-        # Ensure negative is different from positive
-        if negative_idx == positive_idx and len(candidate_indices) > 1:
-            negative_idx = (
-                candidate_indices[1]
-                if candidate_indices[0] == positive_idx
-                else candidate_indices[0]
+    for _, candidate_indices, selected_num in zip(
+        anchor_indices, candidate_indices_by_anchor, results, strict=False
+    ):
+        selected_num = _coerce_selected_num(selected_num)
+        if isinstance(selected_num, int) and 1 <= selected_num <= len(
+            candidate_indices
+        ):
+            positive_indices.append(candidate_indices[selected_num - 1])
+            parse_successes.append(True)
+        else:
+            logger.error(
+                "CRITICAL: Failed to parse positive selection from LM response. "
+                f"Got: {selected_num}. Skipping triplet."
             )
-        return negative_idx, True
-    else:
-        logger.error(
-            f"CRITICAL: Failed to parse negative selection from LM response. "
-            f"Got: {selected_num}. Skipping triplet."
+            positive_indices.append(None)
+            parse_successes.append(False)
+
+    return positive_indices, parse_successes
+
+
+def select_negative_batch(
+    anchor_indices: list[int],
+    positive_indices: list[int],
+    candidate_indices_by_anchor: list[list[int]],
+    documents: list[str],
+    annotations: list[dict],
+    criterion: str,
+    criterion_description: str,
+    triplet_example_hint: dict | str | None = None,
+    lm_judge_preset: str = "triplet_select_negative_gemini",
+    bm25_scores_by_anchor: dict[int, np.ndarray] | None = None,
+    cache_alias: str | None = None,
+    run_name: str | None = None,
+) -> tuple[list[int | None], list[bool]]:
+    """Use LM judge to select negatives for multiple anchors in one batch."""
+    if not anchor_indices:
+        return [], []
+
+    triplet_example_section = _format_triplet_example_section(
+        triplet_example_hint, selection_type="negative"
+    )
+
+    anchor_docs = []
+    anchor_annotations = []
+    positive_docs = []
+    positive_annotations = []
+    candidates_texts = []
+
+    for anchor_idx, positive_idx, candidate_indices in zip(
+        anchor_indices, positive_indices, candidate_indices_by_anchor, strict=False
+    ):
+        anchor_docs.append(documents[anchor_idx])
+        anchor_ann = annotations[anchor_idx]
+        anchor_annotations.append(
+            format_annotation_for_display(anchor_ann, include_spurious=True)
         )
-        return None, False
+
+        positive_docs.append(documents[positive_idx])
+        positive_ann = annotations[positive_idx]
+        positive_annotations.append(
+            format_annotation_for_display(positive_ann, include_spurious=True)
+        )
+
+        bm25_scores = (
+            bm25_scores_by_anchor.get(anchor_idx) if bm25_scores_by_anchor else None
+        )
+        candidates_texts.append(
+            _format_candidates_text(
+                candidate_indices,
+                documents,
+                annotations,
+                anchor_idx,
+                anchor_ann,
+                bm25_scores=bm25_scores,
+                include_spurious_tags=True,
+            )
+        )
+
+    inputs = {
+        "criterion": [criterion] * len(anchor_indices),
+        "criterion_description": [criterion_description or criterion]
+        * len(anchor_indices),
+        "triplet_example_section": [triplet_example_section] * len(anchor_indices),
+        "anchor_doc": anchor_docs,
+        "anchor_annotation": anchor_annotations,
+        "positive_doc": positive_docs,
+        "positive_annotation": positive_annotations,
+        "candidates": candidates_texts,
+    }
+
+    logger.debug(
+        f"Running LM judge for negative selection (batch_size={len(anchor_indices)}, "
+        f"cache_alias={cache_alias})"
+    )
+    results = run_inference(
+        inputs=inputs,
+        config=lm_judge_preset,
+        cache_alias=cache_alias,
+        run_name=run_name,
+        verbose=False,
+    )
+
+    negative_indices = []
+    parse_successes = []
+
+    for positive_idx, candidate_indices, selected_num in zip(
+        positive_indices, candidate_indices_by_anchor, results, strict=False
+    ):
+        selected_num = _coerce_selected_num(selected_num)
+        if isinstance(selected_num, int) and 1 <= selected_num <= len(
+            candidate_indices
+        ):
+            negative_idx = candidate_indices[selected_num - 1]
+            if negative_idx == positive_idx and len(candidate_indices) > 1:
+                negative_idx = (
+                    candidate_indices[1]
+                    if candidate_indices[0] == positive_idx
+                    else candidate_indices[0]
+                )
+            negative_indices.append(negative_idx)
+            parse_successes.append(True)
+        else:
+            logger.error(
+                "CRITICAL: Failed to parse negative selection from LM response. "
+                f"Got: {selected_num}. Skipping triplet."
+            )
+            negative_indices.append(None)
+            parse_successes.append(False)
+
+    return negative_indices, parse_successes
 
 
 def create_lm_triplets(
@@ -369,6 +382,7 @@ def create_lm_triplets(
     triplet_example_hint: dict | str | None = None,
     anchor_indices: list[int] | None = None,
     max_num_candidates: int = 10,
+    run_name: str | None = None,
 ) -> list[tuple[int, int, int]]:
     """Create triplets using language model judge with candidate selection.
 
@@ -400,14 +414,13 @@ def create_lm_triplets(
             If None, uses sequential indices 0, 1, 2, ..., num_triplets-1.
         max_num_candidates: Maximum number of candidates to show LM judge per selection
             (default: 10). For multi strategy, this is the k value per sub-strategy.
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of (anchor_id, positive_id, negative_id) triplets as document indices
     """
     from multiview.benchmark.triplets.candidate_selection import (
         merge_candidate_pools,
-        select_candidates_bm25,
-        select_candidates_embedding,
         select_candidates_jaccard,
         select_spurious_hard_negatives,
     )
@@ -477,13 +490,56 @@ def create_lm_triplets(
         )
 
     triplets = []
-    parse_failures = 0  # Track how many times LM parsing failed
+    parse_failures = 0
 
     logger.info(
         f"Creating {len(anchors_to_process)} triplets using LM judge with {candidate_strategy} strategy"
     )
 
-    # Process each anchor
+    summary_texts = None
+    if candidate_strategy in ["bm25", "multi", "embedding"]:
+        summary_texts = [annotation_final_summary(ann) for ann in annotations]
+
+    bm25_summary_matrix = None
+    bm25_raw_matrix = None
+    if candidate_strategy in ["bm25", "multi"]:
+        bm25_summary_matrix = compute_bm25_matrix(summary_texts)
+        bm25_raw_matrix = compute_bm25_matrix(documents)
+
+    embedding_summary = None
+    embedding_raw = None
+    if candidate_strategy in ["embedding", "multi"]:
+        summary_cache_alias = (
+            f"{cache_alias_prefix}_embedding_summary" if cache_alias_prefix else None
+        )
+        raw_cache_alias = (
+            f"{cache_alias_prefix}_embedding_raw" if cache_alias_prefix else None
+        )
+        summary_embeddings = run_inference(
+            inputs={"document": summary_texts},
+            config=embedding_preset,
+            cache_alias=summary_cache_alias,
+            run_name=run_name,
+            verbose=False,
+        )
+        embedding_summary = np.array(summary_embeddings, dtype=float)
+        summary_norms = np.linalg.norm(embedding_summary, axis=1, keepdims=True)
+        summary_norms[summary_norms == 0] = 1.0
+        embedding_summary = embedding_summary / summary_norms
+
+        raw_embeddings = run_inference(
+            inputs={"document": documents},
+            config=embedding_preset,
+            cache_alias=raw_cache_alias,
+            run_name=run_name,
+            verbose=False,
+        )
+        embedding_raw = np.array(raw_embeddings, dtype=float)
+        raw_norms = np.linalg.norm(embedding_raw, axis=1, keepdims=True)
+        raw_norms[raw_norms == 0] = 1.0
+        embedding_raw = embedding_raw / raw_norms
+
+    candidate_indices_by_anchor: dict[int, list[int]] = {}
     for i, anchor_idx in enumerate(anchors_to_process):
         logger.debug(
             f"Processing anchor {i + 1}/{len(anchors_to_process)} (doc_idx={anchor_idx})"
@@ -491,29 +547,16 @@ def create_lm_triplets(
 
         # Step 1: Select candidate pool
         if candidate_strategy == "bm25":
-            candidates = select_candidates_bm25(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates * 2,
-                use_summary=True,
-            )
-            candidate_indices = [idx for idx, score in candidates]
+            scores = bm25_summary_matrix[anchor_idx].copy()
+            scores[anchor_idx] = -np.inf
+            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
+            candidate_indices = [int(idx) for idx in top_k_indices]
 
         elif candidate_strategy == "embedding":
-            cache_alias = (
-                f"{cache_alias_prefix}_embedding" if cache_alias_prefix else None
-            )
-            candidates = select_candidates_embedding(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates * 2,
-                embedding_preset=embedding_preset,
-                use_summary=True,
-                cache_alias=cache_alias,
-            )
-            candidate_indices = [idx for idx, score in candidates]
+            similarities = embedding_summary @ embedding_summary[anchor_idx]
+            similarities[anchor_idx] = -np.inf
+            top_k_indices = np.argsort(similarities)[::-1][: max_num_candidates * 2]
+            candidate_indices = [int(idx) for idx in top_k_indices]
 
         elif candidate_strategy == "jaccard":
             candidates = select_candidates_jaccard(
@@ -522,26 +565,19 @@ def create_lm_triplets(
             candidate_indices = [idx for idx, score in candidates]
 
         elif candidate_strategy == "multi":
-            # Combine multiple strategies
-            bm25_candidates = select_candidates_bm25(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates,
-                use_summary=True,
-            )
-            cache_alias = (
-                f"{cache_alias_prefix}_embedding" if cache_alias_prefix else None
-            )
-            emb_candidates = select_candidates_embedding(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates,
-                embedding_preset=embedding_preset,
-                use_summary=True,
-                cache_alias=cache_alias,
-            )
+            bm25_scores = bm25_summary_matrix[anchor_idx].copy()
+            bm25_scores[anchor_idx] = -np.inf
+            bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+            bm25_candidates = [
+                (int(idx), float(bm25_scores[idx])) for idx in bm25_top_indices
+            ]
+
+            emb_scores = embedding_summary @ embedding_summary[anchor_idx]
+            emb_scores[anchor_idx] = -np.inf
+            emb_top_indices = np.argsort(emb_scores)[::-1][:max_num_candidates]
+            emb_candidates = [
+                (int(idx), float(emb_scores[idx])) for idx in emb_top_indices
+            ]
             jaccard_candidates = select_candidates_jaccard(
                 annotations, anchor_idx, k=max_num_candidates, use_spurious=False
             )
@@ -549,114 +585,101 @@ def create_lm_triplets(
             candidate_indices = merge_candidate_pools(
                 bm25_candidates, emb_candidates, jaccard_candidates, use_rrf=True
             )
-            # Limit merged pool to max_num_candidates
             candidate_indices = candidate_indices[:max_num_candidates]
 
         else:
             raise ValueError(f"Unknown candidate_strategy: {candidate_strategy}")
 
-        # Ensure we have enough candidates
         if len(candidate_indices) < 2:
             logger.warning(f"Not enough candidates for anchor {anchor_idx}, skipping")
             continue
 
-        # Step 2: Use LM judge to select positive from candidates
-        judge_cache_alias = (
-            f"{cache_alias_prefix}_judge_pos" if cache_alias_prefix else None
-        )
+        candidate_indices_by_anchor[anchor_idx] = candidate_indices
 
-        positive_idx, pos_parse_success = select_positive(
-            anchor_idx=anchor_idx,
-            candidate_indices=candidate_indices,
-            documents=documents,
-            annotations=annotations,
-            criterion=criterion or "similarity",
-            criterion_description=criterion_description
-            or criterion
-            or "general similarity",
-            triplet_example_hint=triplet_example_hint,
-            lm_judge_preset=lm_judge_preset,
-            cache_alias=judge_cache_alias,
-        )
+    anchors_for_pos = list(candidate_indices_by_anchor.keys())
+    if not anchors_for_pos:
+        return []
 
-        if not pos_parse_success:
+    judge_cache_alias = (
+        f"{cache_alias_prefix}_judge_pos" if cache_alias_prefix else None
+    )
+
+    positive_indices, pos_parse_successes = select_positive_batch(
+        anchor_indices=anchors_for_pos,
+        candidate_indices_by_anchor=[
+            candidate_indices_by_anchor[idx] for idx in anchors_for_pos
+        ],
+        documents=documents,
+        annotations=annotations,
+        criterion=criterion or "similarity",
+        criterion_description=criterion_description
+        or criterion
+        or "general similarity",
+        triplet_example_hint=triplet_example_hint,
+        lm_judge_preset=lm_judge_preset,
+        bm25_scores_by_anchor=None,
+        cache_alias=judge_cache_alias,
+        run_name=run_name,
+    )
+
+    positive_by_anchor: dict[int, int] = {}
+    for anchor_idx, positive_idx, parse_success in zip(
+        anchors_for_pos, positive_indices, pos_parse_successes, strict=False
+    ):
+        if not parse_success or positive_idx is None:
             parse_failures += 1
-            continue  # Skip this triplet
+            continue
+        positive_by_anchor[anchor_idx] = positive_idx
 
-        # Step 3: Retrieve negative candidates using DIFFERENT strategy
-        # Negatives should be lexically/semantically similar (raw text) but structurally different (tags)
-        # This creates hard negatives that are superficially similar but actually dissimilar
+    anchors_for_neg = []
+    negative_candidates_by_anchor = []
+    positive_indices_for_neg = []
+
+    for anchor_idx in anchors_for_pos:
+        positive_idx = positive_by_anchor.get(anchor_idx)
+        if positive_idx is None:
+            continue
 
         if candidate_strategy == "bm25":
-            # Use raw documents (not summaries) and get LOW Jaccard candidates
-            neg_candidates = select_candidates_bm25(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates * 2,
-                use_summary=False,
-            )
+            scores = bm25_raw_matrix[anchor_idx].copy()
+            scores[anchor_idx] = -np.inf
+            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
             negative_candidate_indices = [
-                idx for idx, score in neg_candidates if idx != positive_idx
+                int(idx) for idx in top_k_indices if idx != positive_idx
             ]
 
         elif candidate_strategy == "embedding":
-            # Use raw documents (not summaries)
-            cache_alias = (
-                f"{cache_alias_prefix}_embedding_neg" if cache_alias_prefix else None
-            )
-            neg_candidates = select_candidates_embedding(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates * 2,
-                embedding_preset=embedding_preset,
-                use_summary=False,  # Use raw documents for negatives
-                cache_alias=cache_alias,
-            )
+            similarities = embedding_raw @ embedding_raw[anchor_idx]
+            similarities[anchor_idx] = -np.inf
+            top_k_indices = np.argsort(similarities)[::-1][: max_num_candidates * 2]
             negative_candidate_indices = [
-                idx for idx, score in neg_candidates if idx != positive_idx
+                int(idx) for idx in top_k_indices if idx != positive_idx
             ]
 
         elif candidate_strategy == "jaccard":
-            # Invert: get LOW Jaccard similarity documents
             all_jaccard = select_candidates_jaccard(
                 annotations, anchor_idx, k=len(documents) - 1, use_spurious=False
             )
-            # Take the BOTTOM k (lowest Jaccard similarity)
             low_jaccard = list(reversed(all_jaccard))[: max_num_candidates * 2]
             negative_candidate_indices = [
                 idx for idx, score in low_jaccard if idx != positive_idx
             ]
 
         elif candidate_strategy == "multi":
-            # Combine: high BM25/embedding on raw docs + low Jaccard + high spurious similarity
-            bm25_neg = select_candidates_bm25(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates,
-                use_summary=False,
-            )
-            cache_alias = (
-                f"{cache_alias_prefix}_embedding_neg" if cache_alias_prefix else None
-            )
-            emb_neg = select_candidates_embedding(
-                documents,
-                annotations,
-                anchor_idx,
-                k=max_num_candidates,
-                embedding_preset=embedding_preset,
-                use_summary=False,  # Use raw documents
-                cache_alias=cache_alias,
-            )
-            # Get low Jaccard candidates (low true similarity)
+            bm25_scores = bm25_raw_matrix[anchor_idx].copy()
+            bm25_scores[anchor_idx] = -np.inf
+            bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+            bm25_neg = [(int(idx), float(bm25_scores[idx])) for idx in bm25_top_indices]
+
+            emb_scores = embedding_raw @ embedding_raw[anchor_idx]
+            emb_scores[anchor_idx] = -np.inf
+            emb_top_indices = np.argsort(emb_scores)[::-1][:max_num_candidates]
+            emb_neg = [(int(idx), float(emb_scores[idx])) for idx in emb_top_indices]
             all_jaccard = select_candidates_jaccard(
                 annotations, anchor_idx, k=len(documents) - 1, use_spurious=False
             )
             low_jaccard = list(reversed(all_jaccard))[:max_num_candidates]
 
-            # Get spurious hard negatives (high spurious sim, low true sim)
             spurious_negs = select_spurious_hard_negatives(
                 annotations, anchor_idx, k=max_num_candidates
             )
@@ -664,51 +687,50 @@ def create_lm_triplets(
             negative_candidate_indices = merge_candidate_pools(
                 bm25_neg, emb_neg, low_jaccard, spurious_negs, use_rrf=True
             )
-            # Remove positive if present
             negative_candidate_indices = [
                 idx for idx in negative_candidate_indices if idx != positive_idx
             ]
-            # Limit to max_num_candidates
             negative_candidate_indices = negative_candidate_indices[:max_num_candidates]
 
         else:
             raise ValueError(f"Unknown candidate_strategy: {candidate_strategy}")
 
-        # Ensure we have at least one negative candidate
         if len(negative_candidate_indices) < 1:
-            # Fallback: find any document that isn't anchor or positive
             for idx in range(len(documents)):
                 if idx != anchor_idx and idx != positive_idx:
                     negative_candidate_indices = [idx]
                     break
 
-        # Step 4: Use LM judge to select negative from filtered candidates
-        neg_cache_alias = (
-            f"{cache_alias_prefix}_judge_neg" if cache_alias_prefix else None
-        )
+        anchors_for_neg.append(anchor_idx)
+        positive_indices_for_neg.append(positive_idx)
+        negative_candidates_by_anchor.append(negative_candidate_indices)
 
-        negative_idx, neg_parse_success = select_negative(
-            anchor_idx=anchor_idx,
-            positive_idx=positive_idx,
-            candidate_indices=negative_candidate_indices,
-            documents=documents,
-            annotations=annotations,
-            criterion=criterion or "similarity",
-            criterion_description=criterion_description
-            or criterion
-            or "general similarity",
-            triplet_example_hint=triplet_example_hint,
-            lm_judge_preset=lm_judge_preset_negative,
-            cache_alias=neg_cache_alias,
-        )
+    neg_cache_alias = f"{cache_alias_prefix}_judge_neg" if cache_alias_prefix else None
 
-        if not neg_parse_success:
+    negative_indices, neg_parse_successes = select_negative_batch(
+        anchor_indices=anchors_for_neg,
+        positive_indices=positive_indices_for_neg,
+        candidate_indices_by_anchor=negative_candidates_by_anchor,
+        documents=documents,
+        annotations=annotations,
+        criterion=criterion or "similarity",
+        criterion_description=criterion_description
+        or criterion
+        or "general similarity",
+        triplet_example_hint=triplet_example_hint,
+        lm_judge_preset=lm_judge_preset_negative,
+        bm25_scores_by_anchor=None,
+        cache_alias=neg_cache_alias,
+        run_name=run_name,
+    )
+
+    for anchor_idx, negative_idx, parse_success in zip(
+        anchors_for_neg, negative_indices, neg_parse_successes, strict=False
+    ):
+        if not parse_success or negative_idx is None:
             parse_failures += 1
-            continue  # Skip this triplet
-
-        # Create triplet (IDs only, not text)
-        triplet = (anchor_idx, positive_idx, negative_idx)
-        triplets.append(triplet)
+            continue
+        triplets.append((anchor_idx, positive_by_anchor[anchor_idx], negative_idx))
 
     logger.info(f"Created {len(triplets)} triplets")
     if parse_failures > 0:

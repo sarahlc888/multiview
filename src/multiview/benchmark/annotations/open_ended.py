@@ -22,6 +22,7 @@ def generate_pairwise_sim_hint(
     criterion_description: str,
     n_samples: int = 10,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> dict:
     """Generate a pairwise similarity hint from sample documents.
 
@@ -34,6 +35,7 @@ def generate_pairwise_sim_hint(
         criterion_description: Brief description of what the criterion means
         n_samples: Number of documents to sample
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         Dict with structure:
@@ -59,6 +61,7 @@ def generate_pairwise_sim_hint(
         inputs=inputs,
         config="pairwise_sim_hint_generation_gemini",
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=True,
     )
 
@@ -80,6 +83,7 @@ def generate_summary_guidance(
     n_samples: int = 10,
     summary_hint: str | None = None,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> dict:
     """Generate summary guidance from sample documents.
 
@@ -90,6 +94,7 @@ def generate_summary_guidance(
         n_samples: Number of documents to sample
         summary_hint: Optional combined hint (may include desired format)
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         Summary guidance dict with structure:
@@ -124,10 +129,11 @@ def generate_summary_guidance(
             inputs=inputs,
             config="summary_guidance_generation_gemini",
             cache_alias=cache_alias,
+            run_name=run_name,
             force_refresh=(attempt > 0),  # Skip cache on retry
             verbose=True,
         )
-
+        logger.info(f"Summary guidance: {results[0]['summary_guidance']}")
         guidance = results[0]
         if guidance is not None:
             logger.info(f"Generated summary guidance on attempt {attempt + 1}")
@@ -135,7 +141,6 @@ def generate_summary_guidance(
 
         if attempt == 0:
             logger.warning("First attempt failed to parse, retrying once...")
-
     raise ValueError("Failed to generate summary guidance after 2 attempts")
 
 
@@ -145,6 +150,7 @@ def generate_summaries_batch(
     criterion_description: str,
     summary_guidance: dict,
     cache_alias: str | None = None,
+    run_name: str | None = None,
 ) -> list[dict]:
     """Generate structured summaries for multiple documents.
 
@@ -154,6 +160,7 @@ def generate_summaries_batch(
         criterion_description: Criterion description
         summary_guidance: Summary guidance dict
         cache_alias: Optional cache alias for inference calls
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of annotation dicts:
@@ -189,6 +196,7 @@ def generate_summaries_batch(
         inputs=inputs,
         config="summary_generate_gemini",
         cache_alias=cache_alias,
+        run_name=run_name,
         verbose=False,
     )
 

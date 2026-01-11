@@ -41,6 +41,7 @@ def annotate_with_lm_all(
     summary_hint: str | None = None,
     include_debug: bool = False,
     cache_alias_prefix: str | None = None,
+    run_name: str | None = None,
 ) -> list[dict]:
     """Annotate documents with rich multi-faceted annotations.
 
@@ -60,6 +61,7 @@ def annotate_with_lm_all(
         summary_hint: Optional combined hint for summary guidance (may include desired format)
         include_debug: If True, include debug/reasoning info
         cache_alias_prefix: Prefix for cache aliases
+        run_name: Optional experiment/run name for cache organization
 
     Returns:
         List of rich annotation dicts, one per document. Each dict has the structure:
@@ -96,6 +98,7 @@ def annotate_with_lm_all(
         n_samples=n_schema_samples,
         schema_hint=category_schema_hint,
         cache_alias=f"{schema_cache_prefix}_category" if schema_cache_prefix else None,
+        run_name=run_name,
     )
 
     tag_schema = generate_tag_schema(
@@ -106,6 +109,7 @@ def annotate_with_lm_all(
         schema_hint=tag_schema_hint,
         is_spurious=False,
         cache_alias=f"{schema_cache_prefix}_tags" if schema_cache_prefix else None,
+        run_name=run_name,
     )
 
     spurious_tag_schema = generate_spurious_tag_schema(
@@ -114,6 +118,7 @@ def annotate_with_lm_all(
         criterion_description=criterion_description or "",
         n_samples=n_schema_samples,
         cache_alias=f"{schema_cache_prefix}_spurious" if schema_cache_prefix else None,
+        run_name=run_name,
     )
 
     # Generate pairwise similarity hint for summaries
@@ -131,6 +136,7 @@ def annotate_with_lm_all(
             cache_alias=f"{schema_cache_prefix}_pairwise_sim_hint"
             if schema_cache_prefix
             else None,
+            run_name=run_name,
         )
         summary_criterion_desc = (
             generated_hint.get("pairwise_sim_hint") or criterion_description or ""
@@ -143,6 +149,7 @@ def annotate_with_lm_all(
         n_samples=n_schema_samples,
         summary_hint=summary_hint,
         cache_alias=f"{schema_cache_prefix}_guidance" if schema_cache_prefix else None,
+        run_name=run_name,
     )
 
     # Step 2: Apply schemas to all documents
@@ -161,6 +168,7 @@ def annotate_with_lm_all(
         criterion_description or "",
         category_schema,
         cache_alias=cat_alias,
+        run_name=run_name,
     )
 
     tag_annotations = apply_tags_batch(
@@ -169,6 +177,7 @@ def annotate_with_lm_all(
         criterion_description or "",
         tag_schema,
         cache_alias=tag_alias,
+        run_name=run_name,
     )
 
     spurious_annotations = apply_tags_batch(
@@ -177,6 +186,7 @@ def annotate_with_lm_all(
         "spurious/superficial properties",
         spurious_tag_schema,
         cache_alias=spur_alias,
+        run_name=run_name,
     )
 
     summary_annotations = generate_summaries_batch(
@@ -185,6 +195,7 @@ def annotate_with_lm_all(
         summary_criterion_desc,  # Use pairwise similarity hint
         summary_guidance,
         cache_alias=summ_alias,
+        run_name=run_name,
     )
 
     # Combine annotations

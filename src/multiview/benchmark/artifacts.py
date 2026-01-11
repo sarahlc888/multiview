@@ -19,6 +19,8 @@ class _TaskLike(Protocol):
     document_annotations: list[dict] | None
     triplets: list[tuple[int, int, int]] | None
     triplet_quality_ratings: list[int] | None
+    triplet_quality_ratings_with_annotations: list[int] | None
+    triplet_quality_ratings_without_annotations: list[int] | None
 
     def get_task_name(self) -> str: ...
 
@@ -66,6 +68,8 @@ def save_triplets_jsonl(
     output_dir: str | Path,
     task_name: str,
     triplet_quality_ratings: list[int] | None = None,
+    triplet_quality_ratings_with_annotations: list[int] | None = None,
+    triplet_quality_ratings_without_annotations: list[int] | None = None,
     document_annotations: list[dict] | None = None,
 ) -> Path:
     """Save triplets as JSON array to `{output_dir}/{task_name}/triplets.json`."""
@@ -73,9 +77,26 @@ def save_triplets_jsonl(
     output_file = task_dir / "triplets.json"
 
     quality_ratings = triplet_quality_ratings
-    if quality_ratings is not None:
+    if (
+        quality_ratings is not None
+        or triplet_quality_ratings_with_annotations is not None
+        or triplet_quality_ratings_without_annotations is not None
+    ):
         # Local import to avoid a hard dependency chain (Task imports stay lean).
         from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
+
+    def add_quality_fields(
+        payload: dict[str, Any], rating: int | None, suffix: str
+    ) -> None:
+        if rating is None:
+            return
+        payload[f"quality_rating{suffix}"] = rating
+        payload[f"quality_label{suffix}"] = QUALITY_SCALE.get(rating, {}).get(
+            "label", "unknown"
+        )
+        payload[f"quality_class{suffix}"] = QUALITY_SCALE.get(rating, {}).get(
+            "class", "Unknown"
+        )
 
     triplet_records = []
     for i, (anchor_id, positive_id, negative_id) in enumerate(triplets):
@@ -90,13 +111,22 @@ def save_triplets_jsonl(
         }
 
         if quality_ratings is not None and i < len(quality_ratings):
-            rating = quality_ratings[i]
-            payload["quality_rating"] = rating
-            payload["quality_label"] = QUALITY_SCALE.get(rating, {}).get(
-                "label", "unknown"
+            add_quality_fields(payload, quality_ratings[i], "")
+        if triplet_quality_ratings_with_annotations is not None and i < len(
+            triplet_quality_ratings_with_annotations
+        ):
+            add_quality_fields(
+                payload,
+                triplet_quality_ratings_with_annotations[i],
+                "_with_annotations",
             )
-            payload["quality_class"] = QUALITY_SCALE.get(rating, {}).get(
-                "class", "Unknown"
+        if triplet_quality_ratings_without_annotations is not None and i < len(
+            triplet_quality_ratings_without_annotations
+        ):
+            add_quality_fields(
+                payload,
+                triplet_quality_ratings_without_annotations[i],
+                "_without_annotations",
             )
 
         # Include annotations if available
@@ -149,6 +179,12 @@ def save_task_triplets(task: _TaskLike, output_dir: str | Path) -> Path:
         output_dir=output_dir,
         task_name=task.get_task_name(),
         triplet_quality_ratings=task.triplet_quality_ratings,
+        triplet_quality_ratings_with_annotations=(
+            task.triplet_quality_ratings_with_annotations
+        ),
+        triplet_quality_ratings_without_annotations=(
+            task.triplet_quality_ratings_without_annotations
+        ),
         document_annotations=task.document_annotations,
     )
 
@@ -247,10 +283,22 @@ def _write_validation_report_markdown(
                 f"| Tags Jaccard (Mean ± Std) | {stats.get('hard_pos_tags_mean', 0):.3f} ± {stats.get('hard_pos_tags_std', 0):.3f} |\n"
             )
             f.write(
+                f"| Tags Jaccard (Median) | {stats.get('hard_pos_tags_median', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Tags Jaccard (25th - 75th percentile) | {stats.get('hard_pos_tags_p25', 0):.3f} - {stats.get('hard_pos_tags_p75', 0):.3f} |\n"
+            )
+            f.write(
                 f"| Tags Jaccard (Min - Max) | {stats.get('hard_pos_tags_min', 0):.3f} - {stats.get('hard_pos_tags_max', 0):.3f} |\n"
             )
             f.write(
                 f"| Spurious Jaccard (Mean ± Std) | {stats.get('hard_pos_spurious_mean', 0):.3f} ± {stats.get('hard_pos_spurious_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Median) | {stats.get('hard_pos_spurious_median', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (25th - 75th percentile) | {stats.get('hard_pos_spurious_p25', 0):.3f} - {stats.get('hard_pos_spurious_p75', 0):.3f} |\n"
             )
             f.write(
                 f"| Spurious Jaccard (Min - Max) | {stats.get('hard_pos_spurious_min', 0):.3f} - {stats.get('hard_pos_spurious_max', 0):.3f} |\n\n"
@@ -269,10 +317,22 @@ def _write_validation_report_markdown(
                 f"| Tags Jaccard (Mean ± Std) | {stats.get('hard_neg_tags_mean', 0):.3f} ± {stats.get('hard_neg_tags_std', 0):.3f} |\n"
             )
             f.write(
+                f"| Tags Jaccard (Median) | {stats.get('hard_neg_tags_median', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Tags Jaccard (25th - 75th percentile) | {stats.get('hard_neg_tags_p25', 0):.3f} - {stats.get('hard_neg_tags_p75', 0):.3f} |\n"
+            )
+            f.write(
                 f"| Tags Jaccard (Min - Max) | {stats.get('hard_neg_tags_min', 0):.3f} - {stats.get('hard_neg_tags_max', 0):.3f} |\n"
             )
             f.write(
                 f"| Spurious Jaccard (Mean ± Std) | {stats.get('hard_neg_spurious_mean', 0):.3f} ± {stats.get('hard_neg_spurious_std', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (Median) | {stats.get('hard_neg_spurious_median', 0):.3f} |\n"
+            )
+            f.write(
+                f"| Spurious Jaccard (25th - 75th percentile) | {stats.get('hard_neg_spurious_p25', 0):.3f} - {stats.get('hard_neg_spurious_p75', 0):.3f} |\n"
             )
             f.write(
                 f"| Spurious Jaccard (Min - Max) | {stats.get('hard_neg_spurious_min', 0):.3f} - {stats.get('hard_neg_spurious_max', 0):.3f} |\n\n"
@@ -329,6 +389,79 @@ def _write_validation_report_markdown(
                     f"{tags_overlap} | {spur_overlap} |\n"
                 )
             f.write("\n")
+
+        # Triplet quality analysis section
+        if "triplet_quality" in stats:
+            tq = stats["triplet_quality"]
+            f.write("## Triplet Quality Analysis\n\n")
+            f.write(
+                "Analysis of triplet quality ratings by whether triplets involve synthetic documents.\n\n"
+            )
+
+            # Summary counts
+            f.write("### Summary\n\n")
+            f.write("| Category | Count |\n")
+            f.write("|----------|-------|\n")
+            f.write(
+                f"| Triplets with synthetic docs | {tq['total_with_synthetic']} |\n"
+            )
+            f.write(
+                f"| Triplets without synthetic docs | {tq['total_without_synthetic']} |\n\n"
+            )
+
+            # Quality rating distributions
+            f.write("### Quality Rating Distribution\n\n")
+
+            if tq["with_synthetic"]["count"] > 0:
+                f.write("#### Triplets WITH Synthetic Documents\n\n")
+                ws = tq["with_synthetic"]
+                f.write("| Metric | Value |\n")
+                f.write("|--------|-------|\n")
+                f.write(f"| Total | {ws['count']} |\n")
+                f.write(f"| Mean Rating | {ws['mean']:.2f} |\n")
+                f.write(f"| Median Rating | {ws['median']:.1f} |\n")
+                f.write(
+                    f"| Rating 1 (Invalid) | {ws['rating_1']} ({ws['rating_1_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 2 (Ambiguous) | {ws['rating_2']} ({ws['rating_2_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 3 (Trivial) | {ws['rating_3']} ({ws['rating_3_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 4 (Ideal) | {ws['rating_4']} ({ws['rating_4_pct']:.1f}%) |\n\n"
+                )
+
+            if tq["without_synthetic"]["count"] > 0:
+                f.write("#### Triplets WITHOUT Synthetic Documents\n\n")
+                wos = tq["without_synthetic"]
+                f.write("| Metric | Value |\n")
+                f.write("|--------|-------|\n")
+                f.write(f"| Total | {wos['count']} |\n")
+                f.write(f"| Mean Rating | {wos['mean']:.2f} |\n")
+                f.write(f"| Median Rating | {wos['median']:.1f} |\n")
+                f.write(
+                    f"| Rating 1 (Invalid) | {wos['rating_1']} ({wos['rating_1_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 2 (Ambiguous) | {wos['rating_2']} ({wos['rating_2_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 3 (Trivial) | {wos['rating_3']} ({wos['rating_3_pct']:.1f}%) |\n"
+                )
+                f.write(
+                    f"| Rating 4 (Ideal) | {wos['rating_4']} ({wos['rating_4_pct']:.1f}%) |\n\n"
+                )
+
+            # Interpretation
+            f.write("**Quality Scale:**\n")
+            f.write("- 1 (Invalid): Anchor not closer to positive than negative\n")
+            f.write(
+                "- 2 (Ambiguous): Arguably closer but very ambiguous or subjective\n"
+            )
+            f.write("- 3 (Trivial): Obviously closer, not challenging\n")
+            f.write("- 4 (Ideal): Good hard negative triplet\n\n")
 
         # Interpretation guide
         f.write("## Interpretation Guide\n\n")

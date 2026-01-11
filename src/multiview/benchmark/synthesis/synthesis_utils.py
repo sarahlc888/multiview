@@ -16,8 +16,20 @@ def synthesize_documents(
     document_set: Any,
     criterion_name: str,
     num_synthetic_docs: int = 0,
+    run_name: str | None = None,
 ) -> tuple[list[Any], dict[str, Any]]:
-    """Generate synthetic documents using LM-based remix strategy."""
+    """Generate synthetic documents using LM-based remix strategy.
+
+    Args:
+        documents: List of documents to sample from for synthesis
+        document_set: Document set object
+        criterion_name: Criterion name for synthesis
+        num_synthetic_docs: Number of synthetic documents to generate
+        run_name: Optional experiment/run name for cache organization
+
+    Returns:
+        Tuple of (synthetic_docs, synthesis_metadata)
+    """
     if len(documents) == 0:
         logger.warning("No documents to synthesize")
         return [], {}
@@ -201,6 +213,7 @@ def synthesize_documents(
                 inputs={"document1": d1, "document2": d2},
                 config=remix_config,
                 cache_alias=f"synth_remix_{criterion_name}",
+                run_name=run_name,
                 force_refresh=False,
                 verbose=True,
             )

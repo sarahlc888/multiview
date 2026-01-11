@@ -41,6 +41,7 @@ class Task:
         - criterion: Criterion name (e.g., "arithmetic")
 
         Common optional keys:
+        - run_name: Experiment/run name for cache organization
         - triplet_style: "random" | "lm" | "lm_all"
         - max_docs, max_triplets, criterion_description
         - candidate_strategy, use_spurious_hard_negs, embedding_preset, lm_judge_preset
@@ -53,6 +54,7 @@ class Task:
         self.criterion_name = config["criterion"]
 
         # Extract optional params with defaults
+        self.run_name = config.get("run_name")
         self.max_docs = config.get("max_docs")
         self.max_triplets = config.get("max_triplets")
         self.triplet_style = config.get("triplet_style", TRIPLET_STYLE_LM)
@@ -80,6 +82,8 @@ class Task:
         self.triplet_quality_ratings = (
             None  # List of quality ratings (1-4) for each triplet
         )
+        self.triplet_quality_ratings_with_annotations = None
+        self.triplet_quality_ratings_without_annotations = None
         self.synthesis_anchor_indices = (
             None  # Indices of docs used as synthesis anchors (backward compat)
         )
@@ -151,6 +155,7 @@ class Task:
             document_set=self.document_set,
             criterion_name=self.criterion_name,
             num_synthetic_docs=self.num_synthetic_docs,
+            run_name=self.run_name,
         )
 
         if synthetic_docs:
@@ -193,6 +198,7 @@ class Task:
                 summary_hint=hints["summary_hint"],
                 include_debug=self.config.get("include_annotation_debug", False),
                 cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                run_name=self.run_name,
             )
         else:
             raise ValueError(
@@ -236,6 +242,7 @@ class Task:
                 triplet_example_hint=hints["triplet_example_hint"],
                 anchor_indices=self.synthesis_anchor_indices,
                 max_num_candidates=self.config.get("max_num_candidates", 10),
+                run_name=self.run_name,
             )
         else:
             raise ValueError(f"Unknown triplet_style: {self.triplet_style}")
@@ -316,6 +323,7 @@ class Task:
             lm_judge_preset=lm_judge_preset,
             cache_alias=cache_alias,
             annotations=self.document_annotations if use_annotations else None,
+            run_name=self.run_name,
         )
 
         self.triplet_quality_ratings = results["ratings"]
@@ -374,6 +382,9 @@ class Task:
             lm_judge_preset="lmjudge_quality_rating_with_annotation_gemini",
             min_quality=None,
         )
+        self.triplet_quality_ratings_without_annotations = results_without["ratings"]
+        self.triplet_quality_ratings_with_annotations = results_with["ratings"]
+        self.triplet_quality_ratings = self.triplet_quality_ratings_with_annotations
 
         # Calculate agreement
         ratings_without, ratings_with = (

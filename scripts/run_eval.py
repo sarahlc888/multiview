@@ -91,22 +91,13 @@ def main(cfg: DictConfig):
     # create tasks
     tasks = []
     for task_spec in cfg.tasks.task_list:
-        cur_task = Task(config={**cfg.tasks.defaults, **task_spec})
+        cur_task = Task(
+            config={**cfg.tasks.defaults, **task_spec, "run_name": cfg.run_name}
+        )
         cur_task.load_documents()
         cur_task.augment_with_synthetic_documents()
         if cur_task.triplet_style != "random":
             cur_task.annotate_documents()
-
-            # Validate synthetic annotations if synthesis was performed
-            if cur_task.add_synthetic_docs and cur_task.synthesis_metadata:
-                validation_dir = output_base / "validation"
-                validate_synthesis(
-                    documents=cur_task.documents,
-                    annotations=cur_task.document_annotations,
-                    synthesis_metadata=cur_task.synthesis_metadata,
-                    output_dir=validation_dir,
-                    task_name=cur_task.get_task_name(),
-                )
 
         cur_task.create_triplets()
 
@@ -145,6 +136,23 @@ def main(cfg: DictConfig):
                 stats=quality_stats,
                 task_name=cur_task.get_task_name(),
                 min_quality=min_quality,
+            )
+
+        # Validate synthetic annotations if synthesis was performed
+        if (
+            cur_task.document_annotations is not None
+            and cur_task.add_synthetic_docs
+            and cur_task.synthesis_metadata
+        ):
+            validation_dir = output_base / "validation"
+            validate_synthesis(
+                documents=cur_task.documents,
+                annotations=cur_task.document_annotations,
+                synthesis_metadata=cur_task.synthesis_metadata,
+                output_dir=validation_dir,
+                task_name=cur_task.get_task_name(),
+                triplets=cur_task.triplets,
+                quality_ratings=cur_task.triplet_quality_ratings,
             )
 
         # Save documents and annotations

@@ -29,9 +29,20 @@ def evaluate_with_lm_judge_pair(
     criterion_description: str | None = None,
     lm_judge_preset: str = "lmjudge_pair_plaintext_likerthard_gemini",
     cache_alias: str | None = None,
+    run_name: str | None = None,
     annotations: list[dict] | None = None,
 ) -> dict[str, Any]:
-    """Evaluate triplets using pairwise LM judge scoring."""
+    """Evaluate triplets using pairwise LM judge scoring.
+
+    Args:
+        triplets: List of triplet dictionaries
+        criterion: Name of the similarity criterion
+        criterion_description: Optional detailed description
+        lm_judge_preset: Inference preset to use
+        cache_alias: Optional cache identifier
+        run_name: Optional experiment/run name for cache organization
+        annotations: Optional document annotations
+    """
     if not triplets:
         logger.warning("No triplets provided for evaluation")
         return {
@@ -68,6 +79,7 @@ def evaluate_with_lm_judge_pair(
         inputs=positive_pairs_inputs,
         config=lm_judge_preset,
         cache_alias=f"{cache_alias}_positive" if cache_alias else None,
+        run_name=run_name,
         verbose=False,
         return_raw=True,
     )
@@ -91,6 +103,7 @@ def evaluate_with_lm_judge_pair(
         inputs=negative_pairs_inputs,
         config=lm_judge_preset,
         cache_alias=f"{cache_alias}_negative" if cache_alias else None,
+        run_name=run_name,
         verbose=False,
         return_raw=True,
     )
