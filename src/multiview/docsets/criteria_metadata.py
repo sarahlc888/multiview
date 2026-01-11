@@ -135,5 +135,33 @@ HACKERNEWS_CRITERIA = {
         # "pairwise_sim_hint": "Two posts are similar if they appeal to the same type of reader interest or curiosity. Consider the underlying angle: technical deep-dive, business/startup news, philosophical/societal commentary, practical how-to, academic research, industry gossip, futurism/speculation, nostalgia/history, controversy/debate-starter, etc.",
         "category_schema_hint": "Consider categories like: technical deep-dive (for engineers wanting implementation details), business/startup news (for founders/VCs tracking industry), thought leadership (big ideas and philosophy), practical tutorial (devs seeking solutions), academic research (for researchers/intellectuals), career/hiring (for job seekers), product launch (for early adopters), controversy/hot take (for debate enthusiasts), historical retrospective on tech developments (for tech historians), etc.",
         "tag_schema_hint": "Create tags for interest angles: appeals_to_engineers, appeals_to_founders, appeals_to_researchers, appeals_to_job_seekers, appeals_to_early_adopters, technical_depth, business_implications, philosophical_angle, practical_utility, academic_rigor, controversial_take, historical_perspective, futurist_speculation, inside_baseball; cutting_edge_physical_science (new developments in biology, physics, etc), cutting_edge_math (new developments in math research, typically from quanta), youth_wow_factor (a cool project created by someone very young), fun_toy_project (not interesting because of technical complexity but interesting because it is a fun idea executed well, e.g. wikipedia in tik tok format), browser_game (a playable game, e.g. snake on a sphere), whimsical_gimmick (a fun website that is whimsical, e.g. website that pulls up an image of a person pointing wherever your cursor is at that moment), web_design (a link that is impressive due to its aesthetic value), personal_project_white_whale (a long running personal project), elegant_technical_deep_dive (a deep dive into re-implementing a very complex system from scratch, typically highlighting that it has very low lines of code relative to the full systems that it mocks, may also have educational value, e.g. nanochat), tech_think_piece (general interest pieces in outlets like the New Yorker, discussing some tech related topics), startup_news (news about companies raising money, IPOs, acquisitions, etc), tech_philosophy (philosophy or nuggets of wisdom from individual programmers on tech blogs).",
+    }
+}
+# Onion News: Satirical headlines from The Onion
+ONION_NEWS_CRITERIA = {
+    "topic": {
+        "description": "The literal subject matter of the headline (what is the joke about?).",
+        "category_schema_hint": None,
+        "tag_schema_hint": "Create tags for different topics and subject matter in the headlines.",
+    },
+    "joketype": {
+        "description": (
+            "What makes the joke funny? Beyond the subject matter/content, what strategies does the headline use?"
+            " e.g. "
+            "Irony – Intended meaning is opposite of literal meaning; "
+            "Character – Comedic character acting on personality traits; "
+            "Reference – Common experiences that audiences can relate to; "
+            "Shock – Surprising jokes typically involving sex, drugs, gross-out humor, swearing; "
+            "Parody – Mimic a familiar character, trope or cliche in an unfamiliar way; "
+            "Hyperbole – Exaggeration to absurd extremes; "
+            "Wordplay – Puns, rhymes, double entendres; "
+            "Analogy – Comparing two disparate things; "
+            "Madcap – Crazy, wacky, silly, nonsensical; "
+            "Meta-humor – Jokes about jokes, or about the idea of comedy; "
+            "Misplaced Focus – Attention is focused on the wrong thing\n"
+            "Important: consider only on the most salient strategies in the joke."
+        ),
+        "category_schema_hint": "Consider categories based on comedic strategies: irony, character-based, reference, shock, parody, hyperbole, wordplay, analogy, madcap, meta-humor, misplaced focus, etc.",
+        "tag_schema_hint": "Create tags for different joke types and strategies: uses_irony, uses_character, uses_reference, uses_shock, uses_parody, uses_hyperbole, uses_wordplay, uses_analogy, uses_madcap, uses_meta_humor, uses_misplaced_focus, etc.",
     },
 }
