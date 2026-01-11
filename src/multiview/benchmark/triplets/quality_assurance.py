@@ -98,7 +98,7 @@ def rate_triplet_quality(
     if has_annotations:
         logger.info("Using annotations in quality rating")
         add_annotation_summaries_to_inputs(
-            inputs,
+            inputs=inputs,
             triplets=triplets,
             annotations=annotations,
             triplet_keys_by_input_suffix={

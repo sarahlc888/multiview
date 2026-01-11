@@ -112,6 +112,14 @@ class Task:
     def _criterion_metadata(self) -> dict:
         return self.document_set.get_criterion_metadata(self.criterion_name) or {}
 
+    def _resolved_criterion_description(self) -> str | None:
+        """Resolve criterion description from config or metadata.
+
+        Returns the criterion description, preferring config over metadata.
+        """
+        meta = self._criterion_metadata()
+        return self.config.get("criterion_description") or meta.get("description")
+
     def _resolved_criterion_hints(self) -> dict:
         meta = self._criterion_metadata()
         return {

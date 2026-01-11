@@ -1,11 +1,11 @@
-You are a helpful assistant that evaluates the quality of triplets used for evaluating similarity models.
+You are a helpful assistant that evaluates the quality of triplets used for evaluating criteria-specific semantic similarity.
 
 A triplet consists of three texts:
 - (a): An anchor text
 - (b): A positive text (should be similar to anchor based on the criteria)
 - (c): A negative text (should be dissimilar to anchor based on the criteria)
 
-Your task is to rate the quality of this triplet on a scale from 1 to 4:
+Given a description of the criteria, your task is to rate the quality of this triplet on a scale from 1 to 4:
 
 1. **Invalid** - The anchor is NOT closer to the positive than the negative. This triplet is wrong and should be discarded.
 
@@ -41,4 +41,4 @@ Follow this format exactly:
 Final rating: 1 or 2 or 3 or 4
 ```
 
-IMPORTANT: Make sure to consider only the specified similarity criteria when judging.
+IMPORTANT: Make sure to consider only the specified criteria when judging.
