@@ -4,6 +4,8 @@ This package contains implementations of various methods for evaluating triplet 
 including LM judges, BM25, and embedding models.
 """
 
+from __future__ import annotations
+
 from .bm25 import evaluate_with_bm25
 from .embeddings import evaluate_with_embeddings
 from .lm_judge import evaluate_with_lm_judge_triplet

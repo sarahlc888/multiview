@@ -36,20 +36,55 @@ def preset_requires_annotations(preset: str) -> bool:
     return "with_annotation" in preset.lower()
 
 
+def has_rich_annotations(annotations: list[dict] | None) -> bool:
+    """Check if annotations contain rich information (summaries, tags, etc.).
+
+    Returns:
+        True if annotations have rich fields beyond just criterion_value
+        False if annotations only have criterion_value (simple precomputed annotations)
+    """
+    if not annotations or len(annotations) == 0:
+        return False
+
+    # Check first annotation for rich fields
+    first_ann = annotations[0]
+
+    # Rich annotations have at least one of: summary, tags, category
+    has_summary = "summary" in first_ann and first_ann.get("summary")
+    has_tags = "tags" in first_ann and first_ann.get("tags")
+    has_category = "category" in first_ann and first_ann.get("category")
+
+    return has_summary or has_tags or has_category
+
+
 def get_annotations_if_required(*, preset: str, task: Any) -> dict | None:
-    """Return task annotations only if the preset expects them (else None)."""
+    """Return task annotations only if the preset expects them (else None).
+
+    Also checks if annotations are rich enough for the preset - simple precomputed
+    annotations (only criterion_value) are not sufficient for presets that need
+    summaries/tags.
+    """
     if not preset_requires_annotations(preset):
         return None
 
-    if task.document_annotations is not None:
-        logger.info("Using annotations for evaluation (preset requires them)")
-        return task.document_annotations
+    if task.document_annotations is None:
+        logger.warning(
+            f"Preset '{preset}' requires annotations but task has none. "
+            "Skipping this method."
+        )
+        return None
 
-    logger.warning(
-        f"Preset '{preset}' requires annotations but task has none. "
-        "Evaluation may fail or produce incorrect results."
-    )
-    return None
+    # Check if annotations are rich enough
+    if not has_rich_annotations(task.document_annotations):
+        logger.warning(
+            f"Preset '{preset}' requires rich annotations (summaries/tags), "
+            f"but task only has simple criterion values. "
+            f"Skipping this method. Use presets without 'with_annotation' for simple annotations."
+        )
+        return None
+
+    logger.info("Using annotations for evaluation (preset requires them)")
+    return task.document_annotations
 
 
 def make_cache_alias(*, task: Any, method_config: dict, default_name: str) -> str:
@@ -68,12 +103,23 @@ def evaluate_method(
             "preset", "lmjudge_triplet_plaintext_binaryhard_gemini"
         )
         annotations = get_annotations_if_required(preset=preset, task=task)
+
+        # Skip if preset requires annotations but they're not available/suitable
+        if preset_requires_annotations(preset) and annotations is None:
+            logger.warning("Skipping method due to missing/insufficient annotations")
+            return {"skipped": True, "reason": "Missing or insufficient annotations"}
+
         cache_alias = make_cache_alias(
             task=task, method_config=method_config, default_name="lmjudge"
         )
 
+        # Extract text from documents (handle both string and dict formats)
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
         raw = evaluate_with_lm_judge_triplet(
-            triplets=build_triplet_dicts(task.documents, task.triplets),
+            triplets=build_triplet_dicts(document_texts, task.triplets),
             criterion=task.criterion_name,
             criterion_description=_resolved_criterion_description(task),
             lm_judge_preset=preset,
@@ -86,12 +132,23 @@ def evaluate_method(
     if method_type == "lm_judge_pair":
         preset = method_config.get("preset", "lmjudge_pair_plaintext_likerthard_gemini")
         annotations = get_annotations_if_required(preset=preset, task=task)
+
+        # Skip if preset requires annotations but they're not available/suitable
+        if preset_requires_annotations(preset) and annotations is None:
+            logger.warning("Skipping method due to missing/insufficient annotations")
+            return {"skipped": True, "reason": "Missing or insufficient annotations"}
+
         cache_alias = make_cache_alias(
             task=task, method_config=method_config, default_name="lmjudge_pair"
         )
 
+        # Extract text from documents (handle both string and dict formats)
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
         raw = evaluate_with_lm_judge_pair(
-            triplets=build_triplet_dicts(task.documents, task.triplets),
+            triplets=build_triplet_dicts(document_texts, task.triplets),
             criterion=task.criterion_name,
             criterion_description=_resolved_criterion_description(task),
             lm_judge_preset=preset,
@@ -108,8 +165,13 @@ def evaluate_method(
             task=task, method_config=method_config, default_name="embeddings"
         )
 
+        # Extract text from documents (handle both string and dict formats)
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
         raw = evaluate_with_embeddings(
-            documents=task.documents,
+            documents=document_texts,
             triplet_ids=task.triplets,
             embedding_preset=preset,
             cache_alias=cache_alias,
@@ -122,8 +184,13 @@ def evaluate_method(
         if method_config.get("use_annotations"):
             logger.warning("bm25: use_annotations is not supported; ignoring.")
 
+        # Extract text from documents (handle both string and dict formats)
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
         raw = evaluate_with_bm25(
-            documents=task.documents,
+            documents=document_texts,
             triplet_ids=task.triplets,
         )
         return finalize_method_results(raw)
@@ -167,9 +234,9 @@ def metrics_from_correctness(
     n_ties = sum(1 for t in is_tie if t)
 
     if exclude_ties:
-        n_correct = sum(1 for c, t in zip(correct, is_tie, strict=True) if c and not t)
+        n_correct = sum(1 for c, t in zip(correct, is_tie, strict=False) if c and not t)
         n_incorrect = sum(
-            1 for c, t in zip(correct, is_tie, strict=True) if (not c) and (not t)
+            1 for c, t in zip(correct, is_tie, strict=False) if (not c) and (not t)
         )
         n_judged = n_correct + n_incorrect
         accuracy = (n_correct / n_judged) if n_judged > 0 else 0.0
@@ -203,7 +270,7 @@ def outcomes_from_pair_scores(
         raise ValueError(f"tie_tol must be >= 0, got {tie_tol}")
 
     outcomes: list[int] = []
-    for pos, neg in zip(positive_scores, negative_scores, strict=True):
+    for pos, neg in zip(positive_scores, negative_scores, strict=False):
         if pos > neg + tie_tol:
             outcomes.append(1)
         elif neg > pos + tie_tol:

@@ -4,6 +4,8 @@ This module provides reusable BM25 scoring functions with sophisticated
 tokenization for use in candidate selection and triplet evaluation.
 """
 
+from __future__ import annotations
+
 import re
 import unicodedata
 from collections.abc import Callable

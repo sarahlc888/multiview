@@ -180,7 +180,7 @@ def analyze_triplet_quality_by_synthesis(
     with_synthetic = []
     without_synthetic = []
 
-    for triplet, rating in zip(triplets, quality_ratings, strict=True):
+    for triplet, rating in zip(triplets, quality_ratings, strict=False):
         if rating is None:
             # Skip triplets without ratings
             continue

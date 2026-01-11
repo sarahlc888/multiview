@@ -1,5 +1,7 @@
 """Infinite chats responses document_set loader."""
 
+from __future__ import annotations
+
 import logging
 from collections import defaultdict
 from typing import Any

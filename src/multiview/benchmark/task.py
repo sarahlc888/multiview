@@ -1,10 +1,13 @@
 """Task representation for benchmarking."""
 
+from __future__ import annotations
+
 import logging
 
 from multiview.benchmark.annotations import (
     annotate_with_known_criterion,
     annotate_with_lm_all,
+    annotate_with_precomputed,
 )
 from multiview.benchmark.triplets.quality_assurance import (
     filter_triplets_by_quality,
@@ -12,6 +15,7 @@ from multiview.benchmark.triplets.quality_assurance import (
 )
 from multiview.benchmark.triplets.triplet_utils import (
     create_lm_triplets,
+    create_prelabeled_triplets,
     create_random_triplets,
 )
 from multiview.benchmark.triplets.utils import build_triplet_dicts
@@ -20,6 +24,7 @@ from multiview.docsets import DOCSETS
 logger = logging.getLogger(__name__)
 
 TRIPLET_STYLE_RANDOM = "random"
+TRIPLET_STYLE_PRELABELED = "prelabeled"
 TRIPLET_STYLE_LM = "lm"
 TRIPLET_STYLE_LM_ALL = "lm_all"
 
@@ -181,7 +186,13 @@ class Task:
 
         logger.info(f"Annotating documents for criterion: {self.criterion_name}...")
 
-        if self.criterion_name in self.document_set.KNOWN_CRITERIA:
+        # Check for precomputed annotations first
+        if self.document_set.has_precomputed_annotations(self.criterion_name):
+            logger.info("Using precomputed annotations from dataset")
+            self.document_annotations = annotate_with_precomputed(
+                self.documents, self.document_set, self.criterion_name
+            )
+        elif self.criterion_name in self.document_set.KNOWN_CRITERIA:
             self.document_annotations = annotate_with_known_criterion(
                 self.documents, self.document_set, self.criterion_name
             )
@@ -221,6 +232,16 @@ class Task:
             self.triplets = create_random_triplets(
                 self.documents,
                 max_triplets=self.max_triplets,
+            )
+        elif self.triplet_style == TRIPLET_STYLE_PRELABELED:
+            self.triplets = create_prelabeled_triplets(
+                documents=self.documents,
+                annotations=self.document_annotations,
+                max_triplets=self.max_triplets,
+                selection_strategy=self.config.get(
+                    "prelabeled_selection", "hard_negatives"
+                ),
+                seed=self.config.get("seed", 42),
             )
         elif self.triplet_style in LM_TRIPLET_STYLES:
             hints = self._resolved_criterion_hints()
@@ -396,7 +417,7 @@ class Task:
         # Filter out pairs with None values for comparison
         valid_pairs = [
             (r1, r2)
-            for r1, r2 in zip(ratings_without, ratings_with, strict=True)
+            for r1, r2 in zip(ratings_without, ratings_with, strict=False)
             if r1 is not None and r2 is not None
         ]
         n_valid = len(valid_pairs)
@@ -419,7 +440,7 @@ class Task:
                 else None,
             }
             for i, (r_w, r_a) in enumerate(
-                zip(ratings_without, ratings_with, strict=True)
+                zip(ratings_without, ratings_with, strict=False)
             )
             if r_w != r_a
         ]

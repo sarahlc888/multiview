@@ -3,10 +3,10 @@
 run_name: "benchmark_debug_cw"
 logging:
   level: DEBUG
-  output_file: temp.{run_name}.log  # Log to console only
+  output_file: "temp.${run_name}.log"  # Log to console only
 seed: 42
 use_cache: true
-step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)
+step_through: true  # Enable breakpoints for debugging (set to true to step through code)
 
 # Task configuration
 tasks:
@@ -25,8 +25,8 @@ tasks:
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
     use_spurious_hard_negs: true   # Include spurious hard negatives in candidate pool
     embedding_preset: "hf_qwen3_embedding_8b"
-    max_num_candidates: 5  # Max candidates shown to LM judge (per strategy for 'multi')
-    n_schema_samples: 4
+    max_num_candidates: 10  # Max candidates shown to LM judge (per strategy for 'multi')
+    n_schema_samples: 10
 
     # Quality filtering parameters
     rate_triplet_quality: true  # Enable LM-based quality rating

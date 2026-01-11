@@ -1,5 +1,7 @@
 """Analogies document_set loader."""
 
+from __future__ import annotations
+
 import logging
 import re
 from typing import Any
@@ -30,11 +32,23 @@ class AnalogiesDocSet(BaseDocSet):
         - analogy_type is a known criterion extracted from prefix field (e.g., "antonyms - gradable")
         - Category names are extracted from file paths using regex pattern
         - Robust error handling for malformed records
+        - Provides precomputed annotations for analogy_type criterion
     """
 
     DATASET_PATH = "relbert/analogy_questions"
     DESCRIPTION = "Word analogy pairs (stem and answer)"
     KNOWN_CRITERIA = ["analogy_type"]  # prefix field (e.g., "country-capital")
+
+    def __init__(self, config: dict | None = None):
+        """Initialize AnalogiesDocSet.
+
+        Args:
+            config: Optional configuration dict
+        """
+        super().__init__(config)
+        # Initialize precomputed annotations as instance variable
+        # Will be populated during load_documents()
+        self.PRECOMPUTED_ANNOTATIONS = {}
 
     def load_documents(self) -> list[Any]:
         """Load analogy pairs from HuggingFace.
@@ -116,6 +130,10 @@ class AnalogiesDocSet(BaseDocSet):
             documents = documents[:max_docs]
 
         logger.debug(f"Loaded {len(documents)} word pair documents from Analogies")
+
+        # Build precomputed annotations for analogy_type criterion
+        self._build_precomputed_annotations(documents)
+
         return documents
 
     def get_document_text(self, document: Any) -> str:
@@ -138,3 +156,27 @@ class AnalogiesDocSet(BaseDocSet):
 
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
+
+    def _build_precomputed_annotations(self, documents: list[dict]) -> None:
+        """Build precomputed annotations from loaded documents.
+
+        Creates a mapping: {document_text: {"criterion_value": analogy_type}}
+
+        Args:
+            documents: List of document dicts with 'text' and 'analogy_type' fields
+        """
+        annotations = {}
+
+        for doc in documents:
+            if isinstance(doc, dict):
+                text = doc.get("text")
+                analogy_type = doc.get("analogy_type")
+
+                if text and analogy_type:
+                    annotations[text] = {"criterion_value": analogy_type}
+
+        self.PRECOMPUTED_ANNOTATIONS["analogy_type"] = annotations
+
+        logger.info(
+            f"Built precomputed annotations for analogy_type: {len(annotations)} documents"
+        )

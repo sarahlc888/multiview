@@ -9,17 +9,16 @@ CRITERIA DESCRIPTION:
 SAMPLE DOCUMENTS:
 {sample_documents}
 
-Your task is to create a demonstration for how to annotate a document with respect to the criterion.
+Your task is to create a "golden" demonstration for how to create a criteria annotation.
 
 The annotation should include two sections:
-1) Annotation trace: freeform text with justification and references to the document
+1) Annotation trace: freeform text with justification and explicit references to the document
 2) Final summary: concise, structured summary
-  - Try to use as structured of a format as possible. Prefer not to use prose. If the hint specifies a desired format, the final summary should follow that format.
-  - Should not reference the specifics of the document unless there's no other way to illustrate the point
-  - Should be invariant to spurious factors
+  - Prefer not to use prose. The format should be as structured as possible. If the hint specifies a desired format, the final summary should follow that format.
   - If two documents are similar with respect to the criterion, their final summaries should have high lexical overlap
+  - IMPORTANT: Should not explicitly reference or quote the document. The summary should be invariant to everything except the most essential criteria-specific attributes.
 
-Include a demonstration showing both sections for one example document.
+Include a demonstration showing both outputs for one example document.
 
 Output valid JSON:
 {

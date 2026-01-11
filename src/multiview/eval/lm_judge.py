@@ -4,6 +4,8 @@ This module implements evaluation methods that use language models to judge
 similarity between documents in triplets.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

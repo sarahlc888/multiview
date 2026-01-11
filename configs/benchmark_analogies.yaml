@@ -1,19 +1,21 @@
 # Benchmark configuration for GSM8K arithmetic evaluation
 # Goal: Generate 256 triplets and evaluate with 4 methods
-run_name: "benchmark_debug"
+run_name: "benchmark_debug_analogies"
 logging:
   level: DEBUG
-  output_file: temp.log  # Log to console only
+  output_file: "temp.${run_name}.log"  # Log to console only
 seed: 42
 use_cache: true
-step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)
-
+step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 100  # Need more docs than triplets for good sampling
-    max_triplets: 20
-    num_synthetic_docs: 10    # Absolute number of synthetic docs to generate
+    max_docs: 20  # Need more docs than triplets for good sampling
+    max_triplets: 4
+    num_synthetic_docs: 8    # Absolute number of synthetic docs to generate
+    # max_docs: 100  # Need more docs than triplets for good sampling
+    # max_triplets: 20
+    # num_synthetic_docs: 10    # Absolute number of synthetic docs to generate
     # For quick testing, use: max_docs: 10, max_triplets: 2
     triplet_style: "lm_all"  # Rich annotations (categories + tags + summaries)
     add_synthetic_docs: false
@@ -22,8 +24,8 @@ tasks:
     candidate_strategy: "multi"  # BM25 + embedding + Jaccard
     use_spurious_hard_negs: true   # Include spurious hard negatives in candidate pool
     embedding_preset: "hf_qwen3_embedding_8b"
-    max_num_candidates: 5  # Max candidates shown to LM judge (per strategy for 'multi')
-    n_schema_samples: 4
+    max_num_candidates: 10  # Max candidates shown to LM judge (per strategy for 'multi')
+    n_schema_samples: 10
 
     # Quality filtering parameters
     rate_triplet_quality: true  # Enable LM-based quality rating
@@ -34,19 +36,12 @@ tasks:
                             # Set to null to rate but not filter
 
   task_list:
-    - document_set: gsm8k
-      criterion: arithmetic
-      add_synthetic_docs: true  # Enable synthetic document generation for GSM8K
-      # Optional per-task overrides:
-      # max_docs: 500
-      # max_triplets: 100
-      # triplet_style: random
-    # - document_set: gsm8k
-    #   criterion: final_answer_units
-    # - document_set: crossword_clues
-    #   criterion: clue_type
-    # - document_set: rocstories
-    #   criterion: num_character_entities
+    - document_set: analogies
+      dataset_config: bats
+      criterion: analogy_type
+      triplet_style: prelabeled  # Use prelabeled triplets (based on pre-existing criterion values)
+      prelabeled_selection: hard_negatives  # "random" or "hard_negatives" (BM25-based)
+      max_triplets: 10
 
 # Evaluation methods configuration
 methods_to_evaluate:

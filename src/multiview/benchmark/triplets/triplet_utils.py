@@ -14,6 +14,8 @@ Related modules:
     - utils.py: Helper functions (jaccard_similarity, format_annotation_for_display, etc.)
 """
 
+from __future__ import annotations
+
 import logging
 
 import numpy as np
@@ -58,6 +60,232 @@ def create_random_triplets(
         )
         triplets.append(tuple(sampled_indices))
 
+    return triplets
+
+
+def _select_with_bm25(
+    anchor_idx: int,
+    documents: list[str],
+    candidate_indices: list[int],
+    num_to_select: int,
+    prefer_low_score: bool,
+    seed: int,
+) -> list[int]:
+    """Select candidates using BM25 scores.
+
+    Args:
+        anchor_idx: Index of the anchor document
+        documents: List of all document texts
+        candidate_indices: List of candidate document indices to select from
+        num_to_select: Number of candidates to select
+        prefer_low_score: If True, prefer LOW BM25 scores (hard positives)
+                         If False, prefer HIGH BM25 scores (hard negatives)
+        seed: Random seed for tie-breaking
+
+    Returns:
+        List of selected candidate indices
+
+    Note:
+        - Hard positives: Documents that share a criterion but have low text similarity
+        - Hard negatives: Documents that don't share a criterion but have high text similarity
+    """
+    from multiview.utils.bm25_utils import compute_bm25_scores
+
+    if len(candidate_indices) == 0:
+        return []
+
+    if len(candidate_indices) <= num_to_select:
+        return candidate_indices
+
+    # Compute BM25 scores from anchor to all documents
+    bm25_scores = compute_bm25_scores(documents, anchor_idx)
+
+    # Extract scores for candidate indices
+    candidate_scores = [(idx, bm25_scores[idx]) for idx in candidate_indices]
+
+    # Sort by score
+    if prefer_low_score:
+        # For hard positives: lowest scores first
+        candidate_scores.sort(key=lambda x: (x[1], x[0]))  # Use idx as tiebreaker
+    else:
+        # For hard negatives: highest scores first
+        candidate_scores.sort(key=lambda x: (-x[1], x[0]))  # Use idx as tiebreaker
+
+    # Select top num_to_select
+    selected = [idx for idx, _ in candidate_scores[:num_to_select]]
+
+    return selected
+
+
+def create_prelabeled_triplets(
+    documents: list[str] | list[dict],
+    annotations: list[dict],
+    max_triplets: int | None = None,
+    selection_strategy: str = "hard_negatives",
+    allow_multi_class: bool = True,
+    seed: int = 42,
+) -> list[tuple[int, int, int]]:
+    """Create triplets based on pre-existing criterion labels.
+
+    For datasets with known gold labels, creates triplets where:
+    - Positives: Documents sharing at least one criterion value with anchor
+    - Negatives: Documents sharing NO criterion values with anchor
+
+    Default uses "hard_negatives" strategy (BM25-based selection)
+
+    Args:
+        documents: List of document texts or dicts (will extract text if needed)
+        annotations: List of annotation dicts with "criterion_value" field
+        max_triplets: Max number of triplets (None = use all documents as anchors)
+        selection_strategy: "random" or "hard_negatives" (BM25-based)
+        allow_multi_class: Allow documents to have multiple criterion values
+        seed: Random seed for deterministic sampling
+
+    Returns:
+        List of (anchor_id, positive_id, negative_id) triplets
+
+    Raises:
+        ValueError: If documents don't have sufficient criterion diversity
+    """
+    from collections import defaultdict
+
+    if len(documents) < 3:
+        logger.warning("Need at least 3 documents to create triplets")
+        return []
+
+    # Extract text from documents (handle both string and dict formats)
+    document_texts = []
+    for doc in documents:
+        if isinstance(doc, dict):
+            document_texts.append(doc.get("text", str(doc)))
+        elif isinstance(doc, str):
+            document_texts.append(doc)
+        else:
+            document_texts.append(str(doc))
+
+    documents = document_texts
+
+    # Build classmap: {criterion_value: [doc_indices]}
+    classmap = defaultdict(list)
+    doc_to_classes = {}  # doc_idx -> [criterion_values]
+
+    for idx, ann in enumerate(annotations):
+        criterion_value = ann.get("criterion_value")
+        if criterion_value is None:
+            logger.warning(f"Document {idx} has no criterion_value, skipping")
+            continue
+
+        # Support multi-class: criterion_value can be a list or single value
+        if isinstance(criterion_value, list):
+            values = criterion_value
+        else:
+            values = [criterion_value]
+
+        doc_to_classes[idx] = values
+        for value in values:
+            classmap[value].append(idx)
+
+    if len(classmap) < 2:
+        logger.warning(
+            f"Need at least 2 distinct criterion values to create triplets, found {len(classmap)}"
+        )
+        return []
+
+    logger.info(
+        f"Building prelabeled triplets: {len(doc_to_classes)} documents, "
+        f"{len(classmap)} distinct criterion values"
+    )
+
+    # Helper: check if two doc indices share any criterion value
+    def shares_criterion(idx1: int, idx2: int) -> bool:
+        if idx1 not in doc_to_classes or idx2 not in doc_to_classes:
+            return False
+        classes1 = set(doc_to_classes[idx1])
+        classes2 = set(doc_to_classes[idx2])
+        return len(classes1 & classes2) > 0
+
+    # Select anchor documents
+    anchor_indices = list(doc_to_classes.keys())
+    if max_triplets is not None and max_triplets < len(anchor_indices):
+        # Deterministic sampling of anchors
+        anchor_indices = deterministic_sample(
+            anchor_indices, max_triplets, seed_base=f"criterion_anchors_{seed}"
+        )
+
+    triplets = []
+    used_docs = set(anchor_indices)  # Track used docs to avoid repeats
+
+    for anchor_idx in anchor_indices:
+        # Find positive candidates: share at least one criterion value, not anchor itself
+        pos_candidates = [
+            idx
+            for idx in doc_to_classes.keys()
+            if idx != anchor_idx
+            and idx not in used_docs
+            and shares_criterion(anchor_idx, idx)
+        ]
+
+        # Find negative candidates: share NO criterion values
+        neg_candidates = [
+            idx
+            for idx in doc_to_classes.keys()
+            if idx != anchor_idx
+            and idx not in used_docs
+            and not shares_criterion(anchor_idx, idx)
+        ]
+
+        if len(pos_candidates) == 0:
+            logger.warning(
+                f"No positive candidates for anchor {anchor_idx} "
+                f"(criterion: {doc_to_classes[anchor_idx]}), skipping"
+            )
+            continue
+
+        if len(neg_candidates) == 0:
+            logger.warning(
+                f"No negative candidates for anchor {anchor_idx} "
+                f"(criterion: {doc_to_classes[anchor_idx]}), skipping"
+            )
+            continue
+
+        # Select positive and negative based on strategy
+        if selection_strategy == "random":
+            # Random selection
+            pos_idx = deterministic_sample(
+                pos_candidates, 1, seed_base=f"criterion_pos_{anchor_idx}_{seed}"
+            )[0]
+            neg_idx = deterministic_sample(
+                neg_candidates, 1, seed_base=f"criterion_neg_{anchor_idx}_{seed}"
+            )[0]
+
+        elif selection_strategy == "hard_negatives":
+            # BM25-based selection (implemented separately)
+            pos_idx = _select_with_bm25(
+                anchor_idx=anchor_idx,
+                documents=documents,
+                candidate_indices=pos_candidates,
+                num_to_select=1,
+                prefer_low_score=True,  # Hard positives: low BM25
+                seed=seed,
+            )[0]
+
+            neg_idx = _select_with_bm25(
+                anchor_idx=anchor_idx,
+                documents=documents,
+                candidate_indices=neg_candidates,
+                num_to_select=1,
+                prefer_low_score=False,  # Hard negatives: high BM25
+                seed=seed,
+            )[0]
+
+        else:
+            raise ValueError(f"Unknown selection_strategy: {selection_strategy}")
+
+        triplets.append((anchor_idx, pos_idx, neg_idx))
+        used_docs.add(pos_idx)
+        used_docs.add(neg_idx)
+
+    logger.info(f"Created {len(triplets)} prelabeled triplets")
     return triplets
 
 

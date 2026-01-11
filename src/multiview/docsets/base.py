@@ -1,5 +1,7 @@
 """Base class for document_sets."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,11 @@ class BaseDocSet(ABC):
     # Maps criterion name → {remix_prompt}
     # Subclasses can override to provide custom synthesis logic per criterion
     SYNTHESIS_CONFIGS: dict[str, dict[str, str]] = {}
+
+    # Optional: Pre-computed annotations for datasets with gold labels
+    # Format: {criterion_name: {document_text: {"criterion_value": value}}}
+    # Subclasses can populate this to skip LM-based annotation generation
+    PRECOMPUTED_ANNOTATIONS: dict[str, dict[str, dict]] = {}
 
     def __init__(self, config: dict | None = None):
         """Initialize document_set.
@@ -95,3 +102,27 @@ class BaseDocSet(ABC):
     def get_criterion_metadata(self, criterion: str) -> dict[str, Any]:
         """Get metadata for a criterion (description, schema hints, etc.)."""
         return self.CRITERION_METADATA.get(criterion, {})
+
+    def has_precomputed_annotations(self, criterion: str) -> bool:
+        """Check if criterion has pre-computed annotations.
+
+        Args:
+            criterion: The criterion name
+
+        Returns:
+            True if precomputed annotations are available for this criterion
+        """
+        return criterion in self.PRECOMPUTED_ANNOTATIONS
+
+    def get_precomputed_annotations(self, criterion: str) -> dict[str, dict]:
+        """Get pre-computed annotations for a criterion.
+
+        Args:
+            criterion: The criterion name
+
+        Returns:
+            Dict mapping document text -> annotation dict
+            (e.g., {"doc text": {"criterion_value": "value"}})
+            Returns empty dict if no precomputed annotations exist
+        """
+        return self.PRECOMPUTED_ANNOTATIONS.get(criterion, {})

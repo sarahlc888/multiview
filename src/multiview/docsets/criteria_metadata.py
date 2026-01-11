@@ -52,15 +52,9 @@ GSM8K_CRITERIA = {
 # Crossword Clues
 CROSSWORD_CRITERIA = {
     "clue_type": {
-        "description": "The type of or technique used in the crossword clue (definition, wordplay, cryptic, fill-in-the-blank, trivia, etc.).",
+        "description": "The type of or technique used in the crossword clue. The method the clue uses to hint at the answer.",
         "category_schema_hint": "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, etc.",
-        "tag_schema_hint": "Create tags for clue properties: uses_wordplay, uses_abbreviation, requires_trivia, uses_definition, is_cryptic, is_themed, etc.",
-        # Tag specific techniques:
-        # - Uses anagram
-        # - Uses abbreviation
-        # - Uses pun or homophone
-        # - References pop culture
-        # - Requires domain knowledge (science, history, etc.)
+        "tag_schema_hint": "Create tags for very specific clue properties: e.g. uses_wordplay, uses_abbreviation, requires_trivia, uses_definition, is_cryptic, is_themed, uses_anagram, is_playful_tone, is_serious_tone, is_simple, is_complicated, references_highly_obscure_fact, requires_domain_knowledge, etc.",
     },
     "domain": {
         "description": "The subject domain or topic of the clue (geography, history, pop culture, science, sports, etc.).",

@@ -4,6 +4,8 @@ This module implements evaluation methods that use embedding models to compute
 similarity scores via cosine similarity, then evaluate triplet accuracy.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

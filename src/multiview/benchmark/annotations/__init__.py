@@ -77,9 +77,46 @@ def annotate_with_known_criterion(
     return annotations
 
 
+def annotate_with_precomputed(
+    documents: list[str],
+    document_set,
+    criterion: str,
+) -> list[dict]:
+    """Load pre-computed annotations from dataset.
+
+    Args:
+        documents: List of document strings or dicts
+        document_set: DocumentSet instance with precomputed annotations
+        criterion: Criterion name to load annotations for
+
+    Returns:
+        List of annotation dicts (format: {"criterion_value": value})
+    """
+    precomputed = document_set.get_precomputed_annotations(criterion)
+
+    annotations = []
+    for doc in documents:
+        # Extract text from document (handles both string and dict documents)
+        doc_text = document_set.get_document_text(doc)
+
+        if doc_text in precomputed:
+            annotations.append(precomputed[doc_text])
+        else:
+            logger.warning(
+                f"Document not found in precomputed annotations for {criterion}: {doc_text[:100]}..."
+            )
+            annotations.append({"criterion_value": None})
+
+    logger.info(
+        f"Loaded precomputed annotations for {criterion}: {len(annotations)} documents"
+    )
+    return annotations
+
+
 __all__ = [
     # Main entry points
     "annotate_with_known_criterion",
+    "annotate_with_precomputed",
     "annotate_with_lm_all",
     # Schema generation
     "generate_category_schema",

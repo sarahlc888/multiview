@@ -3,6 +3,8 @@
 This module coordinates running benchmarks across multiple tasks and methods.
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 from typing import Any
