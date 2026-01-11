@@ -11,6 +11,7 @@ from multiview.docsets.hackernews import HackerNewsDocSet
 from multiview.docsets.infinite_chats import InfiniteChatsDocSet
 from multiview.docsets.infinite_prompts import InfinitePromptsDocSet
 from multiview.docsets.moralfables import MoralFablesDocSet
+from multiview.docsets.onion_news import OnionNewsDocSet
 from multiview.docsets.rocstories import RocStoriesDocSet
 
 DOCSETS = {
@@ -25,6 +26,7 @@ DOCSETS = {
     "infinite_prompts": InfinitePromptsDocSet,
     "infinite_chats": InfiniteChatsDocSet,
     "moralfables": MoralFablesDocSet,
+    "onion_news": OnionNewsDocSet,
 }
 
 __all__ = [
@@ -41,4 +43,5 @@ __all__ = [
     "InfinitePromptsDocSet",
     "InfiniteChatsDocSet",
     "MoralFablesDocSet",
+    "OnionNewsDocSet",
 ]

@@ -121,3 +121,32 @@ ABSTRACTSIM_CRITERIA = {
         "tag_schema_hint": "Create tags for abstraction properties: uses_named_entities, uses_specific_details, uses_concrete_examples, uses_general_categories, uses_broad_concepts, uses_abstract_concepts, describes_specific_instance, describes_general_pattern, includes_numbers_or_quantities, includes_dates_or_times, describes_action, describes_state, describes_relationship.",
     },
 }
+
+# Onion News: Satirical headlines from The Onion
+ONION_NEWS_CRITERIA = {
+    "topic": {
+        "description": "The literal subject matter of the headline (what is the joke about?).",
+        "category_schema_hint": None,
+        "tag_schema_hint": "Create tags for different topics and subject matter in the headlines.",
+    },
+    "joketype": {
+        "description": (
+            "What makes the joke funny? Beyond the subject matter/content, what strategies does the headline use?"
+            " e.g. "
+            "Irony – Intended meaning is opposite of literal meaning; "
+            "Character – Comedic character acting on personality traits; "
+            "Reference – Common experiences that audiences can relate to; "
+            "Shock – Surprising jokes typically involving sex, drugs, gross-out humor, swearing; "
+            "Parody – Mimic a familiar character, trope or cliche in an unfamiliar way; "
+            "Hyperbole – Exaggeration to absurd extremes; "
+            "Wordplay – Puns, rhymes, double entendres; "
+            "Analogy – Comparing two disparate things; "
+            "Madcap – Crazy, wacky, silly, nonsensical; "
+            "Meta-humor – Jokes about jokes, or about the idea of comedy; "
+            "Misplaced Focus – Attention is focused on the wrong thing\n"
+            "Important: consider only on the most salient strategies in the joke."
+        ),
+        "category_schema_hint": "Consider categories based on comedic strategies: irony, character-based, reference, shock, parody, hyperbole, wordplay, analogy, madcap, meta-humor, misplaced focus, etc.",
+        "tag_schema_hint": "Create tags for different joke types and strategies: uses_irony, uses_character, uses_reference, uses_shock, uses_parody, uses_hyperbole, uses_wordplay, uses_analogy, uses_madcap, uses_meta_humor, uses_misplaced_focus, etc.",
+    },
+}
