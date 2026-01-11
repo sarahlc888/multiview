@@ -12,6 +12,7 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import ABSTRACTSIM_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,9 @@ class AbstractSimDocSet(BaseDocSet):
     DATASET_PATH = "biu-nlp/abstract-sim"
     DESCRIPTION = "Wikipedia sentences with abstract descriptions (good/bad)"
     KNOWN_CRITERIA = ["abstract_similarity"]
+
+    # Metadata for LM-based criteria (descriptions, schema hints, etc.)
+    CRITERION_METADATA = ABSTRACTSIM_CRITERIA
 
     def __init__(self, config: dict | None = None):
         """Initialize AbstractSimDocSet.

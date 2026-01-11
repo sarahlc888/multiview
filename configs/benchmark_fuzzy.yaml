@@ -11,7 +11,7 @@ step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 100  # Small dataset for quick testing
+    max_docs: 20  # Small dataset for quick testing
     max_triplets: 5
 
     num_synthetic_docs: 0
@@ -29,10 +29,17 @@ tasks:
     prelabeled_selection: "hard_negatives"  # BM25-based selection
 
   task_list:
-    # Test all 4 moral criteria with prelabeled triplets
+    # - document_set: hackernews
+    #   criterion: angle_of_interest
+    #   max_triplets: 5
     - document_set: rocstories
-      criterion: setting
+      criterion: seven_basic_plots
       max_triplets: 10
+    # - document_set: rocstories
+    #   criterion: setting
+    #   max_triplets: 10
+
+
 
 # Evaluation methods configuration
 methods_to_evaluate:
