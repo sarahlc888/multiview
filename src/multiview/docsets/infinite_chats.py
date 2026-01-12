@@ -1,4 +1,14 @@
-"""Infinite chats responses document_set loader."""
+"""Infinite chats full conversations document_set loader.
+
+Loads full conversations from HuggingFace (liweijiang/infinite-chats-taxonomy).
+Groups conversations by first user message (prompt), similar to AidanBench approach.
+
+Each unique prompt is treated as a separate DocumentSet. Documents are full conversations
+formatted with role separators (=== USER ===, === ASSISTANT ===).
+
+Streams sample_size conversations (default: 1000), groups by prompt, then returns
+conversations for selected prompt. Use prompt_id or prompt_text to specify which prompt.
+"""
 
 from __future__ import annotations
 

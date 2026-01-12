@@ -1,4 +1,10 @@
-"""HackerNews posts document_set loader."""
+"""HackerNews posts document_set loader.
+
+Loads posts from HuggingFace (julien040/hacker-news-posts) and formats as "title\\nurl".
+Posts filtered by score threshold (default: 10). Uses streaming mode for max_docs < 100.
+
+Note: Score values not preserved after formatting (documents are strings, not dicts).
+"""
 
 import logging
 from typing import Any

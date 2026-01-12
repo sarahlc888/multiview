@@ -96,6 +96,11 @@ os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(HF_CACHE_DIR))
 # Infinite Chats dataset configuration
 INFINITE_CHATS_DATASET_ID = "liweijiang/infinite-chats-taxonomy"
 
+# AidanBench dataset configuration
+AIDANBENCH_REPO_URL = "https://github.com/aidanmclaughlin/AidanBench.git"
+AIDANBENCH_CACHE_DIR = CACHE_ROOT / "AidanBench"
+AIDANBENCH_RESULTS_PATH = AIDANBENCH_CACHE_DIR / "results" / "results.json"
+
 # ============================================================================
 # Create directories
 # ============================================================================
