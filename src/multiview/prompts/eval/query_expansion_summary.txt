@@ -1,0 +1,21 @@
+You are analyzing a document based on a specific criterion.
+
+CRITERION: {criterion}
+
+CRITERION DESCRIPTION: {criterion_description}
+
+DOCUMENT:
+{document}
+
+Your task: Generate a concise summary of this document focusing ONLY on aspects relevant to the criterion. Be specific and concrete.
+
+Guidelines:
+- Focus on criterion-relevant information
+- Be concrete and specific (include numbers, names, entities)
+- Keep it concise (2-4 sentences maximum)
+- If the document has no relevant information, state that clearly
+
+Return JSON with:
+- "final_summary": Your criterion-focused summary (string)
+
+Example: {"final_summary": "This document discusses X, Y, and Z in relation to [criterion]."}
