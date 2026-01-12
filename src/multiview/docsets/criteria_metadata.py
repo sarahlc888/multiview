@@ -11,6 +11,7 @@ document sets. Each criterion includes:
 """
 
 # GSM8K: Math word problems
+# GSM8K word problems have clear orthogonal criteria (algebraic structure vs. narrative context)
 GSM8K_CRITERIA = {
     "arithmetic": {
         "description": "The exact sequence of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem.",
@@ -135,7 +136,11 @@ HACKERNEWS_CRITERIA = {
         # "pairwise_sim_hint": "Two posts are similar if they appeal to the same type of reader interest or curiosity. Consider the underlying angle: technical deep-dive, business/startup news, philosophical/societal commentary, practical how-to, academic research, industry gossip, futurism/speculation, nostalgia/history, controversy/debate-starter, etc.",
         "category_schema_hint": "Consider categories like: technical deep-dive (for engineers wanting implementation details), business/startup news (for founders/VCs tracking industry), thought leadership (big ideas and philosophy), practical tutorial (devs seeking solutions), academic research (for researchers/intellectuals), career/hiring (for job seekers), product launch (for early adopters), controversy/hot take (for debate enthusiasts), historical retrospective on tech developments (for tech historians), etc.",
         "tag_schema_hint": "Create tags for interest angles: appeals_to_engineers, appeals_to_founders, appeals_to_researchers, appeals_to_job_seekers, appeals_to_early_adopters, technical_depth, business_implications, philosophical_angle, practical_utility, academic_rigor, controversial_take, historical_perspective, futurist_speculation, inside_baseball; cutting_edge_physical_science (new developments in biology, physics, etc), cutting_edge_math (new developments in math research, typically from quanta), youth_wow_factor (a cool project created by someone very young), fun_toy_project (not interesting because of technical complexity but interesting because it is a fun idea executed well, e.g. wikipedia in tik tok format), browser_game (a playable game, e.g. snake on a sphere), whimsical_gimmick (a fun website that is whimsical, e.g. website that pulls up an image of a person pointing wherever your cursor is at that moment), web_design (a link that is impressive due to its aesthetic value), personal_project_white_whale (a long running personal project), elegant_technical_deep_dive (a deep dive into re-implementing a very complex system from scratch, typically highlighting that it has very low lines of code relative to the full systems that it mocks, may also have educational value, e.g. nanochat), tech_think_piece (general interest pieces in outlets like the New Yorker, discussing some tech related topics), startup_news (news about companies raising money, IPOs, acquisitions, etc), tech_philosophy (philosophy or nuggets of wisdom from individual programmers on tech blogs).",
-    }
+    },
+    "article_topic": {
+        "description": "The topic or subject matter of the article (technology, business, science, culture, politics, etc.).",
+        "tag_schema_hint": "Does the article reference specific technologies, companies, products, people, events, etc.?",
+    },
 }
 # Onion News: Satirical headlines from The Onion
 ONION_NEWS_CRITERIA = {

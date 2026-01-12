@@ -4,6 +4,8 @@ Given three texts, (a), (b), and (c), please judge whether text (a) is more simi
 
 Each text is accompanied by a summary that highlights relevant aspects based on the similarity criteria.
 
+IMPORTANT: The summaries are noisy. Always verify against actual document content.
+
 ### Similarity criteria
 
 {similarity_criteria}

@@ -57,6 +57,10 @@ methods_to_evaluate:
       preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
     - name: gemini_flash_triplet_no_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
+    - name: gemini_pro_triplet_with_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_pro
+    - name: gemini_pro_triplet_no_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_pro
 
   # Method 3 & 4: Embeddings with/without instructions
   embeddings:
