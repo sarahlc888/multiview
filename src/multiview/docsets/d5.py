@@ -1,23 +1,16 @@
 """D5 ABC news dataset loader with descriptor applicability scores.
 
-The D5 dataset contains:
-- 2000 ABC news documents (headlines/snippets)
-- 60 descriptors (hypotheses about content)
-- Continuous applicability scores [0, 1] for each document-descriptor pair
+Loads 2000 ABC news articles with 60 descriptor applicability scores (0-1 continuous).
+Downloads output.pkl from GitHub (ruiqi-zhong/D5) on first use, caches locally.
 
-PKL Structure:
-{
-    "descriptor_text_1": {
-        "hypothesis": "descriptor text",
-        "sample2score": {"doc_text_1": 0.91, "doc_text_2": 0.03, ...},
-        ...
-    },
-    ...
-}
+Structure: PKL with descriptors as keys, each containing sample2score dict mapping
+document text to applicability score. Binarized at threshold 0.5 (configurable).
 
-For prelabeled triplet creation, we binarize scores at threshold 0.5:
-- "applicable" if score >= 0.5
-- "not_applicable" if score < 0.5
+Key features:
+- Pre-labeled multi-criteria dataset (no LM annotation needed)
+- 60 KNOWN_CRITERIA (description_0 through description_59)
+- Supports prelabeled triplet creation using binary labels
+- Mean score ~0.13 (13% positive labels)
 """
 
 from __future__ import annotations

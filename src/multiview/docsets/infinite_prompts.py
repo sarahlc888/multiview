@@ -1,4 +1,13 @@
-"""Infinite chats prompts document_set loader."""
+"""Infinite chats prompts document_set loader.
+
+Loads user prompts (first messages) from HuggingFace (liweijiang/infinite-chats-taxonomy).
+26,100+ conversations with pre-labeled category tags.
+
+Features:
+- Always uses streaming mode (efficient for any sample size)
+- Optional category_filter to filter by topics (e.g., ["coding", "debugging"])
+- Categories stored as comma-separated string in precomputed annotations
+"""
 
 import logging
 from typing import Any

@@ -1,6 +1,7 @@
 """DocSet registry for benchmark tasks."""
 
 from multiview.docsets.abstractsim import AbstractSimDocSet
+from multiview.docsets.aidanbench import AidanBenchDocSet
 from multiview.docsets.analogies import AnalogiesDocSet
 from multiview.docsets.base import BaseDocSet
 from multiview.docsets.crossword_clues import CrosswordCluesDocSet
@@ -16,6 +17,7 @@ from multiview.docsets.rocstories import RocStoriesDocSet
 
 DOCSETS = {
     "abstractsim": AbstractSimDocSet,
+    "aidanbench": AidanBenchDocSet,
     "analogies": AnalogiesDocSet,
     "d5": D5DocSet,
     "dickinson": DickinsonDocSet,
@@ -31,6 +33,7 @@ DOCSETS = {
 
 __all__ = [
     "AbstractSimDocSet",
+    "AidanBenchDocSet",
     "AnalogiesDocSet",
     "BaseDocSet",
     "D5DocSet",
