@@ -305,36 +305,6 @@ class TestAllAnnotation:
         assert "summary" in mock_annotation
 
 
-class TestAnnotationEdgeCases:
-    """Tests for edge cases in annotation system."""
-
-    def test_empty_documents_list(self):
-        """Test handling of empty document list."""
-        # This should not crash
-        # (Would need mocking to test without API calls)
-        pass
-
-    def test_single_document(self):
-        """Test annotation with single document."""
-        # Should work with n_schema_samples=1
-        pass
-
-    def test_very_long_document(self):
-        """Test annotation with very long document."""
-        # Should handle token limits gracefully
-        pass
-
-    def test_special_characters_in_document(self):
-        """Test annotation with special characters."""
-        special_docs = [
-            "Problem with $10.50 and €20.30",
-            "Use the formula: x = (a + b) / 2",
-            "Text with emoji: 🎯 Target is 100%",
-        ]
-        # Should handle without crashing
-        pass
-
-
 class TestAnnotationHelpers:
     """Tests for annotation helper utilities."""
 
