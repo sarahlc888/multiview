@@ -1,0 +1,57 @@
+# Test configuration for query expansion evaluation
+# Goal: Test query expansion on a small dataset
+run_name: "test_query_expansion"
+logging:
+  level: DEBUG
+  output_file: test_query_expansion.log
+seed: 42
+use_cache: true
+step_through: false
+
+# Task configuration (small scale for testing)
+tasks:
+  defaults:
+    max_docs: 50  # Small dataset for quick testing
+    max_triplets: 10  # Just a few triplets
+    num_synthetic_docs: 5  # Few synthetic docs
+    triplet_style: "lm_all"  # Rich annotations for criterion-aware summaries
+    add_synthetic_docs: false
+
+    # Triplet creation parameters
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 5
+    n_schema_samples: 4
+
+    # Quality filtering
+    rate_triplet_quality: false  # Disable for faster testing
+    min_triplet_quality: null
+
+  task_list:
+    - document_set: gsm8k
+      criterion: arithmetic
+
+# Evaluation methods
+methods_to_evaluate:
+  # Baseline: BM25 on raw documents
+  bm25:
+    - name: bm25_raw
+
+  # Query expansion with different retrieval methods
+  query_expansion:
+    # BM25 over summaries
+    - name: qe_bm25
+      retrieval_method: bm25
+      summary_preset: query_expansion_summary_gemini
+
+    # Embeddings over summaries
+    - name: qe_embeddings
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_gemini
+      embedding_preset: hf_qwen3_embedding_8b
+
+  # For comparison: embeddings on raw documents
+  embeddings:
+    - name: qwen3_8b_raw
+      preset: hf_qwen3_embedding_8b

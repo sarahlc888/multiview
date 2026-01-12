@@ -77,6 +77,15 @@ from .triplet_selection import (
     TRIPLET_SELECT_POSITIVE_GEMINI,
 )
 
+# Query expansion (for evaluation)
+from .query_expansion import (
+    QUERY_EXPANSION_SUMMARY_CLAUDE_HAIKU,
+    QUERY_EXPANSION_SUMMARY_CLAUDE_SONNET,
+    QUERY_EXPANSION_SUMMARY_GEMINI,
+    QUERY_EXPANSION_SUMMARY_GEMINI_FLASH,
+    QUERY_EXPANSION_SUMMARY_GEMINI_PRO,
+)
+
 # ============================================================================
 # PRESET REGISTRY
 # ============================================================================
@@ -127,6 +136,12 @@ PRESET_REGISTRY = {
     "summary_generate_gemini": SUMMARY_GENERATE_GEMINI,
     "triplet_select_positive_gemini": TRIPLET_SELECT_POSITIVE_GEMINI,
     "triplet_select_negative_gemini": TRIPLET_SELECT_NEGATIVE_GEMINI,
+    # Query expansion presets
+    "query_expansion_summary_gemini": QUERY_EXPANSION_SUMMARY_GEMINI,
+    "query_expansion_summary_gemini_flash": QUERY_EXPANSION_SUMMARY_GEMINI_FLASH,
+    "query_expansion_summary_gemini_pro": QUERY_EXPANSION_SUMMARY_GEMINI_PRO,
+    "query_expansion_summary_claude_haiku": QUERY_EXPANSION_SUMMARY_CLAUDE_HAIKU,
+    "query_expansion_summary_claude_sonnet": QUERY_EXPANSION_SUMMARY_CLAUDE_SONNET,
 }
 
 
@@ -205,4 +220,9 @@ __all__ = [
     "SUMMARY_GENERATE_GEMINI",
     "TRIPLET_SELECT_POSITIVE_GEMINI",
     "TRIPLET_SELECT_NEGATIVE_GEMINI",
+    "QUERY_EXPANSION_SUMMARY_GEMINI",
+    "QUERY_EXPANSION_SUMMARY_GEMINI_FLASH",
+    "QUERY_EXPANSION_SUMMARY_GEMINI_PRO",
+    "QUERY_EXPANSION_SUMMARY_CLAUDE_HAIKU",
+    "QUERY_EXPANSION_SUMMARY_CLAUDE_SONNET",
 ]

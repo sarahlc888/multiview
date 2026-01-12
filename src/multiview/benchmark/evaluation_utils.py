@@ -16,6 +16,8 @@ from multiview.eval import (
     evaluate_with_embeddings,
     evaluate_with_lm_judge_pair,
     evaluate_with_lm_judge_triplet,
+    evaluate_with_query_expansion,
+    evaluate_with_query_expansion_bm25,
 )
 
 logger = logging.getLogger(__name__)
@@ -192,6 +194,63 @@ def evaluate_method(
         raw = evaluate_with_bm25(
             documents=document_texts,
             triplet_ids=task.triplets,
+        )
+        return finalize_method_results(raw)
+
+    if method_type == "query_expansion":
+        retrieval_method = method_config.get("retrieval_method", "bm25")
+        summary_preset = method_config.get(
+            "summary_preset", "query_expansion_summary_gemini"
+        )
+        embedding_preset = method_config.get("embedding_preset", "openai_embedding_small")
+        preset_overrides = method_config.get("preset_overrides")
+
+        cache_alias = make_cache_alias(
+            task=task, method_config=method_config, default_name=f"qe_{retrieval_method}"
+        )
+
+        # Extract text from documents
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
+        raw = evaluate_with_query_expansion(
+            documents=document_texts,
+            triplet_ids=task.triplets,
+            criterion=task.criterion_name,
+            criterion_description=_resolved_criterion_description(task),
+            retrieval_method=retrieval_method,
+            summary_preset=summary_preset,
+            embedding_preset=embedding_preset,
+            cache_alias=cache_alias,
+            run_name=task.run_name,
+            preset_overrides=preset_overrides,
+        )
+        return finalize_method_results(raw)
+
+    # Backwards compatibility for query_expansion_bm25
+    if method_type == "query_expansion_bm25":
+        summary_preset = method_config.get(
+            "summary_preset", "query_expansion_summary_gemini"
+        )
+
+        cache_alias = make_cache_alias(
+            task=task, method_config=method_config, default_name="qe_bm25"
+        )
+
+        # Extract text from documents
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
+        raw = evaluate_with_query_expansion_bm25(
+            documents=document_texts,
+            triplet_ids=task.triplets,
+            criterion=task.criterion_name,
+            criterion_description=_resolved_criterion_description(task),
+            summary_preset=summary_preset,
+            cache_alias=cache_alias,
+            run_name=task.run_name,
         )
         return finalize_method_results(raw)
 
