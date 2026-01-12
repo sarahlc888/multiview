@@ -5,7 +5,7 @@
 run_name: "test_quality_comparison"
 logging:
   level: INFO
-  output_file: null
+  output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false

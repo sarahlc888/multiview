@@ -3,7 +3,7 @@
 run_name: "benchmark_debug"
 logging:
   level: DEBUG
-  output_file: temp.gsm8k.log  # Log to console only
+  output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false # true  # Enable breakpoints for debugging (set to true to step through code)

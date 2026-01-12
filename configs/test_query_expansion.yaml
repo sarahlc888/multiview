@@ -3,7 +3,7 @@
 run_name: "test_query_expansion"
 logging:
   level: DEBUG
-  output_file: test_query_expansion.log
+  output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false

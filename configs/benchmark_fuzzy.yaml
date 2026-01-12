@@ -3,7 +3,7 @@
 run_name: "benchmark_fuzzy"
 logging:
   level: DEBUG
-  output_file: "temp.${run_name}.log"
+  output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false

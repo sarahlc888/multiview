@@ -1,4 +1,25 @@
-"""Task representation for benchmarking."""
+"""Task representation for benchmarking.
+
+
+--------------------------------------------------
+Automatic semantic similarity evaluation pipeline
+--------------------------------------------------
+Given a set of documents and a criterion, create triplets (anchor, pos, neg) where anchor is more similar to pos than neg based on the criteria.
+
+Overall workflow:
+- Accept a corpus and a specific criteria/aspect as input
+- Use a strong LM to generate some text elaborating on the criteria and how it relates to the corpus.
+- Use these annotations to construct triplets
+
+High quality data has 2 features
+
+(1) Criteria should be unambiguous. Even a relatively weak generative LM like qwen 3 8b should be able to correctly identify the positive item >90% of the time. This is a non-negotiable requirement.
+(2) Triplets should be non-trivial (hard negatives). Ideally, triplets should be constructed so that anchor and negative have some superficial similarities that a model must learn to be invariant to.
+
+An additional consideration is scalability.
+The pipeline should be designed so that task complexity is scalable with the strength of an LM judge.
+We want to be able to scale task complexity simply by using a stronger LM judge.
+"""
 
 from __future__ import annotations
 

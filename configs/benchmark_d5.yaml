@@ -3,7 +3,7 @@
 run_name: "benchmark_debug_d5"
 logging:
   level: DEBUG
-  output_file: "temp.${run_name}.log"  # Log to console only
+  output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
 step_through: false # true
