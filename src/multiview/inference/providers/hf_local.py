@@ -257,13 +257,14 @@ def hf_local_hidden_state_completions(
     # Process prompts - apply chat template if needed
     processed_prompts = list(prompts)  # Make a copy
     if is_chatml_prompt:
-        # Apply chat template (assume prompts are already in format for prompt_to_chatml)
-        # Convert each prompt to chat format and apply template
-        from multiview.utils.prompt_utils import prompt_to_chatml
-
         processed_prompts = [
             tokenizer.apply_chat_template(
-                prompt_to_chatml(prompt),
+                [
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
                 add_generation_prompt=True,
                 tokenize=False,
             )
