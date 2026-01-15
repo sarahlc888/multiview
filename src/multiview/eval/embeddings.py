@@ -36,6 +36,7 @@ def evaluate_with_embeddings(
     cache_alias: str | None = None,
     run_name: str | None = None,
     preset_overrides: dict | None = None,
+    criterion: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate triplets using embedding-based cosine similarity.
 
@@ -46,6 +47,7 @@ def evaluate_with_embeddings(
         cache_alias: Optional cache identifier
         run_name: Optional experiment/run name for cache organization
         preset_overrides: Optional preset configuration overrides
+        criterion: Criterion name (required for instruction-tuned embeddings like instr_hf_qwen3_embedding_8b)
     """
     if not triplet_ids:
         logger.warning("No triplets provided for evaluation")
@@ -65,8 +67,13 @@ def evaluate_with_embeddings(
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
 
+    # Build inputs - include criterion if provided (needed for instruction-tuned embeddings)
+    inputs = {"document": documents}
+    if criterion is not None:
+        inputs["criterion"] = criterion
+
     embeddings = run_inference(
-        inputs={"document": documents},
+        inputs=inputs,
         config=embedding_preset,
         cache_alias=cache_alias,
         run_name=run_name,

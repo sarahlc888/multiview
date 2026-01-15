@@ -202,11 +202,10 @@ class TestFormatPrompts:
         """Test embedding instructions are formatted."""
         inputs = {"query": ["search term"]}
         config = InferenceConfig(
-            provider="openai",
+            provider="openai_embedding",
             model_name="text-embedding-3-large",
             prompt_template="{query}",
             embed_query_instr_template="Represent this query: ",
-            is_embedding=True,
             parser="vector",
         )
 

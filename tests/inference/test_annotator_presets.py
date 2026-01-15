@@ -9,9 +9,6 @@ import os
 import pytest
 
 from multiview.inference import (
-    EMBED_PLAINTEXT_HFAPI,
-    LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI,
-    REWRITE_PLAINTEXT_FREEFORM_GEMINI,
     get_preset,
     list_presets,
     run_inference,
@@ -43,17 +40,21 @@ class TestPresetListing:
     def test_get_preset(self):
         """Test getting annotator preset by name."""
         config = get_preset("embed_plaintext_hfapi")
-        assert config.provider == "hf_api"
+        assert config.provider == "hf_embedding"
         assert (
             config.model_name == "Qwen/Qwen3-Embedding-8B"
         )  # 4B not available via Inference API
-        assert config.is_embedding is True
 
     def test_direct_import(self):
-        """Test that annotator configs can be imported directly."""
-        assert EMBED_PLAINTEXT_HFAPI.provider == "hf_api"
-        assert REWRITE_PLAINTEXT_FREEFORM_GEMINI.provider == "gemini"
-        assert LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI.provider == "gemini"
+        """Test that annotator configs can be accessed via get_preset()."""
+        embed_config = get_preset("embed_plaintext_hfapi")
+        assert embed_config.provider == "hf_embedding"
+
+        rewrite_config = get_preset("rewrite_plaintext_freeform_gemini")
+        assert rewrite_config.provider == "gemini"
+
+        lmjudge_config = get_preset("lmjudge_pair_plaintext_likerthard_gemini")
+        assert lmjudge_config.provider == "gemini"
 
 
 @pytest.mark.external
@@ -262,7 +263,7 @@ class TestAnnotatorWithOverrides:
         from multiview.inference import get_preset
 
         config = get_preset("embed_plaintext_hfapi")
-        assert config.provider == "hf_api"
+        assert config.provider == "hf_embedding"
         assert (
             config.model_name == "Qwen/Qwen3-Embedding-8B"
         )  # 4B not available via Inference API

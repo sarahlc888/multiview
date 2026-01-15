@@ -141,6 +141,7 @@ def evaluate_with_query_expansion(
             cache_alias=cache_alias,
             run_name=run_name,
             preset_overrides=preset_overrides,
+            criterion=criterion,
         )
 
     # Step 3: Evaluate triplets
@@ -310,6 +311,7 @@ def _compute_embedding_similarity_matrix(
     cache_alias: str | None,
     run_name: str | None,
     preset_overrides: dict | None,
+    criterion: str | None = None,
 ) -> np.ndarray:
     """Compute embedding-based cosine similarity matrix over summaries.
 
@@ -319,6 +321,7 @@ def _compute_embedding_similarity_matrix(
         cache_alias: Optional cache identifier
         run_name: Optional run name
         preset_overrides: Optional preset overrides
+        criterion: Criterion name (required for instruction-tuned embeddings)
 
     Returns:
         N×N similarity matrix where matrix[i][j] is cosine similarity between summary i and j
@@ -330,9 +333,14 @@ def _compute_embedding_similarity_matrix(
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
 
+    # Build inputs - include criterion if provided (needed for instruction-tuned embeddings)
+    inputs = {"document": summaries}
+    if criterion is not None:
+        inputs["criterion"] = criterion
+
     # Generate embeddings for all summaries
     embeddings = run_inference(
-        inputs={"document": summaries},
+        inputs=inputs,
         config=embedding_preset,
         cache_alias=embedding_cache_alias,
         run_name=run_name,

@@ -38,9 +38,6 @@ class InferenceConfig:
     initial_retry_delay: float = 1.0  # Initial backoff delay (seconds)
     retry_backoff_factor: float = 2.0  # Backoff multiplier
 
-    # Model type
-    is_embedding: bool = False
-
     # Output parsing
     parser: str = "text"  # "json", "vector", "text"
     parser_kwargs: dict | None = None

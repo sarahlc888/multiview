@@ -31,14 +31,19 @@ class GSM8KDocSet(BaseDocSet):
     def load_documents(self) -> list[Any]:
         """Load GSM8K problems as documents from Hugging Face.
 
-        Loads the GSM8K dataset and formats each example as:
+        By default, formats each example as:
         "Question: {question}\nAnswer: {answer}"
+
+        If config["question_only"] is True, returns dict documents with:
+        {"text": "Question: {question}", "question": "...", "answer": "..."}
+        where only the question is used for annotations/evaluation.
         """
         logger.info(f"Loading GSM8K from Hugging Face: {self.DATASET_PATH}")
 
         # Determine if we should use streaming mode
         max_docs = self.config.get("max_docs")
         split = self.config.get("split", "train")
+        question_only = self.config.get("question_only", False)
         use_streaming = max_docs is not None and max_docs < 100
 
         if use_streaming:
@@ -54,10 +59,18 @@ class GSM8KDocSet(BaseDocSet):
 
         documents = []
         for i, example in enumerate(dataset):
-            formatted_doc = (
-                f"Question: {example['question']}\nAnswer: {example['answer']}"
-            )
-            documents.append(formatted_doc)
+            if question_only:
+                # Dict format with question-only text
+                doc = {
+                    "text": f"Question: {example['question']}",
+                    "question": example["question"],
+                    "answer": example["answer"],
+                }
+            else:
+                # String format with question + answer (default)
+                doc = f"Question: {example['question']}\nAnswer: {example['answer']}"
+
+            documents.append(doc)
 
             if not use_streaming and max_docs is not None and i + 1 >= max_docs:
                 break
@@ -65,5 +78,10 @@ class GSM8KDocSet(BaseDocSet):
         return documents
 
     def get_document_text(self, document: Any) -> str:
-        """Extract text from a document."""
+        """Extract text from a document.
+
+        Supports both string documents (default) and dict documents (question_only=True).
+        """
+        if isinstance(document, dict):
+            return document.get("text", "")
         return document if isinstance(document, str) else ""

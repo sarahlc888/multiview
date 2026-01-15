@@ -29,10 +29,9 @@ class TestOpenAIEmbeddings:
     def test_openai_embedding_basic(self):
         """Test basic OpenAI embedding."""
         config = InferenceConfig(
-            provider="openai",
+            provider="openai_embedding",
             model_name="text-embedding-3-small",
             prompt_template="{text}",
-            is_embedding=True,
             parser="vector",
         )
 
@@ -97,10 +96,9 @@ class TestHuggingFaceEmbeddings:
     def test_hf_qwen3_8b_embedding(self):
         """Test Qwen3-Embedding-8B via HF API."""
         config = InferenceConfig(
-            provider="hf_api",
+            provider="hf_embedding",
             model_name="Qwen/Qwen3-Embedding-8B",
             prompt_template="{text}",
-            is_embedding=True,
             parser="vector",
         )
 
@@ -148,11 +146,10 @@ class TestHuggingFaceEmbeddings:
     def test_hf_embedding_with_query_instruction(self):
         """Test HF embeddings with query instruction."""
         config = InferenceConfig(
-            provider="hf_api",
+            provider="hf_embedding",
             model_name="Qwen/Qwen3-Embedding-8B",
             prompt_template="{text}",
             embed_query_instr_template="Represent this query for retrieval: ",
-            is_embedding=True,
             parser="vector",
         )
 
@@ -181,10 +178,9 @@ class TestEmbeddingCaching:
             cache_path = Path(tmpdir) / "embedding_cache.json"
 
             config = InferenceConfig(
-                provider="openai",
+                provider="openai_embedding",
                 model_name="text-embedding-3-small",
                 prompt_template="{text}",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -229,10 +225,9 @@ class TestEmbeddingCaching:
             cache_path = Path(tmpdir) / "dedup_cache.json"
 
             config = InferenceConfig(
-                provider="openai",
+                provider="openai_embedding",
                 model_name="text-embedding-3-small",
                 prompt_template="{text}",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -287,11 +282,10 @@ class TestEmbeddingInstructions:
             cache_path = Path(tmpdir) / "instr_cache.json"
 
             config = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_query_instr_template="Query: ",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -330,11 +324,10 @@ class TestEmbeddingInstructions:
             cache_path = Path(tmpdir) / "doc_instr_cache.json"
 
             config = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_doc_instr_template="Document: ",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -373,11 +366,10 @@ class TestEmbeddingInstructions:
 
             # Query side
             config_query = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_query_instr_template="Query: ",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -389,11 +381,10 @@ class TestEmbeddingInstructions:
 
             # Doc side
             config_doc = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_doc_instr_template="Document: ",
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -426,11 +417,10 @@ class TestEmbeddingInstructions:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Get embedding without instruction
             config_no_instr = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_query_instr_template=None,
-                is_embedding=True,
                 parser="vector",
             )
 
@@ -442,11 +432,10 @@ class TestEmbeddingInstructions:
 
             # Get embedding with instruction
             config_with_instr = InferenceConfig(
-                provider="hf_api",
+                provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
                 embed_query_instr_template="Represent this query for retrieval: ",
-                is_embedding=True,
                 parser="vector",
             )
 

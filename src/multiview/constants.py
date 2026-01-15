@@ -101,6 +101,19 @@ AIDANBENCH_REPO_URL = "https://github.com/aidanmclaughlin/AidanBench.git"
 AIDANBENCH_CACHE_DIR = CACHE_ROOT / "AidanBench"
 AIDANBENCH_RESULTS_PATH = AIDANBENCH_CACHE_DIR / "results" / "results.json"
 
+# InstructLF dataset configuration
+INSTRUCTLF_REPO_URL = "https://github.com/allenai/instructLF.git"
+INSTRUCTLF_CACHE_DIR = CACHE_ROOT / "instructLF"
+INSTRUCTLF_INSPIRED_TRAIN = (
+    INSTRUCTLF_CACHE_DIR / "inspired" / "datasets" / "inspired_train.csv"
+)
+INSTRUCTLF_INSPIRED_TEST = (
+    INSTRUCTLF_CACHE_DIR / "inspired" / "datasets" / "inspired_test.csv"
+)
+INSTRUCTLF_BILLS_DATA = (
+    INSTRUCTLF_CACHE_DIR / "bills" / "data" / "topic_generation.jsonl"
+)
+
 # ============================================================================
 # Create directories
 # ============================================================================

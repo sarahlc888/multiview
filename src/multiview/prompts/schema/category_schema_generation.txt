@@ -1,4 +1,4 @@
-Design a category schema that captures how documents vary with respect to a criterion.
+Design a detailed "category schema" or "taxonomy" that captures how documents vary with respect to specific criteria.
 
 CRITERIA:
 {criterion}
@@ -10,14 +10,15 @@ SAMPLE DOCUMENTS:
 {sample_documents}
 
 GUIDELINES:
+- The taxonomy should break down to discrete categories
 - Each document should belong to exactly one category
-- Use 5-10 categories (more or fewer with good reason)
+- Use around 10 categories (more or fewer with good reason)
 - Be comprehensive — reflect the full range of variation in the sample
-- If there's a natural closed set, enumerate it (e.g., color → red, yellow, green...). Otherwise, include an 'other' category
 - Avoid categories that are too broad or too narrow
+- If there's a natural closed set of categories, enumerate them (e.g., color → red, yellow, green...). Otherwise, include an 'other' category
 
 Think through your options, then output valid JSON:
 {
-  "reasoning": "How do documents relate to the criterion? What is the range of variation? What categories are needed to capture how documents vary with respect to the criterion?",
+  "reasoning": "How do documents relate to the criteria? What is the range of variation? What categories are needed to capture how documents vary with respect to the criteria?",
   "categories": [{"name": "...", "description": "..."}, ...]
 }

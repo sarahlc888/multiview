@@ -58,7 +58,6 @@ def generate_cache_path_if_needed(
         "embed_query_instr_template": config.embed_query_instr_template,
         "embed_doc_instr_template": config.embed_doc_instr_template,
         "force_prefill_template": config.force_prefill_template,
-        "is_embedding": config.is_embedding,
         "parser": config.parser,
         "parser_kwargs": config.parser_kwargs,
     }
@@ -140,14 +139,6 @@ def run_inference(
     if config_overrides:
         config = config.with_overrides(**config_overrides)
 
-    # Validate force_prefill compatibility
-    if config.force_prefill_template is not None and config.is_embedding:
-        raise ValueError(
-            f"force_prefill is not supported for embedding models. "
-            f"Provider '{config.provider}' with is_embedding=True cannot use force_prefill_template. "
-            f"Only text completion models (Anthropic, OpenAI, Gemini) support force_prefill."
-        )
-
     # Generate cache path if not provided
     cache_path = generate_cache_path_if_needed(
         config=config,
@@ -180,7 +171,7 @@ def run_inference(
         )
 
     # Get completion function for this provider
-    fn_completions = get_completion_fn(config.provider, config.is_embedding)
+    fn_completions = get_completion_fn(config.provider)
 
     # Load cache
     completion_cache = load_cached_completions(cache_path)
@@ -217,7 +208,6 @@ def run_inference(
             "model_name": config.model_name,
             "config": config.__class__.__name__,
             "cache_alias": cache_alias,
-            "is_embedding": config.is_embedding,
         },
     )
 

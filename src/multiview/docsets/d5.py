@@ -16,28 +16,19 @@ Key features:
 from __future__ import annotations
 
 import logging
-import pickle
-import urllib.request
-from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.d5_utils import D5_OUTPUT_PATH, load_d5_data
 
 logger = logging.getLogger(__name__)
 
-# D5 dataset configuration
-D5_REPO_URL = "https://github.com/ruiqi-zhong/D5"
-D5_PKL_URL = "https://github.com/ruiqi-zhong/D5/raw/main/output.pkl"
-D5_CACHE_DIR = Path.home() / ".cache" / "multiview" / "D5"
-D5_OUTPUT_PATH = D5_CACHE_DIR / "output.pkl"
-
 
 class D5DocSet(BaseDocSet):
-    """D5 ABC news articles with descriptor applicability scores.
+    """D5 ABC news articles with descriptor applicability scores (doc-to-doc variant).
 
     Supports prelabeled triplet creation using binarized applicability scores.
+    This is the original D5 task where documents are compared to each other.
 
     Config parameters:
         max_docs (int, optional): Maximum number of documents to load
@@ -48,14 +39,14 @@ class D5DocSet(BaseDocSet):
 
     Usage:
         tasks:
-          - document_set: d5
+          - document_set: d5_doc2doc
             criterion: description_0  # Use first descriptor
             triplet_style: prelabeled
             binarization_threshold: 0.5
     """
 
     DATASET_PATH = str(D5_OUTPUT_PATH)
-    DESCRIPTION = "D5 ABC news with 60 descriptor applicability scores"
+    DESCRIPTION = "D5 ABC news with 60 descriptor applicability scores (doc-to-doc)"
 
     # Known criteria dynamically populated: ["description_0", "description_1", ...]
     KNOWN_CRITERIA = []
@@ -75,53 +66,31 @@ class D5DocSet(BaseDocSet):
         self.descriptor_names = []  # List of descriptor text strings
         self.doc_texts = []  # List of document texts (for indexing)
 
-        # Ensure PKL is downloaded
-        self._ensure_pkl_downloaded()
-
-        # Load descriptor names to populate KNOWN_CRITERIA and CRITERION_METADATA
-        self._load_descriptor_names()
+        # Load descriptor names and data to populate KNOWN_CRITERIA and CRITERION_METADATA
+        self._load_data()
 
         # Initialize precomputed annotations
         self.PRECOMPUTED_ANNOTATIONS = {}
 
-    def _ensure_pkl_downloaded(self) -> None:
-        """Download D5 PKL file if not cached."""
-        if not D5_OUTPUT_PATH.exists():
-            logger.info(f"Downloading D5 output.pkl to {D5_OUTPUT_PATH}")
-            try:
-                D5_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                urllib.request.urlretrieve(D5_PKL_URL, str(D5_OUTPUT_PATH))
-                logger.info("Successfully downloaded D5 output.pkl")
-            except Exception as e:
-                raise RuntimeError(f"Failed to download D5 output.pkl: {e}") from e
-        else:
-            logger.debug(f"D5 output.pkl already cached at {D5_OUTPUT_PATH}")
+    def _load_data(self) -> None:
+        """Load D5 data and populate KNOWN_CRITERIA and CRITERION_METADATA."""
+        self.descriptor_names, self.doc_texts, self.applicability_matrix = (
+            load_d5_data()
+        )
 
-    def _load_descriptor_names(self) -> None:
-        """Load descriptor names from PKL to populate KNOWN_CRITERIA and CRITERION_METADATA."""
-        try:
-            with open(D5_OUTPUT_PATH, "rb") as f:
-                data = pickle.load(f)
+        self.KNOWN_CRITERIA = [
+            f"description_{i}" for i in range(len(self.descriptor_names))
+        ]
 
-            self.descriptor_names = list(data.keys())
-            self.KNOWN_CRITERIA = [
-                f"description_{i}" for i in range(len(self.descriptor_names))
-            ]
+        # Populate CRITERION_METADATA with actual descriptor text
+        self.CRITERION_METADATA = {}
+        for i, descriptor_text in enumerate(self.descriptor_names):
+            criterion_name = f"description_{i}"
+            self.CRITERION_METADATA[criterion_name] = {
+                "description": f"applicability of the descriptor, '{descriptor_text}'",
+            }
 
-            # Populate CRITERION_METADATA with actual descriptor text
-            self.CRITERION_METADATA = {}
-            for i, descriptor_text in enumerate(self.descriptor_names):
-                criterion_name = f"description_{i}"
-                self.CRITERION_METADATA[criterion_name] = {
-                    "description": f"applicability of the descriptor, '{descriptor_text}'",
-                }
-
-            logger.debug(f"Loaded {len(self.descriptor_names)} descriptors from D5 PKL")
-        except Exception as e:
-            logger.warning(f"Failed to load descriptor names: {e}")
-            self.descriptor_names = []
-            self.KNOWN_CRITERIA = []
-            self.CRITERION_METADATA = {}
+        logger.debug(f"Loaded {len(self.descriptor_names)} descriptors from D5 PKL")
 
     def load_documents(self) -> list[Any]:
         """Load ABC news articles from D5 PKL file.
@@ -129,42 +98,12 @@ class D5DocSet(BaseDocSet):
         Returns:
             List of document text strings
         """
-        logger.info(f"Loading D5 from {D5_OUTPUT_PATH}")
+        logger.info(f"Loading D5 doc-to-doc from {D5_OUTPUT_PATH}")
 
-        # Load PKL file
-        try:
-            with open(D5_OUTPUT_PATH, "rb") as f:
-                data = pickle.load(f)
-        except Exception as e:
-            raise RuntimeError(f"Failed to load D5 PKL: {e}") from e
-
-        # Extract document texts (from first descriptor's sample2score keys)
-        first_descriptor = list(data.keys())[0]
-        self.doc_texts = list(data[first_descriptor]["sample2score"].keys())
-
-        logger.debug(
-            f"Found {len(self.doc_texts)} documents and {len(data)} descriptors"
-        )
-
-        # Build applicability matrix: shape (n_docs, m_descriptors)
-        n_docs = len(self.doc_texts)
-        m_descriptors = len(self.descriptor_names)
-
-        self.applicability_matrix = np.zeros((n_docs, m_descriptors))
-
-        for desc_idx, descriptor in enumerate(self.descriptor_names):
-            for doc_idx, doc_text in enumerate(self.doc_texts):
-                score = data[descriptor]["sample2score"].get(doc_text, 0.0)
-                self.applicability_matrix[doc_idx, desc_idx] = score
-
-        logger.debug(
-            f"Built applicability matrix: shape {self.applicability_matrix.shape}, "
-            f"mean score: {self.applicability_matrix.mean():.3f}"
-        )
-
+        # Data already loaded in __init__ via _load_data()
         # Apply max_docs if specified
         max_docs = self.config.get("max_docs")
-        if max_docs is not None and max_docs < n_docs:
+        if max_docs is not None and max_docs < len(self.doc_texts):
             self.doc_texts = self.doc_texts[:max_docs]
             self.applicability_matrix = self.applicability_matrix[:max_docs, :]
 

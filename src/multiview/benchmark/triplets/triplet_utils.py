@@ -619,6 +619,7 @@ def create_lm_triplets(
     candidate_strategy: str = "multi",
     use_spurious_hard_negs: bool = True,
     embedding_preset: str = "hf_qwen3_embedding_8b",
+    embedding_preset_overrides: dict | None = None,
     lm_judge_preset: str = "triplet_select_positive_gemini",
     lm_judge_preset_negative: str = "triplet_select_negative_gemini",
     criterion: str | None = None,
@@ -652,9 +653,10 @@ def create_lm_triplets(
             - "multi": Combine BM25+embedding+Jaccard for pos, BM25+Jaccard+spurious for neg
         use_spurious_hard_negs: DEPRECATED - now ignored, negative strategy handles this
         embedding_preset: Preset for embedding model (used ONLY for positive candidates)
+        embedding_preset_overrides: Optional overrides for embedding preset (e.g., custom embed_query_instr_template)
         lm_judge_preset: Preset for LM judge when selecting positives
         lm_judge_preset_negative: Preset for LM judge when selecting negatives
-        criterion: Criterion name (for LM judge prompt)
+        criterion: Criterion name (for LM judge prompt and instruction-tuned embeddings)
         criterion_description: Description of criterion (for LM judge prompt)
         cache_alias_prefix: Prefix for cache aliases
         triplet_example_hint: Optional example guidance (dict or string)
@@ -760,12 +762,22 @@ def create_lm_triplets(
         summary_cache_alias = (
             f"{cache_alias_prefix}_embedding_summary" if cache_alias_prefix else None
         )
+        # Build inputs - include criterion if provided (needed for instruction-tuned embeddings)
+        inputs = {"document": summary_texts}
+        if criterion is not None:
+            inputs["criterion"] = criterion
+
+        # Build kwargs for run_inference
+        inference_kwargs = {"verbose": False}
+        if embedding_preset_overrides:
+            inference_kwargs.update(embedding_preset_overrides)
+
         summary_embeddings = run_inference(
-            inputs={"document": summary_texts},
+            inputs=inputs,
             config=embedding_preset,
             cache_alias=summary_cache_alias,
             run_name=run_name,
-            verbose=False,
+            **inference_kwargs,
         )
         embedding_summary = np.array(summary_embeddings, dtype=float)
         summary_norms = np.linalg.norm(embedding_summary, axis=1, keepdims=True)
@@ -777,10 +789,10 @@ def create_lm_triplets(
     # for both candidate selection and evaluation would create circular dependency.
 
     candidate_indices_by_anchor: dict[int, list[int]] = {}
-    for i, anchor_idx in enumerate(anchors_to_process):
-        logger.debug(
-            f"Processing anchor {i + 1}/{len(anchors_to_process)} (doc_idx={anchor_idx})"
-        )
+    for anchor_idx in anchors_to_process:
+        # logger.debug(
+        #     f"Processing anchor {i + 1}/{len(anchors_to_process)} (doc_idx={anchor_idx})"
+        # )
 
         # Step 1: Select candidate pool
         if candidate_strategy == "bm25":

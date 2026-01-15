@@ -55,18 +55,25 @@ def hf_embedding_completions(
 
     logger.debug(f"embed_query_instrs: {embed_query_instrs}")
     logger.debug(f"embed_doc_instrs: {embed_doc_instrs}")
-    logger.debug(f"prompts (before prepending): {prompts}")
+    logger.debug(f"prompts (before prepending): {prompts[:4]}")
 
     final_prompts = []
     for i, prompt in enumerate(prompts):
         final_prompt = prompt
-        if embed_query_instrs and i < len(embed_query_instrs):
-            final_prompt = embed_query_instrs[i] + final_prompt
-        if embed_doc_instrs and i < len(embed_doc_instrs):
-            final_prompt = embed_doc_instrs[i] + final_prompt
+
+        # Format instructions using the proper instruction-tuned format
+        # See: https://huggingface.co/Qwen/Qwen3-Embedding-8B
+        # Format: "Instruct: {task_description}\nQuery: {text}"
+        if embed_query_instrs and i < len(embed_query_instrs) and embed_query_instrs[i]:
+            # Query instruction format
+            final_prompt = f"Instruct: {embed_query_instrs[i]}\nQuery: {final_prompt}"
+        elif embed_doc_instrs and i < len(embed_doc_instrs) and embed_doc_instrs[i]:
+            # Document instruction format (same format, but semantically different)
+            final_prompt = f"Instruct: {embed_doc_instrs[i]}\nQuery: {final_prompt}"
+
         final_prompts.append(final_prompt)
 
-    logger.debug(f"final_prompts (after prepending): {final_prompts}")
+    logger.debug(f"final_prompts (after prepending): {final_prompts[:4]}")
 
     # Validate instructions were applied correctly
     if embed_query_instrs or embed_doc_instrs:
@@ -79,11 +86,17 @@ def hf_embedding_completions(
                 and embed_query_instrs[i]
             ):
                 assert final != original, f"Query instruction not applied to prompt {i}"
+                assert final.startswith(
+                    "Instruct: "
+                ), f"Query instruction format incorrect for prompt {i}"
                 assert (
                     embed_query_instrs[i] in final
                 ), f"Query instruction not in final prompt {i}"
             if embed_doc_instrs and i < len(embed_doc_instrs) and embed_doc_instrs[i]:
                 assert final != original, f"Doc instruction not applied to prompt {i}"
+                assert final.startswith(
+                    "Instruct: "
+                ), f"Doc instruction format incorrect for prompt {i}"
                 assert (
                     embed_doc_instrs[i] in final
                 ), f"Doc instruction not in final prompt {i}"

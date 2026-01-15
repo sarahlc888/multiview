@@ -14,10 +14,12 @@ from multiview.benchmark.triplets.utils import build_triplet_dicts
 from multiview.eval import (
     evaluate_with_bm25,
     evaluate_with_embeddings,
+    evaluate_with_in_one_word,
     evaluate_with_lm_judge_pair,
     evaluate_with_lm_judge_triplet,
     evaluate_with_query_expansion,
     evaluate_with_query_expansion_bm25,
+    evaluate_with_reranker,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,21 @@ def has_rich_annotations(annotations: list[dict] | None) -> bool:
     has_category = "category" in first_ann and first_ann.get("category")
 
     return has_summary or has_tags or has_category
+
+
+def has_category_schemas(annotations: list[dict] | None) -> bool:
+    """Check if annotations contain category schema information.
+
+    Returns:
+        True if annotations have category_schema field
+        False otherwise
+    """
+    if not annotations or len(annotations) == 0:
+        return False
+
+    # Check first annotation for category_schema
+    first_ann = annotations[0]
+    return "category_schema" in first_ann and first_ann.get("category_schema")
 
 
 def get_annotations_if_required(*, preset: str, task: Any) -> dict | None:
@@ -162,7 +179,36 @@ def evaluate_method(
 
     if method_type == "embeddings":
         preset = method_config.get("preset", "openai_embedding_small")
-        preset_overrides = method_config.get("preset_overrides")
+        preset_overrides = method_config.get("preset_overrides", {})
+
+        # Get criterion metadata for embed_instr
+        criterion_metadata = (
+            task.document_set.get_criterion_metadata(task.criterion_name) or {}
+        )
+
+        # Support embed_instr from criterion metadata
+        # For symmetric retrieval (doc-to-doc), use embed_doc_instr_template
+        # Clear embed_query_instr_template to avoid double-prepending
+        # Priority: method_config > criterion_metadata
+        if "embed_instr" not in method_config and "embed_instr" in criterion_metadata:
+            if not isinstance(preset_overrides, dict):
+                preset_overrides = {}
+            # For symmetric document comparison, use embed_doc_instr_template
+            # Clear any query instruction from preset to prevent double-prepending
+            preset_overrides["embed_doc_instr_template"] = criterion_metadata[
+                "embed_instr"
+            ]
+            preset_overrides["embed_query_instr_template"] = None
+
+        # Support convenient embed_instr shorthand in method config (always applies if specified)
+        if "embed_instr" in method_config:
+            if not isinstance(preset_overrides, dict):
+                preset_overrides = {}
+            # For symmetric document comparison, use embed_doc_instr_template
+            # Clear any query instruction from preset to prevent double-prepending
+            preset_overrides["embed_doc_instr_template"] = method_config["embed_instr"]
+            preset_overrides["embed_query_instr_template"] = None
+
         cache_alias = make_cache_alias(
             task=task, method_config=method_config, default_name="embeddings"
         )
@@ -176,6 +222,32 @@ def evaluate_method(
             documents=document_texts,
             triplet_ids=task.triplets,
             embedding_preset=preset,
+            cache_alias=cache_alias,
+            run_name=task.run_name,
+            preset_overrides=preset_overrides if preset_overrides else None,
+            criterion=task.criterion_name,
+        )
+        return finalize_method_results(raw)
+
+    if method_type == "reranker":
+        preset = method_config.get("preset", "qwen3_reranker_8b")
+        instruction = method_config.get("instruction")
+        preset_overrides = method_config.get("preset_overrides")
+
+        cache_alias = make_cache_alias(
+            task=task, method_config=method_config, default_name="reranker"
+        )
+
+        # Extract text from documents (handle both string and dict formats)
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
+        raw = evaluate_with_reranker(
+            documents=document_texts,
+            triplet_ids=task.triplets,
+            reranker_preset=preset,
+            instruction=instruction,
             cache_alias=cache_alias,
             run_name=task.run_name,
             preset_overrides=preset_overrides,
@@ -202,11 +274,15 @@ def evaluate_method(
         summary_preset = method_config.get(
             "summary_preset", "query_expansion_summary_gemini"
         )
-        embedding_preset = method_config.get("embedding_preset", "openai_embedding_small")
+        embedding_preset = method_config.get(
+            "embedding_preset", "openai_embedding_small"
+        )
         preset_overrides = method_config.get("preset_overrides")
 
         cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name=f"qe_{retrieval_method}"
+            task=task,
+            method_config=method_config,
+            default_name=f"qe_{retrieval_method}",
         )
 
         # Extract text from documents
@@ -251,6 +327,39 @@ def evaluate_method(
             summary_preset=summary_preset,
             cache_alias=cache_alias,
             run_name=task.run_name,
+        )
+        return finalize_method_results(raw)
+
+    if method_type == "in_one_word":
+        preset = method_config.get("preset", "inoneword_hf_qwen3_8b")
+
+        # Validate annotations exist
+        if task.document_annotations is None:
+            logger.error("in_one_word method requires annotations but task has none")
+            return {"skipped": True, "reason": "Missing annotations"}
+
+        # Validate annotations have category schemas
+        if not has_category_schemas(task.document_annotations):
+            logger.error("in_one_word method requires category schemas in annotations")
+            return {"skipped": True, "reason": "Missing category schemas"}
+
+        cache_alias = make_cache_alias(
+            task=task, method_config=method_config, default_name="inoneword"
+        )
+
+        # Extract text from documents
+        document_texts = [
+            task.document_set.get_document_text(doc) for doc in task.documents
+        ]
+
+        raw = evaluate_with_in_one_word(
+            documents=document_texts,
+            triplet_ids=task.triplets,
+            annotations=task.document_annotations,
+            preset=preset,
+            cache_alias=cache_alias,
+            run_name=task.run_name,
+            preset_overrides=method_config.get("preset_overrides"),
         )
         return finalize_method_results(raw)
 

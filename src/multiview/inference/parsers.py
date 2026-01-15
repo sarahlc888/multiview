@@ -98,6 +98,27 @@ def vector_parser(completion: dict, **kwargs) -> Any:
         return completion
 
 
+def score_parser(completion: dict | int | float, **kwargs) -> float:
+    """Parse relevance scores from reranker completion.
+
+    Args:
+        completion: Completion dict from reranker model
+            Should have "score" key with relevance score (0-1)
+
+    Returns:
+        The score as a float
+    """
+    if isinstance(completion, dict):
+        if "score" not in completion:
+            raise ValueError(f"No score found in completion keys: {completion.keys()}")
+        return float(completion["score"])
+    elif isinstance(completion, int | float):
+        # Assume it's already a score
+        return float(completion)
+    else:
+        raise ValueError(f"Cannot parse score from type: {type(completion)}")
+
+
 def json_parser(
     completion: str | dict,
     annotation_key: str | None = None,
@@ -444,6 +465,7 @@ def delimiter_parser(completion: str | dict, delimiter: str = "###", **kwargs) -
 # Registry for parser lookup
 PARSER_REGISTRY = {
     "vector": vector_parser,
+    "score": score_parser,
     "json": json_parser,
     "text": text_parser,
     "dict": dict_parser,

@@ -1,0 +1,5 @@
+You will be given a text and some criteria of interest. Based on the criteria, please summarize the text in one word.
+
+Here is the criteria:
+{context}
+Text: {document}

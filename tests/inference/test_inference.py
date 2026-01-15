@@ -189,7 +189,7 @@ class TestChunking:
             call_sizes.append(len(prompts))
             return {"completions": [{"text": f"out:{p}"} for p in prompts]}
 
-        def fake_get_completion_fn(provider, is_embedding=False):
+        def fake_get_completion_fn(provider):
             return fake_completion_fn
 
         monkeypatch.setattr(inference_module, "get_completion_fn", fake_get_completion_fn)
@@ -411,12 +411,12 @@ class TestFileBasedPrompts:
 
     def test_file_based_prompt_loads_correctly(self):
         """Test that prompts from files are loaded correctly."""
-        from multiview.inference.presets.lm_judge_triplet import (
-            LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI,
-        )
+        from multiview.inference import get_preset
+
+        config = get_preset("lmjudge_triplet_plaintext_binaryhard_gemini")
 
         # Verify the config has a file path
-        assert "prompts/lm_judge/triplet_plaintext_binaryhard.txt" in LMJUDGE_TRIPLET_PLAINTEXT_BINARYHARD_GEMINI.prompt_template
+        assert "prompts/lm_judge/triplet_plaintext_binaryhard.txt" in config.prompt_template
 
     def test_read_or_return_with_file(self):
         """Test read_or_return loads file correctly."""

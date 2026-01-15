@@ -1,0 +1,99 @@
+# Benchmark configuration for specialized evaluation methods
+# Includes: in-one-word evaluation and query expansion methods
+run_name: "benchmark_specialized"
+logging:
+  level: INFO
+  output_file: "outputs/logs/${run_name}.log"
+seed: 42
+use_cache: true
+step_through: false
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 100
+    max_triplets: 50
+    triplet_style: "lm_all"  # Rich annotations required for specialized methods
+    add_synthetic_docs: false
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 5
+    n_schema_samples: 10
+    rate_triplet_quality: false
+    min_triplet_quality: null
+
+  task_list:
+    # In-one-word evaluation: requires category schemas from annotations
+    - document_set: gsm8k
+      criterion: arithmetic
+      max_triplets: 50
+
+    # Query expansion: criterion-aware summaries
+    - document_set: rocstories
+      criterion: seven_basic_plots
+      max_docs: 50
+      max_triplets: 20
+
+    - document_set: hackernews
+      criterion: angle_of_interest
+      max_docs: 50
+      max_triplets: 20
+
+# Evaluation methods configuration
+methods_to_evaluate:
+  # Baselines for comparison
+  bm25:
+    - name: bm25_raw
+
+  embeddings:
+    - name: qwen3_8b_raw
+      preset: hf_qwen3_embedding_8b
+
+  # In-one-word evaluation (GPU-based)
+  in_one_word:
+    - name: inoneword_qwen3_8b
+      preset: inoneword_hf_qwen3_8b
+      # Uses category schemas from annotations to extract
+      # hidden states for specific category words
+
+  # Query expansion with different model combinations
+  query_expansion:
+    # BM25 over summaries
+    - name: qe_gemini_lite_bm25
+      retrieval_method: bm25
+      summary_preset: query_expansion_summary_gemini
+
+    - name: qe_gemini_flash_bm25
+      retrieval_method: bm25
+      summary_preset: query_expansion_summary_gemini_flash
+
+    - name: qe_claude_haiku_bm25
+      retrieval_method: bm25
+      summary_preset: query_expansion_summary_claude_haiku
+
+    # Embeddings over summaries
+    - name: qe_gemini_lite_qwen_8b
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_gemini
+      embedding_preset: hf_qwen3_embedding_8b
+
+    - name: qe_gemini_lite_openai_small
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_gemini
+      embedding_preset: openai_embedding_small
+
+    - name: qe_gemini_lite_openai_large
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_gemini
+      embedding_preset: openai_embedding_large
+
+    - name: qe_claude_haiku_qwen_8b
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_claude_haiku
+      embedding_preset: hf_qwen3_embedding_8b
+
+    - name: qe_gemini_flash_qwen_8b
+      retrieval_method: embeddings
+      summary_preset: query_expansion_summary_gemini_flash
+      embedding_preset: hf_qwen3_embedding_8b

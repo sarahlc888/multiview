@@ -126,3 +126,18 @@ class BaseDocSet(ABC):
             Returns empty dict if no precomputed annotations exist
         """
         return self.PRECOMPUTED_ANNOTATIONS.get(criterion, {})
+
+    def get_document_image(self, document: Any) -> str | None:
+        """Extract image source from a document for vision tasks.
+
+        Subclasses can override this to provide image sources for documents.
+        Image sources can be URLs or local file paths.
+
+        Args:
+            document: A single document
+
+        Returns:
+            Image source (URL or file path), or None if document has no image
+        """
+        # Default: no images
+        return None

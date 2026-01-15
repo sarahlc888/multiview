@@ -20,6 +20,7 @@ def _gemini_single_completion(
     client,
     prompt: str,
     prefill: str | None,
+    image: str | None,
     model_name: str,
     temperature: float,
     max_tokens: int,
@@ -34,6 +35,7 @@ def _gemini_single_completion(
         client: Gemini client instance
         prompt: Prompt text
         prefill: Optional prefill string to force response start
+        image: Optional image source (URL or file path) for vision tasks
         model_name: Model name
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
@@ -53,14 +55,47 @@ def _gemini_single_completion(
             "google-genai package required. Install with: pip install google-genai"
         ) from None
 
-    # Build contents
-    if prefill:
-        contents = [
-            {"role": "user", "parts": [{"text": prompt}]},
-            {"role": "model", "parts": [{"text": prefill}]},
-        ]
+    # Build contents with optional image
+    if image:
+        # Import VLM utilities for image handling
+        from multiview.inference.vlm_utils import prepare_image_for_gemini
+
+        try:
+            # Prepare image in Gemini format
+            image_part = prepare_image_for_gemini(image)
+            logger.debug(f"Prepared image for Gemini: {image}")
+
+            # Build multimodal contents
+            if prefill:
+                contents = [
+                    {"role": "user", "parts": [image_part, {"text": prompt}]},
+                    {"role": "model", "parts": [{"text": prefill}]},
+                ]
+            else:
+                # For simple case, can use parts directly
+                contents = [{"role": "user", "parts": [image_part, {"text": prompt}]}]
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to load image {image}, falling back to text-only: {e}"
+            )
+            # Fall back to text-only
+            if prefill:
+                contents = [
+                    {"role": "user", "parts": [{"text": prompt}]},
+                    {"role": "model", "parts": [{"text": prefill}]},
+                ]
+            else:
+                contents = prompt
     else:
-        contents = prompt
+        # Text-only (original behavior)
+        if prefill:
+            contents = [
+                {"role": "user", "parts": [{"text": prompt}]},
+                {"role": "model", "parts": [{"text": prefill}]},
+            ]
+        else:
+            contents = prompt
 
     config = GenerateContentConfig(
         temperature=temperature,
@@ -141,13 +176,14 @@ def gemini_completions(
     temperature: float = 0.0,
     max_tokens: int = 4096,
     force_prefills: list[str] | None = None,
+    images: list[str | None] | None = None,
     max_workers: int = 5,
     max_retries: int = 5,
     initial_retry_delay: float = 1.0,
     retry_backoff_factor: float = 2.0,
     **kwargs,
 ) -> dict:
-    """Get Gemini completions.
+    """Get Gemini completions with optional vision support.
 
     Args:
         prompts: List of prompts
@@ -155,6 +191,9 @@ def gemini_completions(
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
         force_prefills: Optional list of prefill strings to force response start
+        images: Optional list of image sources (URLs or file paths) for vision tasks
+                Each image corresponds to the prompt at the same index
+                Use None for text-only prompts in a mixed batch
         max_workers: Maximum concurrent API requests (default 5)
         max_retries: Maximum retry attempts per request (default 5)
         initial_retry_delay: Initial delay for exponential backoff (default 1.0s)
@@ -181,13 +220,27 @@ def gemini_completions(
 
     client = genai.Client(api_key=api_key)
 
-    # Pair prompts with their corresponding prefills
-    prompt_prefill_pairs = []
+    # Validate and log image list if provided
+    if images is not None:
+        from multiview.inference.vlm_utils import validate_image_list
+
+        validate_image_list(images)
+        logger.info(
+            f"Processing {len(prompts)} prompts with {sum(1 for img in images if img is not None)} images"
+        )
+
+    # Pair prompts with their corresponding prefills and images
+    prompt_prefill_image_tuples = []
     for i, prompt in enumerate(prompts):
         prefill = None
         if force_prefills and i < len(force_prefills):
             prefill = force_prefills[i]
-        prompt_prefill_pairs.append((prompt, prefill))
+
+        image = None
+        if images and i < len(images):
+            image = images[i]
+
+        prompt_prefill_image_tuples.append((prompt, prefill, image))
 
     # Create partial function with fixed parameters
     completion_fn = partial(
@@ -206,8 +259,8 @@ def gemini_completions(
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         completions = list(
             executor.map(
-                lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
-                prompt_prefill_pairs,
+                lambda t: completion_fn(prompt=t[0], prefill=t[1], image=t[2]),
+                prompt_prefill_image_tuples,
             )
         )
 

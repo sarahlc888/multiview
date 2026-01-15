@@ -1,0 +1,380 @@
+# Available Criteria for Document Sets
+#
+# This file defines all available criteria for LM-based annotations across different
+# document sets. Each criterion includes:
+# - description: What the criterion measures
+# - pairwise_sim_hint: Hint for generating pairwise similarity comparisons (optional)
+# - category_schema_hint: Guidance for creating category-based schemas (optional)
+# - tag_schema_hint: Guidance for creating tag-based schemas (optional)
+# - summary_hint: Combined guidance + desired format for summaries (optional)
+# - triplet_example_hint: Example triplet guidance for LM triplet selection (optional)
+#
+# Values can be either:
+# - Inline text: "The description goes here"
+# - File reference: "prompts/criteria/filename.txt" (relative to project root)
+
+# GSM8K: Math word problems
+# GSM8K word problems have clear orthogonal criteria (algebraic structure vs. narrative context)
+gsm8k:
+  arithmetic:
+    embed_instr: "Given a document, retrieve documents that have a similar sequence of arithmetic operations"
+    description: "The exact sequence of arithmetic operations (addition, subtraction, multiplication, division, etc.) required to solve the problem."
+    pairwise_sim_hint: "Two problems are similar if they require the same sequence of arithmetic operations, even if the problem context or numbers differ. Focus on the operation sequence (e.g., multiply then add vs. divide then subtract) rather than the story context."
+    category_schema_hint: null
+    tag_schema_hint: "Consider tags like step1_add, step1_sub, step1_mul, step1_div, step2_add, etc."
+    summary_hint: "List the exact sequence of arithmetic operations in order, formatted as e.g. ['multiplication', 'addition', 'division']"
+    triplet_example_hint:
+      anchor: "Question: Bill walks 0.5 mile south, then 0.75 mile east, and finally 0.5 mile south. How many miles is he, in a direct line, from his starting point?\nAnswer: Bill walks 0.5 mile south and then another 0.5 mile south. The total distance south is 0.5 + 0.5 = <<0.5+0.5=1>>1 mile. He also walks 0.75 mile east.\nThe square of the southward distance is 1 × 1 = <<1*1=1>>1. The square of the eastward distance is 0.75 × 0.75 = <<0.75*0.75=0.5625>>0.5625. The sum of the squares is 1 + 0.5625 = <<1+0.5625=1.5625>>1.5625.\nThe square root of 1.5625 is <<sqrt(1.5625)=1.25>>1.25.\n#### 1.25"
+      pos: "Question: A subway route is planned to run 1.9 km north, then 2.5 km west, and finally 0.3 km south. How far is the subway from its original position?\nAnswer: The subway moves 1.9 km north and then 0.3 km south. The net northward distance is 1.9 − 0.3 = <<1.9-0.3=1.6>>1.6 km. It also moves 2.5 km west.\nThe square of the northward distance is 1.6 × 1.6 = <<1.6*1.6=2.56>>2.56. The square of the westward distance is 2.5 × 2.5 = <<2.5*2.5=6.25>>6.25. The sum of the squares is 2.56 + 6.25 = <<2.56+6.25=8.81>>8.81.\nThe square root of 8.81 is <<sqrt(8.81)=2.97>>2.97.\n#### 2.97"
+      neg: "Question: Bill walks to his school located 0.5 miles south from his house. If the walk took 12 minutes, how fast was Bill, in miles per hour?\nAnswer: Bill walks 0.5 miles in 12 minutes. There are 60 minutes in an hour. The time in hours is 12 ÷ 60 = <<12/60=0.2>>0.2 hours.\nSpeed is distance divided by time. Bill's speed is 0.5 ÷ 0.2 = <<0.5/0.2=2.5>>2.5 miles per hour.\n#### 2.5"
+
+  problem_type:
+    description: "The domain or context of the word problem (money, time, measurement, rates, probability, geometry, etc.)."
+    pairwise_sim_hint: "Two problems are similar if they share the same domain or real-world context (e.g., both about money/shopping, both about time/scheduling). Consider the setting and concepts involved rather than the specific numbers or operations."
+    category_schema_hint: "Consider categories like: money/finance, time/scheduling, distance/speed, measurement/units, ratios/proportions, geometry/area, probability, combinatorics, etc."
+    tag_schema_hint: "Create tags for different problem domains that may overlap: involves_money, involves_time, involves_distance, involves_measurement, involves_rates, involves_geometry, involves_probability, etc."
+
+  solution_strategy:
+    description: "The problem-solving approach or strategy needed (working backwards, setting up equations, using ratios, multi-step reasoning, etc.)."
+    category_schema_hint: "Consider categories like: direct computation, working backwards, setting up equations, using ratios/proportions, multi-step reasoning, logical deduction, etc."
+    tag_schema_hint: "Create tags for different strategies: requires_working_backwards, requires_equation_setup, requires_ratio_reasoning, requires_multi_step, requires_unit_conversion, etc."
+
+  difficulty:
+    description: "The relative difficulty or complexity of the problem based on steps required and concepts involved."
+    category_schema_hint: "Consider categories like: simple (1-2 steps), moderate (3-4 steps), complex (5+ steps), or based on concept difficulty."
+    tag_schema_hint: "Create tags for difficulty factors: multi_step, requires_intermediate_values, requires_complex_operations, requires_unit_conversion, has_multiple_entities, etc."
+
+  numerical_complexity:
+    description: "The complexity of the numbers involved (whole numbers, decimals, fractions, large numbers, etc.)."
+    category_schema_hint: "Consider categories like: small whole numbers only, large whole numbers, decimals, fractions, mixed numbers, negative numbers, etc."
+    tag_schema_hint: "Create tags for number types: has_whole_numbers, has_decimals, has_fractions, has_large_numbers, has_negative_numbers, has_small_numbers, etc."
+
+# Crossword Clues
+crossword:
+  wow_factor:
+    description: "Crosswords are an indication of being tuned into arts and culture, general knowledge, and trivia. What 'bragging rights' would a person win for being able to solve this clue?"
+
+  clue_type:
+    description: "The type of crossword clue (independent of the topic). The archetype or prototype of the clue type. The kinds of strategies or 'moves' that clue writers might pull."
+    category_schema_hint: "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, and more."
+    tag_schema_hint: "Create tags for a bunch of different types of clues: e.g. direct_definition (provides a standard definition or synonym for the word that is the answer), oblique_definition (provides a definition of the word that is the answer, but in a way that is very cryptic), direct_reference (refers directly to a notable person/event/object/place via their claim to fame), niche_reference (refers to a trivia factoid that would make the answer obvious, if known), anagram (uses an anagram of the answer), cross_reference (references to other parts of the puzzle), needs_letter (extremely hard and probably not able to be solved without knowing some of the letters), answer_is_word, answer_is_proper_noun, answer_is_abbrev, answer_is_phrase, answer_is_fragment, etc."
+
+  difficulty_factor:
+    description: "What makes the clue difficult to solve? What is the source of uncertainty/ambiguity?"
+    category_schema_hint: "Consider categories like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?)"
+    tag_schema_hint: "Consider tags like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?). Also consider tags like is_a_thinker (you might be able to get it by thinking harder about it), know_it_or_dont (more time would not help solve); clear_clue (it's obvious what the clue says, you just don't know the answer), ambiguous_clue (it's not clear what the clue itself is even saying), misleading_clue (the clue is actively misleading in some way)."
+
+  answer_domain:
+    description: "The subject domain or topic of the answer (geography, history, pop culture, science, sports, etc.)."
+    category_schema_hint: "Consider categories like: geography, history, pop culture, science, sports, arts, politics, literature, general knowledge, etc."
+    tag_schema_hint: "Create tags for different domains: geography, history, pop_culture, science, sports, arts, politics, literature, etc. Also consider properties like is_word, is_person, is_proper_noun."
+
+  difficulty:
+    description: "The difficulty level of the clue based on obscurity and wordplay complexity."
+    category_schema_hint: "Consider categories like: easy (common knowledge), medium (moderate knowledge/wordplay), hard (obscure or complex), etc."
+    tag_schema_hint: "Create tags for difficulty factors: requires_specialized_knowledge, uses_complex_wordplay, uses_abbreviations, has_misdirection, etc."
+
+  answer_length:
+    description: "The length category of the answer (short, medium, long)."
+    category_schema_hint: "Consider categories based on character count: very short (1-4 chars), short (5-7), medium (8-10), long (11+), etc."
+    tag_schema_hint: "Create tags for length: single_word, multi_word, short_answer, long_answer, compound_word, etc."
+
+# ROCStories: Short stories
+rocstories:
+  seven_basic_plots:
+    # Reference: https://en.wikipedia.org/wiki/The_Seven_Basic_Plots
+    embed_instr: "Given a document, retrieve documents that have a similar narrative structure"
+    description: "Relationship to Christopher Booker's Seven Basic Plots: (1) Overcoming the Monster - protagonist defeats an antagonistic force that threatens them or their homeland; (2) Rags to Riches - poor protagonist acquires power/wealth/mate, loses it, then regains it while growing as a person; (3) The Quest - protagonist and companions set out to acquire an object or reach a location, facing obstacles; (4) Voyage and Return - protagonist goes to a strange land, overcomes threats or learns lessons, and returns with experience; (5) Comedy - conflict becomes increasingly confusing but is clarified in a single event, resulting in a happy ending; (6) Tragedy - hero with a major flaw or mistake that causes their undoing and fall; (7) Rebirth - an event forces the protagonist to change their ways and become a better person."
+    category_schema_hint: "Consider categories corresponding to the seven basic plots: Overcoming the Monster, Rags to Riches, The Quest, Voyage and Return, Comedy, Tragedy, Rebirth. Also consider: Multiple Plots (combines elements of multiple plots), None/Other (doesn't fit the framework)."
+    tag_schema_hint: "Create tags for plot elements: has_antagonist, has_threat, involves_defeat_of_evil, has_rise_and_fall, has_personal_growth, has_journey, has_quest_object, has_obstacles, has_strange_location, has_return_home, has_confusion_then_clarity, has_happy_ending, has_tragic_flaw, has_downfall, has_transformation, has_redemption, etc. Also consider similarity tags to prominent examples: similar_to_star_wars, similar_to_harry_potter, similar_to_beowulf (Overcoming the Monster); similar_to_cinderella, similar_to_aladdin, similar_to_great_expectations (Rags to Riches); similar_to_lotr, similar_to_raiders, similar_to_odyssey (The Quest); similar_to_alice_in_wonderland, similar_to_hobbit, similar_to_lion_king (Voyage and Return); similar_to_midsummer_nights_dream, similar_to_much_ado (Comedy); similar_to_romeo_and_juliet, similar_to_hamlet, similar_to_macbeth (Tragedy); similar_to_christmas_carol, similar_to_beauty_and_beast, similar_to_groundhog_day (Rebirth)."
+
+  narrative_arc:
+    description: "The type of narrative structure or story arc (problem-solution, cause-effect, journey, conflict-resolution, etc.)."
+    category_schema_hint: "Consider categories like: problem-solution, cause-effect, journey/adventure, conflict-resolution, character growth, unexpected twist, etc."
+    tag_schema_hint: "Create tags for narrative elements: has_problem, has_solution, has_conflict, has_resolution, has_twist, has_character_growth, etc."
+
+  theme:
+    description: "The main theme or topic of the story (relationships, work, adventure, everyday life, challenges, etc.)."
+    category_schema_hint: "Consider categories like: relationships/family, work/career, adventure/travel, everyday life, overcoming challenges, humor, learning/growth, etc."
+    tag_schema_hint: "Create tags for themes: involves_relationships, involves_work, involves_adventure, involves_everyday_life, involves_challenge, involves_humor, etc."
+
+  emotional_tone:
+    description: "The emotional tone or mood of the story (positive, negative, neutral, humorous, serious, etc.)."
+    category_schema_hint: "Consider categories like: positive/uplifting, negative/sad, neutral/matter-of-fact, humorous, suspenseful, heartwarming, etc."
+    tag_schema_hint: "Create tags for emotional qualities: is_positive, is_negative, is_humorous, is_serious, is_suspenseful, is_heartwarming, etc."
+
+  setting:
+    description: "The setting or context where the story takes place (home, workplace, outdoor, travel, social, etc.)."
+    category_schema_hint: "Consider categories like: home/domestic, workplace/professional, outdoor/nature, travel, social/public, school/education, etc."
+    tag_schema_hint: "Create tags for settings: at_home, at_work, outdoors, traveling, at_social_event, at_school, in_public, no_explicit_setting, implied_indoor_setting, vague_outdoor_setting, etc."
+
+  character_dynamics:
+    description: "The types of character interactions and relationships in the story (solo, family, friends, strangers, etc.)."
+    category_schema_hint: "Consider categories like: solo protagonist, family interaction, friends, romantic, strangers/new relationships, professional colleagues, etc."
+    tag_schema_hint: "Create tags for character elements: solo_protagonist, involves_family, involves_friends, involves_romance, involves_strangers, involves_colleagues, etc."
+
+# Abstract-Sim: Wikipedia sentences with abstract descriptions
+abstractsim:
+  abstract_similarity:
+    description: "The level of abstraction used to describe a concept. Sentences with similar abstraction levels use similar types of general or specific language, abstracting away from or focusing on particular details."
+    pairwise_sim_hint: "Two sentences are similar if they describe concepts at the same level of abstraction, using similarly general or specific language. Focus on whether both texts abstract away from details to the same degree, not whether they share the same topic."
+    category_schema_hint: "Consider categories based on abstraction level: highly specific (uses named entities, precise details, concrete examples), moderately specific (uses general categories with some detail), moderately abstract (uses broad concepts with minimal specifics), highly abstract (uses only general principles and abstract concepts)."
+    tag_schema_hint: "Create tags for abstraction properties: uses_named_entities, uses_specific_details, uses_concrete_examples, uses_general_categories, uses_broad_concepts, uses_abstract_concepts, describes_specific_instance, describes_general_pattern, includes_numbers_or_quantities, includes_dates_or_times, describes_action, describes_state, describes_relationship."
+
+# HackerNews: Tech news posts
+hackernews:
+  angle_of_interest:
+    description: "What motivates someone to click and engage with this post? What is the wow factor."
+    category_schema_hint: "Consider categories like: technical deep-dive (for engineers wanting implementation details), business/startup news (for founders/VCs tracking industry), thought leadership (big ideas and philosophy), practical tutorial (devs seeking solutions), academic research (for researchers/intellectuals), career/hiring (for job seekers), product launch (for early adopters), controversy/hot take (for debate enthusiasts), historical retrospective on tech developments (for tech historians), etc."
+    tag_schema_hint: "Create tags for interest angles: appeals_to_engineers, appeals_to_founders, appeals_to_researchers, appeals_to_job_seekers, appeals_to_early_adopters, technical_depth, business_implications, philosophical_angle, practical_utility, academic_rigor, controversial_take, historical_perspective, futurist_speculation, inside_baseball; cutting_edge_physical_science (new developments in biology, physics, etc), cutting_edge_math (new developments in math research, typically from quanta), youth_wow_factor (a cool project created by someone very young), fun_toy_project (not interesting because of technical complexity but interesting because it is a fun idea executed well, e.g. wikipedia in tik tok format), browser_game (a playable game, e.g. snake on a sphere), whimsical_gimmick (a fun website that is whimsical, e.g. website that pulls up an image of a person pointing wherever your cursor is at that moment), web_design (a link that is impressive due to its aesthetic value), personal_project_white_whale (a long running personal project), elegant_technical_deep_dive (a deep dive into re-implementing a very complex system from scratch, typically highlighting that it has very low lines of code relative to the full systems that it mocks, may also have educational value, e.g. nanochat), tech_think_piece (general interest pieces in outlets like the New Yorker, discussing some tech related topics), startup_news (news about companies raising money, IPOs, acquisitions, etc), tech_philosophy (philosophy or nuggets of wisdom from individual programmers on tech blogs)."
+
+  article_topic:
+    description: "The topic or subject matter of the article (technology, business, science, culture, politics, etc.)."
+    tag_schema_hint: "Does the article reference specific technologies, companies, products, people, events, etc.?"
+
+# Onion News: Satirical headlines
+onion_news:
+  topic:
+    description: "The literal subject matter of the headline (what is the joke about?)."
+    category_schema_hint: null
+    tag_schema_hint: "Create tags for different topics and subject matter in the headlines."
+
+  joketype:
+    description: "What makes the joke funny? Beyond the subject matter/content, what strategies does the headline use? e.g. Irony – Intended meaning is opposite of literal meaning; Character – Comedic character acting on personality traits; Reference – Common experiences that audiences can relate to; Shock – Surprising jokes typically involving sex, drugs, gross-out humor, swearing; Parody – Mimic a familiar character, trope or cliche in an unfamiliar way; Hyperbole – Exaggeration to absurd extremes; Wordplay – Puns, rhymes, double entendres; Analogy – Comparing two disparate things; Madcap – Crazy, wacky, silly, nonsensical; Meta-humor – Jokes about jokes, or about the idea of comedy; Misplaced Focus – Attention is focused on the wrong thing\nImportant: consider only on the most salient strategies in the joke."
+    category_schema_hint: "Consider categories based on comedic strategies: irony, character-based, reference, shock, parody, hyperbole, wordplay, analogy, madcap, meta-humor, misplaced focus, etc."
+    tag_schema_hint: "Create tags for different joke types and strategies: uses_irony, uses_character, uses_reference, uses_shock, uses_parody, uses_hyperbole, uses_wordplay, uses_analogy, uses_madcap, uses_meta_humor, uses_misplaced_focus, etc."
+
+# IntentEmotion: Customer support sentences
+intent_emotion:
+  intent_similarity:
+    description: "The underlying intent or purpose of the customer support query. Two sentences have similar intent if they express the same type of request, question, or concern, regardless of the specific words or emotional tone used. For example, 'I want to track my card' and 'Where is my package?' both express an intent to track a delivery."
+    pairwise_sim_hint: "Two sentences are similar if they express the same underlying intent or purpose, even if they use different words or have different emotional tones. Focus on what the customer is trying to accomplish (e.g., track delivery, cancel order, report problem, request information) rather than how they express it."
+    category_schema_hint: "Consider categories based on customer intent types: track_delivery, cancel_order, report_problem, request_refund, update_information, verify_status, compare_options, request_assistance, confirm_action, etc."
+    tag_schema_hint: "Create tags for different intent types: wants_to_track, wants_to_cancel, reports_issue, requests_refund, requests_info, verifies_status, compares_options, needs_help, confirms_action, asks_about_timing, asks_about_location, asks_about_cost, etc."
+
+  emotion_similarity:
+    description: "The emotional tone or sentiment expressed in the customer support query. Two sentences have similar emotion if they convey the same feelings or attitudes, regardless of the specific intent or topic. For example, 'Why is it so hard to track down this card?' and 'I'm frustrated with this delay' both express frustration."
+    pairwise_sim_hint: "Two sentences are similar if they express the same emotional tone or sentiment, even if they have different intents or topics. Focus on the feeling being conveyed (e.g., frustration, satisfaction, urgency, confusion, gratitude) rather than what the customer is asking about."
+    category_schema_hint: "Consider categories based on emotional tone: frustrated, satisfied, urgent, confused, grateful, worried, angry, neutral, polite, demanding, disappointed, relieved, etc."
+    tag_schema_hint: "Create tags for emotional qualities: expresses_frustration, expresses_satisfaction, expresses_urgency, expresses_confusion, expresses_gratitude, expresses_worry, expresses_anger, is_neutral, is_polite, is_demanding, expresses_disappointment, expresses_relief, uses_exclamation, uses_question, implies_impatience, etc."
+
+# NYTClustering: New York Times articles
+nytclustering:
+  topic:
+    description: "The primary topic or subject matter of the New York Times article. Articles with similar topics cover related subjects, themes, or domains, such as politics, business, technology, sports, arts, or international affairs."
+    pairwise_sim_hint: "Two articles are similar if they cover related topics or subject matter, even if they discuss different specific events or people. Focus on the general domain or theme (e.g., both about politics, both about technology) rather than specific details."
+    category_schema_hint: "Consider categories based on news topics: politics, business/economics, technology, sports, arts/culture, science, health, international affairs, local news, opinion/editorial, etc."
+    tag_schema_hint: "Create tags for different topic areas: covers_politics, covers_business, covers_technology, covers_sports, covers_arts, covers_science, covers_health, covers_international, covers_local, is_opinion, discusses_policy, discusses_economy, discusses_innovation, discusses_entertainment, etc."
+
+  location:
+    description: "The primary geographic location or region that the article is about. Articles with similar location focus on the same country, region, or geographic area, regardless of the specific topic or event being covered."
+    pairwise_sim_hint: "Two articles are similar if they focus on the same geographic location or region, even if they cover different topics. Focus on where the story is taking place (e.g., both about Japan, both about Europe) rather than what the story is about."
+    category_schema_hint: "Consider categories based on geographic regions: specific countries (e.g., United States, China, Japan, UK), continents (e.g., Europe, Asia, Africa), regions (e.g., Middle East, Latin America, Southeast Asia), or location types (e.g., urban areas, international, domestic)."
+    tag_schema_hint: "Create tags for locations: located_in_us, located_in_europe, located_in_asia, located_in_africa, located_in_americas, located_in_middle_east, specific_country_mentioned, specific_city_mentioned, international_scope, domestic_focus, regional_focus, etc."
+
+# TRIZ40: Innovation principles (Theory of Inventive Problem Solving)
+# Source: https://www.triz40.com/aff_Principles_TRIZ.php
+# Dataset: ~200 real innovation examples covering all 40 TRIZ principles (2-8 examples each)
+# Config options: examples_per_principle (controls replication), seed, max_docs
+# Multi-label: ~25% of examples demonstrate multiple principles
+triz40:
+  triz_principle:
+    description: "The TRIZ (Theory of Inventive Problem Solving) principles demonstrated by the innovation. TRIZ is a systematic approach to innovation that identifies 40 universal principles used to solve engineering problems. An innovation can demonstrate multiple TRIZ principles simultaneously. Principles include: Segmentation (divide into parts), Taking Out (extract/remove parts), Local Quality (non-uniform structures), Asymmetry, Merging (combine operations), Universality (multi-function), Nested Doll (objects within objects), Anti-Weight (compensate weight), Preliminary Action/Anti-Action, Beforehand Cushioning (backup systems), Equipotentiality (eliminate height changes), The Other Way Round (invert), Spheroidality (curved shapes), Dynamics (adaptable), Partial/Excessive Actions, Another Dimension (multi-layer), Mechanical Vibration, Periodic Action (pulsing), Continuity of Useful Action (eliminate idle time), Skipping (high-speed to avoid side effects), Blessing in Disguise (use harmful factors), Feedback, Intermediary (temporary carriers), Self-Service (auxiliary functions), Copying (simpler alternatives), Cheap Short-Living Objects (disposable), Mechanics Substitution (sensory means), Pneumatics/Hydraulics, Flexible Shells, Porous Materials, Color Changes, Homogeneity (same materials), Discarding/Recovering, Parameter Changes (physical states), Phase Transitions, Thermal Expansion, Strong Oxidants, Inert Atmosphere, and Composite Materials."
+    pairwise_sim_hint: "Two innovations are similar if they apply the same TRIZ principles to solve problems, even if they're in completely different domains. Focus on the problem-solving strategy used (e.g., both use segmentation to make parts independent, both use merging to combine functions) rather than the specific application or industry."
+    category_schema_hint: "Consider categories based on TRIZ principle groups: Resource-oriented (5_merging, 6_universality, 20_continuity_useful_action, 22_blessing_in_disguise, 25_self_service, 34_discarding_recovering), Space-time-oriented (1_segmentation, 7_nested_doll, 10_preliminary_action, 17_another_dimension, 19_periodic_action, 21_skipping), Structure-oriented (3_local_quality, 4_asymmetry, 14_spheroidality, 30_flexible_shells, 31_porous_materials, 40_composite_materials), Matter-oriented (28_mechanics_substitution, 29_pneumatics_hydraulics, 33_homogeneity, 35_parameter_changes, 36_phase_transitions, 38_strong_oxidants, 39_inert_atmosphere), System-oriented (2_taking_out, 8_anti_weight, 9_preliminary_anti_action, 11_beforehand_cushioning, 12_equipotentiality, 13_the_other_way_round, 15_dynamics, 23_feedback, 24_intermediary), Substitution-oriented (26_copying, 27_cheap_short_living, 32_color_changes, 37_thermal_expansion), Action-oriented (16_partial_excessive_actions, 18_mechanical_vibration)."
+    tag_schema_hint: "Create tags for each TRIZ principle: uses_segmentation, uses_taking_out, uses_local_quality, uses_asymmetry, uses_merging, uses_universality, uses_nested_doll, uses_anti_weight, uses_preliminary_anti_action, uses_preliminary_action, uses_beforehand_cushioning, uses_equipotentiality, uses_the_other_way_round, uses_spheroidality, uses_dynamics, uses_partial_excessive_actions, uses_another_dimension, uses_mechanical_vibration, uses_periodic_action, uses_continuity_useful_action, uses_skipping, uses_blessing_in_disguise, uses_feedback, uses_intermediary, uses_self_service, uses_copying, uses_cheap_short_living, uses_mechanics_substitution, uses_pneumatics_hydraulics, uses_flexible_shells, uses_porous_materials, uses_color_changes, uses_homogeneity, uses_discarding_recovering, uses_parameter_changes, uses_phase_transitions, uses_thermal_expansion, uses_strong_oxidants, uses_inert_atmosphere, uses_composite_materials. Also consider domain tags: mechanical_engineering, electrical_engineering, software_engineering, consumer_product, industrial_application, materials_science, process_optimization, safety_improvement, cost_reduction, performance_enhancement, space_saving, energy_efficiency, user_experience, manufacturing, packaging, etc."
+
+# RateMyProfClustering: Professor reviews
+ratemyprof:
+  cluster:
+    description: "The thematic category of the professor review based on what aspect it highlights: demeanor/attitude/personal qualities, teaching style/methods, course difficulty/workload, grading practices/fairness, or clarity/communication."
+    pairwise_sim_hint: "Two reviews are similar if they discuss the same aspect of the professor's performance, even if they express different opinions. Focus on what dimension is being evaluated (e.g., both discuss teaching style, both discuss grading) rather than positive or negative sentiment."
+    category_schema_hint: "Consider categories like: demeanor/attitude, teaching style, course difficulty, grading practices, communication/clarity, helpfulness/availability, expertise/knowledge, etc."
+    tag_schema_hint: "Create tags for review aspects: discusses_demeanor, discusses_teaching_style, discusses_difficulty, discusses_grading, discusses_clarity, discusses_helpfulness, discusses_expertise, mentions_personality, mentions_methods, mentions_workload, mentions_fairness, etc."
+
+# FeedbacksClustering: Summary feedback
+feedbacks:
+  cluster:
+    description: "The type of feedback provided on a summary: inclusion of main points and necessary details, accuracy and correctness of information, or coherence and logical flow of ideas."
+    pairwise_sim_hint: "Two feedback comments are similar if they address the same quality dimension of the summary, even if they point out different specific issues. Focus on what aspect of summary quality is being evaluated (e.g., both about completeness, both about coherence) rather than the specific criticism."
+    category_schema_hint: "Consider categories like: completeness (main points and details), accuracy (correctness of information), coherence (logical flow), clarity (understandability), conciseness (brevity), etc."
+    tag_schema_hint: "Create tags for feedback types: addresses_completeness, addresses_accuracy, addresses_coherence, addresses_clarity, addresses_conciseness, mentions_missing_info, mentions_errors, mentions_structure, mentions_flow, etc."
+
+# FewRelClustering: Relation type clusters
+fewrel:
+  cluster:
+    description: "The type of relationship expressed between entities in the sentence: field of work, record label, place of birth, occupation, nationality, location, affiliation, etc. Based on semantic relation extraction and classification."
+    pairwise_sim_hint: "Two sentences are similar if they express the same type of relationship between entities, even if the specific entities are completely different. Focus on the relation type (e.g., both describe 'field of work', both describe 'place of birth') rather than the domain or entities involved."
+    category_schema_hint: "Consider categories based on relation types: professional (field of work, occupation, employer), geographic (place of birth, location, nationality), organizational (affiliation, member of), creative (creator of, artist of), temporal (date of birth, time period), familial (parent of, sibling of), etc."
+    tag_schema_hint: "Create tags for relation types: expresses_profession, expresses_location, expresses_affiliation, expresses_creation, expresses_time, expresses_family, involves_person, involves_organization, involves_place, involves_work, etc."
+
+# FewNerdClustering: Named entity type clusters
+fewnerd:
+  cluster:
+    description: "The type of named entity featured in the text: person, organization, location, building, art, product, event, etc. Based on fine-grained named entity recognition categories."
+    pairwise_sim_hint: "Two texts are similar if they feature the same type of named entity, even if the specific entities and contexts are different. Focus on the entity category (e.g., both feature organizations, both feature geographical locations) rather than the specific entity or topic."
+    category_schema_hint: "Consider categories based on entity types: person (individual, group), organization (company, institution, government), location (city, country, geographical feature), building/facility, creative work (art, literature, media), product, event, etc."
+    tag_schema_hint: "Create tags for entity types: features_person, features_organization, features_location, features_building, features_art, features_product, features_event, features_geo_political_entity, features_facility, features_creative_work, etc."
+
+# FewEventClustering: Event type clusters
+fewevent:
+  cluster:
+    description: "The type of life event or biographical category described in the text: education, career, personal life, achievements, conflicts, birth/death, etc. Based on event type classification in biographical contexts."
+    pairwise_sim_hint: "Two texts are similar if they describe the same type of life event or biographical category, even if they're about different people or specific circumstances. Focus on the event category (e.g., both about education, both about career milestones) rather than the specific person or details."
+    category_schema_hint: "Consider categories based on event types: education (schooling, degrees, training), career (jobs, appointments, roles), personal life (marriage, family, relationships), achievements (awards, accomplishments), conflicts (controversies, challenges), life milestones (birth, death), etc."
+    tag_schema_hint: "Create tags for event types: describes_education, describes_career, describes_personal_life, describes_achievement, describes_conflict, describes_milestone, mentions_degree, mentions_position, mentions_award, mentions_challenge, etc."
+
+# InstructSTSB: Sentence similarity
+instructstsb:
+  similarity:
+    description: "Whether two sentences are semantically similar or entail each other in the context of a specific instruction or question. Binary similarity where 1 means the sentences are similar/entail and 0 means they are dissimilar."
+    pairwise_sim_hint: "Two sentence pairs are similar if they have the same similarity relationship (both similar or both dissimilar) when evaluated in the context of their respective instructions. The instruction provides the lens through which similarity should be judged."
+    category_schema_hint: "Consider categories: similar (score=1, sentences entail or are very similar), dissimilar (score=0, sentences don't entail or are different)."
+    tag_schema_hint: "Create tags for similarity properties: are_similar, are_dissimilar, high_overlap, low_overlap, same_topic, different_topic, entailment, contradiction, neutral_relation, etc."
+
+# ArXiv CS: Computer Science papers
+arxiv_cs:
+  research_sensibility:
+    description: "The type of paper and research sensibility it encapsulates—the fundamental approach and contribution style of the research. This captures what kind of intellectual work the paper represents: incremental optimization (hill climbing on benchmarks), method transfer (applying prior techniques to new domains), novel method development (introducing fundamentally new approaches), theoretical contributions (proofs and complexity analysis), systems building (engineering artifacts), resource creation (datasets/benchmarks), synthesis (surveys/frameworks), empirical investigation (comparative studies), or meta-research (critiques, reproductions, problem formulations)."
+    pairwise_sim_hint: "Two papers are similar if they embody the same research sensibility and contribution type, even if they address completely different technical problems or application domains. Focus on the fundamental nature of the intellectual contribution (e.g., both incrementally optimize existing benchmarks, both transfer methods to new domains) rather than the specific technical content or domain."
+    category_schema_hint: "Consider categories based on research sensibility: benchmark_optimization (incremental improvements on existing benchmarks through architectural tweaks, hyperparameter tuning, or minor algorithmic refinements), method_transfer (applying existing techniques to new domains, tasks, or modalities), novel_method (introducing fundamentally new algorithms, architectures, or techniques), theoretical_analysis (mathematical proofs, complexity results, convergence guarantees, formal frameworks), systems_building (practical implementations, software tools, engineering artifacts focused on real-world deployment), dataset_creation (introducing new datasets, benchmarks, or evaluation resources), survey_synthesis (comprehensive reviews, surveys, taxonomies that organize existing work), empirical_study (systematic comparisons, ablation studies, analysis papers that investigate existing methods), unifying_framework (theoretical frameworks that organize or unify disparate prior work), problem_formulation (defining new problems, research directions, or perspectives), critique_negative_results (questioning assumptions, reporting negative results, identifying limitations), reproduction_study (validating, replicating, or re-analyzing prior work), position_paper (vision statements, opinion pieces about research directions), application_paper (applying established techniques to specific practical problems)."
+    tag_schema_hint: "Create tags for research sensibilities: is_benchmark_optimization, is_method_transfer, is_novel_method, is_theoretical, is_systems_building, is_dataset_creation, is_survey, is_empirical_study, is_framework, is_problem_formulation, is_critique, is_reproduction, is_position_paper, is_application_paper, involves_architecture_search, involves_hyperparameter_tuning, involves_domain_adaptation, involves_new_task, involves_proof, involves_complexity_analysis, involves_convergence_analysis, involves_implementation, involves_engineering, involves_benchmarking, involves_resource_creation, involves_systematic_comparison, involves_ablation_study, involves_unification, involves_taxonomy, involves_new_problem, involves_negative_results, involves_replication, involves_vision_statement, involves_practical_application, incremental_improvement, significant_innovation, engineering_focused, theory_focused, empirical_focused, meta_research, hill_climbing_approach, transfer_learning_approach, novel_contribution_approach, synthesis_approach, analysis_approach."
+
+  paper_type:
+    description: "The type of paper based on its primary contribution and research approach. This is a simpler categorization than research_sensibility, focusing on the main category of contribution."
+    pairwise_sim_hint: "Two papers are similar if they belong to the same general category of research contribution, even if their specific technical content differs. Focus on the type of contribution (e.g., both propose new methods, both create resources) rather than the specific problem or domain."
+    category_schema_hint: "Consider categories like: algorithmic (new algorithms or methods), systems (implementations, tools, infrastructure), theoretical (proofs, analysis, formal results), empirical (experimental studies, comparisons), resource (datasets, benchmarks, surveys), application (applying techniques to real problems), survey (reviews and syntheses)."
+    tag_schema_hint: "Create tags for paper types: is_algorithmic, is_systems, is_theoretical, is_empirical, is_resource, is_application, is_survey, proposes_method, builds_system, proves_theorem, creates_dataset, reports_experiments, transfers_technique, reviews_literature, etc."
+
+  core_technique:
+    description: ""
+    pairwise_sim_hint: null
+    category_schema_hint: null
+    tag_schema_hint: null
+
+  core_contribution:
+    description: ""
+    pairwise_sim_hint: null
+    category_schema_hint: null
+    tag_schema_hint: null
+
+# Knowledge Graph Completion datasets
+wn18rr:
+  relation:
+    description: "The type of lexical relationship between two entities (words) in the WordNet knowledge graph. WordNet relations represent semantic connections between word senses: hypernymy (is-a), derivational relationships (word formation), instance relationships, meronymy (part-of), and domain associations."
+    pairwise_sim_hint: "Two triples are similar if they share the same relation type, even if the specific entities (words) are completely different. Focus on the type of relationship (e.g., both are hypernym relations, both are derivational relations) rather than the specific word meanings or domains. For example, (dog, hypernym, animal) is similar to (car, hypernym, vehicle) because both use the hypernym relation."
+    category_schema_hint: "Consider categories based on WordNet's 11 relation types: hypernym (is-a type of), derivationally_related_form (word derivation), instance_hypernym (is instance of), member_meronym (has member), synset_domain_topic_of (topic association), has_part (part-whole), member_of_domain_usage (usage domain), member_of_domain_region (regional domain), verb_group (related verbs), also_see (related concepts), similar_to (similarity)."
+    tag_schema_hint: "Create tags for relation types: is_hypernym, is_derivational, is_instance, is_meronym, is_topic_domain, is_part_relation, is_usage_domain, is_regional_domain, is_verb_group, is_see_also, is_similarity, is_hierarchical_relation, is_associative_relation, is_lexical_relation, involves_taxonomy, involves_word_formation, etc."
+    summary_hint: "Describe the type of relationship in this triple, focusing on the relation type. Format: 'This triple represents a [relation_type] relationship where [head] is related to [tail] through [brief explanation of the relation semantics].' For example: 'This triple represents a hypernym relationship where entity_12345 is a type of entity_67890.'"
+
+fb15k237:
+  relation:
+    description: "The type of factual relationship between two entities in the Freebase knowledge graph. FB15k-237 contains 237 diverse relation types covering domains like people (occupation, nationality, place of birth), organizations (headquarters, industry, founded by), locations (contains, capital, timezone), media (genre, language, release date), and many more. The relation defines how the head entity is connected to the tail entity."
+    pairwise_sim_hint: "Two triples are similar if they share the same relation type, regardless of the specific entities involved or their domains. Focus on the type of relationship (e.g., both describe birthplace, both describe occupation, both describe location containment) rather than the specific people, places, or things. For example, (/m/obama, place_of_birth, /m/hawaii) is similar to (/m/einstein, place_of_birth, /m/germany) because both use the place_of_birth relation."
+    category_schema_hint: "Consider broad relation categories in Freebase: biographical (birth, death, nationality, occupation, education), organizational (headquarters, industry, membership, leadership), geographical (contains, capital, borders, timezone), temporal (start_date, end_date, year), categorical (type, genre, category, classification), relational (spouse, parent, child, sibling), functional (produces, creates, works_on, specializes_in), locational (located_in, adjacent_to, near), causal (caused_by, leads_to), attributive (has_property, characterized_by), and media-related (language, format, platform). Freebase uses hierarchical relation paths (e.g., /location/country/capital, /people/person/nationality)."
+    tag_schema_hint: "Create tags for relation types: is_biographical, is_organizational, is_geographical, is_temporal, is_categorical, is_relational, is_functional, is_locational, is_causal, is_attributive, is_media_related, involves_person, involves_organization, involves_location, involves_time, involves_hierarchy, is_symmetric_relation, is_asymmetric_relation, is_one_to_one, is_one_to_many, is_many_to_many, domain_people, domain_location, domain_organization, domain_media, domain_business, domain_sports, domain_arts, etc."
+    summary_hint: "Describe the type of relationship in this triple, focusing on the relation type and domain. Format: 'This triple represents a [relation_type] relationship where [head_entity] is connected to [tail_entity] through [brief explanation, e.g., the Freebase relation path /domain/type/property]. The relation belongs to the [domain] domain.' For example: 'This triple represents a place_of_birth relationship where entity obama is connected to entity hawaii through the person's birthplace. The relation belongs to the biographical domain.'"
+
+trex:
+  relation:
+    description: "The type of factual relationship between two entities extracted from Wikipedia and aligned with Wikidata. T-REx contains 839 diverse relation types expressed as human-readable templates (e.g., '[Person] was born in [Place]', '[Organization] is located in [City]'). Relations cover biographical facts, geographical information, organizational structure, temporal relationships, creative works, and more. Unlike opaque relation IDs, T-REx relations are self-explanatory natural language patterns."
+    pairwise_sim_hint: "Two triples are similar if they share the same relation type template, regardless of the specific entities involved. Focus on the relationship pattern (e.g., both describe where someone was born, both describe what organization someone works for) rather than the specific people or places. For example, ('Einstein', '[Person] was born in [Place]', 'Germany') is similar to ('Mozart', '[Person] was born in [Place]', 'Austria') because both use the birth location relation."
+    category_schema_hint: "Consider broad relation categories: biographical (birth, death, education, family), professional (occupation, employer, position), geographical (location, contains, borders), organizational (founded_by, headquartered_in, member_of), creative (author_of, genre, language), temporal (start_date, end_date, time_period), categorical (type, instance_of, subclass_of), possessive (has_part, owns, controls), associative (associated_with, related_to, similar_to), causal (caused_by, results_in, influences). Relations are expressed as natural language templates with placeholder slots."
+    tag_schema_hint: "Create tags for relation types and patterns: is_biographical, is_professional, is_geographical, is_organizational, is_creative_work, is_temporal, is_categorical, is_possessive, is_associative, is_causal, involves_person, involves_place, involves_organization, involves_work, involves_event, involves_time, is_birth_relation, is_location_relation, is_membership_relation, is_creation_relation, is_hierarchical, is_symmetric, is_many_to_one, is_one_to_many, subject_is_person, subject_is_place, object_is_person, object_is_place, etc."
+    summary_hint: "Describe the type of relationship in this triple using the natural language template. Format: 'This triple represents a relationship where [head] [relation_pattern] [tail]. The relation type is [category, e.g., biographical, geographical, organizational].' For example: 'This triple represents a relationship where Albert Einstein was born in Germany. The relation type is biographical, specifically describing place of birth.'"
+
+# Haiku: English haiku poems
+# Analyzes what haikus evoke beneath their surface through multiple aesthetic and philosophical dimensions
+haiku:
+  philosophical_depth:
+    description: "The underlying philosophical insight or truth that the haiku evokes about existence, nature, human experience, impermanence, interconnection, or the nature of reality. What deeper understanding about life or the world does the haiku point toward beneath its surface imagery? Common themes include: mono no aware (pathos of things/impermanence), wabi-sabi (beauty in imperfection), yugen (mysterious depth), aware (sensitivity to ephemeral beauty), satori (sudden enlightenment), mushin (no-mind/present awareness), ma (negative space/pause), acceptance of transience, unity with nature, solitary contemplation, simplicity revealing complexity, the eternal in the momentary."
+    pairwise_sim_hint: "Two haiku are similar if they evoke the same philosophical insight or existential theme, even if they use completely different imagery or settings. Focus on the deeper truth being pointed at (e.g., both express impermanence, both reveal interconnection, both capture sudden insight) rather than the specific images or words used."
+    category_schema_hint: "Consider categories based on philosophical themes: impermanence/transience (mono no aware - awareness that things pass), interconnection/unity (oneness with nature, dissolution of boundaries), present moment/mindfulness (direct experience, immediate awareness), simplicity/essence (wabi-sabi, finding profound in mundane), paradox/mystery (yugen - profound depth beyond words), acceptance/letting-go (non-attachment, flow), solitude/contemplation (quiet reflection), beauty-in-decay (aging, seasons ending), sudden-insight/awakening (satori moments), emptiness/space (ma, what's unsaid), human-condition (universal experiences), cyclical-nature (return, renewal), contrast/duality (opposing forces), ephemeral-beauty (cherry blossoms, dewdrops), stillness/silence (pause, cessation)."
+    tag_schema_hint: "Create tags for philosophical dimensions: evokes_impermanence, evokes_mono_no_aware, evokes_interconnection, evokes_unity_with_nature, evokes_present_moment, evokes_mindfulness, evokes_simplicity, evokes_wabi_sabi, evokes_mystery, evokes_yugen, evokes_acceptance, evokes_letting_go, evokes_solitude, evokes_contemplation, evokes_beauty_in_decay, evokes_sudden_insight, evokes_satori, evokes_emptiness, evokes_ma, evokes_human_condition, evokes_mortality, evokes_cyclical_time, evokes_contrast, evokes_ephemeral_beauty, evokes_stillness, evokes_silence, reveals_eternal_in_momentary, reveals_complexity_in_simplicity, reveals_profound_in_mundane, expresses_non_attachment, expresses_flow, captures_liminal_moment, captures_transformation, suggests_deeper_truth, points_beyond_words, creates_pause_for_reflection, invites_contemplation."
+
+  imagery_symbolism:
+    description: "The concrete images and sensory details in the haiku, and what they symbolize or represent beyond their literal meaning. What do the specific objects, natural elements, or scenes stand for? How do the sensory details (visual, auditory, tactile) create meaning beyond description? Consider both traditional haiku symbolism (cherry blossoms = impermanence, moon = enlightenment, frogs = awakening, snow = purity/silence) and the particular symbolic resonance in this specific haiku."
+    pairwise_sim_hint: "Two haiku are similar if they use imagery that symbolizes similar concepts or evokes similar archetypal meanings, even if the specific images differ. Focus on what the images represent (e.g., both use images of endings/beginnings, both use images of stillness, both use images of transformation) rather than the literal objects described."
+    category_schema_hint: "Consider categories based on symbolic dimensions: seasonal-transitions (blooming, falling leaves, first snow), natural-elements (water/flow, stone/permanence, wind/change, fire/transformation), living-beings (birds/freedom, insects/small-scale wonder, fish/hidden-depths), celestial (moon/illumination, stars/vastness, clouds/transience), temporal-markers (dawn/beginning, dusk/ending, seasons/cycles), human-artifacts (abandoned-objects, simple-tools, paths/journeys), light-shadow (illumination-ignorance, clarity-mystery), growth-decay (blooming-wilting, building-crumbling), presence-absence (what's-there, what's-missing), sound-silence (breaks-in-quietude, return-to-stillness)."
+    tag_schema_hint: "Create tags for imagery: uses_seasonal_imagery, uses_water_imagery, uses_stone_mountain_imagery, uses_plant_flower_imagery, uses_animal_imagery, uses_insect_imagery, uses_bird_imagery, uses_celestial_imagery, uses_moon, uses_stars, uses_sun, uses_weather_imagery, uses_light_shadow, uses_sound_imagery, uses_silence, uses_human_artifact, uses_path_journey, uses_dwelling_shelter, uses_empty_space, cherry_blossom_symbol, falling_leaves_symbol, snow_symbol, rain_symbol, fog_mist_symbol, frog_symbol, cicada_symbol, crow_symbol, dewdrop_symbol, pond_lake_symbol, mountain_symbol, symbolizes_impermanence, symbolizes_permanence, symbolizes_transformation, symbolizes_stillness, symbolizes_movement, symbolizes_beginning, symbolizes_ending, symbolizes_cycle, symbolizes_purity, symbolizes_simplicity, rich_sensory_detail, sparse_sensory_detail, visual_dominant, auditory_dominant, tactile_dominant, olfactory_present, synesthetic_imagery."
+
+  juxtaposition_structure:
+    description: "The relationship and contrast between the two parts of the haiku (typically separated by a cutting word or line break). How do the two images or ideas interact? What tension, harmony, or insight arises from their juxtaposition? Consider: direct contrast (opposite qualities), parallel images (similar things side-by-side), cause-effect, zoom in/zoom out (scale shift), foreground-background, observer-observed, human-nature, eternal-momentary, expected-unexpected."
+    pairwise_sim_hint: "Two haiku are similar if they use the same type of structural relationship between their parts, even if the specific content differs. Focus on the nature of the juxtaposition (e.g., both use scale-shift from small to vast, both contrast stillness with sudden motion, both place human moment against natural backdrop) rather than the specific images."
+    category_schema_hint: "Consider categories based on juxtaposition type: direct-contrast (opposing qualities or states), parallel-harmony (similar or complementary images), scale-shift (micro-macro, intimate-cosmic), temporal-contrast (before-after, fleeting-eternal), motion-stillness (movement paired with calm), human-nature (human experience against natural world), presence-absence (what-is with what-isn't), sound-silence (noise breaking quiet or vice versa), light-dark (illumination and shadow), inner-outer (subjective experience with objective scene), cause-effect (action and consequence), question-answer (problem and resolution), concrete-abstract (physical detail evoking concept)."
+    tag_schema_hint: "Create tags for structural relationships: uses_direct_contrast, uses_parallel_images, uses_scale_shift, zooms_in, zooms_out, contrasts_motion_stillness, contrasts_sound_silence, contrasts_light_dark, contrasts_human_nature, contrasts_presence_absence, contrasts_temporal, contrasts_expected_unexpected, creates_tension, creates_harmony, creates_surprise, uses_cause_effect, uses_observer_observed, uses_foreground_background, uses_concrete_abstract, uses_question_answer, strong_cut, subtle_transition, unified_image, fragmented_image, clear_two_part_structure, flowing_structure, sharp_break, gentle_turn."
+
+  emotional_resonance:
+    description: "The feeling, mood, or emotional quality that the haiku evokes in the reader. This goes beyond explicit emotion words to the affective atmosphere created by the imagery and structure. What feeling lingers after reading? Consider: melancholy, serenity, loneliness, joy, wistfulness, awe, intimacy, unease, wonder, contentment, yearning, peace, surprise, poignancy, tenderness, detachment, engagement, mystery, clarity."
+    pairwise_sim_hint: "Two haiku are similar if they evoke the same emotional quality or affective atmosphere, even if they achieve it through different imagery or themes. Focus on the feeling that lingers (e.g., both evoke gentle melancholy, both create sense of wonder, both feel serene and accepting) rather than the subject matter."
+    category_schema_hint: "Consider emotional categories: contemplative-calm (serenity, peace, stillness, meditative quality), melancholic-wistful (gentle sadness, nostalgia, longing, bittersweet), joyful-celebratory (delight, celebration, lightness, pleasure), solitary-lonely (isolation, aloneness, quiet separation, hermetic quality), awe-wonder (amazement, vastness, sublime, mysterious grandeur), poignant-tender (touching beauty, delicate emotion, fragile moments), unsettling-eerie (uncanny, strange, disquieting, liminal unease), playful-light (humor, whimsy, childlike wonder, gentle surprise), yearning-desire (longing, wanting, reaching toward), detached-observational (cool distance, objective witness, non-judgmental seeing), intimate-personal (close connection, private moment, vulnerable sharing), stark-austere (bare, unadorned, harsh clarity, winter quality)."
+    tag_schema_hint: "Create tags for emotional qualities: evokes_serenity, evokes_peace, evokes_melancholy, evokes_wistfulness, evokes_joy, evokes_wonder, evokes_awe, evokes_loneliness, evokes_solitude, evokes_tenderness, evokes_poignancy, evokes_nostalgia, evokes_yearning, evokes_contentment, evokes_surprise, evokes_unease, evokes_mystery, evokes_clarity, evokes_intimacy, evokes_detachment, evokes_playfulness, evokes_stillness, evokes_celebration, evokes_contemplation, evokes_acceptance, evokes_longing, evokes_gratitude, tone_gentle, tone_stark, tone_warm, tone_cool, tone_dark, tone_bright, tone_quiet, tone_vibrant, mood_meditative, mood_bittersweet, mood_uplifting, mood_somber, mood_uncanny, creates_sense_of_space, creates_sense_of_closeness, creates_pause, creates_motion."
+
+  implied_meaning:
+    description: "What the haiku suggests or implies without stating directly. The meaning that emerges from what's unsaid, from the gaps and silences, from the reader filling in connections. What does the haiku point to without naming? What understanding arises between the lines? Consider the Japanese concept of 'ma' (negative space) - what's potent in what's omitted? What does the haiku invite the reader to complete or discover?"
+    pairwise_sim_hint: "Two haiku are similar if they rely on similar strategies of implication and suggestion, leaving similar types of meaning unstated. Focus on what's evoked through absence (e.g., both imply human emotion through natural scene alone, both suggest narrative through single frozen moment, both point to spiritual insight through mundane detail) rather than what's explicitly present."
+    category_schema_hint: "Consider categories of implication: narrative-implied (story/event hinted through fragment), emotion-through-scene (feeling shown via imagery not named), spiritual-insight-pointed-to (truth indicated not explained), human-presence-in-absence (person implied by details but not mentioned), relationship-suggested (connection between beings/things hinted), change-transformation-indicated (shift suggested through before/after or incomplete action), question-raised-not-answered (mystery opened but not closed), completion-by-reader-required (meaning depends on reader's participation), cultural-reference-evoked (allusion to tradition/shared knowledge), contrast-creates-third-meaning (two images combine to imply something neither states alone)."
+    tag_schema_hint: "Create tags for implication strategies: implies_narrative, implies_backstory, implies_future, implies_emotion_through_scene, emotion_unstated, implies_human_presence, human_absent_but_felt, implies_relationship, implies_transformation, implies_change, implies_continuity, implies_passage_of_time, implies_spatial_relationship, raises_question, leaves_open_ended, requires_reader_completion, relies_on_cultural_knowledge, relies_on_seasonal_association, meaning_in_juxtaposition, meaning_in_absence, meaning_in_silence, meaning_in_what_follows, uses_ma_negative_space, uses_ellipsis_of_thought, shows_not_tells, concrete_implies_abstract, physical_implies_spiritual, particular_implies_universal, moment_implies_eternity, fragment_implies_whole, still_image_implies_motion, silence_implies_sound."
+
+  kigo_seasonality:
+    description: "The seasonal reference (kigo) in the haiku, whether explicit or subtle. Traditional haiku anchor themselves in a season through seasonal words or images. What season is evoked? How does the seasonal context add layers of meaning? Seasons carry archetypal associations: spring (renewal, youth, beginnings), summer (abundance, vitality, ripeness), autumn (decline, maturity, harvest), winter (stillness, death, waiting). Some haiku transcend specific seasons or occupy liminal times (dawn, dusk, seasonal transitions)."
+    pairwise_sim_hint: "Two haiku are similar if they evoke the same season or seasonal quality, drawing on similar seasonal associations and archetypal meanings. Focus on the seasonal context and its symbolic resonance rather than specific images."
+    category_schema_hint: "Consider categories: spring (new-growth, blossoms, renewal, awakening, rain, melting), early-summer (green abundance, bird song, long days), late-summer (heat, cicadas, ripeness, lazy time), autumn (falling leaves, harvest, decline, cooling, preparation), early-winter (first snow, bare trees, approaching cold, gathering in), deep-winter (snow depth, ice, stillness, hibernation, starkness), seasonal-transition (in-between times, cusp moments, neither-nor), no-season/all-seasons (transcends seasonal grounding), liminal-times (dawn, dusk, twilight - time rather than season)."
+    tag_schema_hint: "Create tags for seasonality: spring_season, summer_season, autumn_season, winter_season, seasonal_transition, early_spring, late_spring, early_summer, late_summer, early_autumn, late_autumn, early_winter, deep_winter, no_clear_season, all_seasons, transcends_season, liminal_time, uses_spring_kigo, uses_summer_kigo, uses_autumn_kigo, uses_winter_kigo, explicit_seasonal_marker, subtle_seasonal_hint, seasonal_association_traditional, seasonal_association_personal, evokes_renewal, evokes_abundance, evokes_decline, evokes_stillness, evokes_waiting, evokes_awakening, evokes_dormancy, evokes_growth, evokes_harvest, evokes_ending, evokes_beginning, evokes_threshold."
+
+# Inspired: Movie recommendation dialogues
+# Source: https://github.com/allenai/instructLF (InstructLF project)
+# Dataset: ~18K training examples, ~2.6K test examples
+# Config options: split (train/test), max_docs, flatten_movies (one doc per movie if true)
+inspired:
+  movie_recommendation:
+    description: "The specific movie(s) recommended based on the user's preferences expressed in the conversation. Recommendations are made through natural dialogue where users discuss their movie preferences, and the system suggests films that match their stated interests in genres, actors, themes, or moods."
+
+# Bills: US legislative bills with topic and subtopic annotations
+# Source: https://github.com/allenai/instructLF (InstructLF project)
+# Dataset: ~8.6K bills from US Congress
+# Config options: text_field (summary or tokenized_text), max_docs
+bills:
+  topic:
+    description: "The primary policy topic or domain that the legislative bill addresses. Bills are categorized into broad policy areas such as Healthcare, Education, Environment, Energy, Transportation, Defense, Economy, Social Welfare, and more."
+
+  subtopic:
+    description: "The specific subtopic or category within the broader policy domain. This provides a more granular classification of the bill's focus area, such as 'Elementary & Secondary' within Education or 'Natural Gas & Oil' within Energy."
+
+# D5: ABC news articles with descriptor applicability scores
+# Doc-to-doc comparison variant with 60 descriptors
+# Source: https://github.com/ruiqi-zhong/D5
+d5:
+  # Dynamic criteria: description_0 through description_59
+  # Each criterion represents applicability of a specific descriptor
+  # Example descriptors:
+  #   - "mention the coronavirus and the pandemic's effects"
+  #   - "discuss the politics of the situation, such as government responses"
+  #   - "highlight struggles of certain industries"
+  # ~2000 ABC news articles, mean applicability score ~0.13 (13% positive labels)
+  description_0:
+    description: "Applicability of the descriptor (dynamically loaded from D5 PKL file). D5 contains 60 descriptors total, indexed 0-59. Each descriptor is a text string describing a property or theme that may apply to news articles."
+    pairwise_sim_hint: "Two documents are similar if they both have high (or both have low) applicability scores for this descriptor. Documents are ABC news articles, and the descriptor defines the similarity dimension being evaluated."
+
+# D5 Applicability: Property-text matching in joint embedding space
+# Alternate variant where properties and texts are embedded together
+d5_applicability:
+  applicability:
+    description: "Whether a property (descriptor) is applicable to a text. This task evaluates property-text matching in a joint embedding space containing 60 properties formatted as 'property: <text>' and ~2000 news texts formatted as 'headline: <text>' or 'description: <text>'. The goal is to identify which property-text pairs match based on semantic applicability."
+    pairwise_sim_hint: "Properties and texts are similar if the property is applicable to the text. This is an asymmetric matching task: given a property, retrieve applicable texts; or given a text, retrieve applicable properties. The model must be invariant to formatting (headline vs description) and embed properties and texts in the same space."
+    # Property side embedding instruction
+    embed_query_instr_template: "Given the following property, embed it so that it is close to texts that it is applicable to. {document}"
+    # Text side embedding instruction
+    embed_doc_instr_template: "Given the following text, embed it so that it is close to applicable properties. {document}"
+
+# Goodreads Quotes: Curated literary quotes
+# Large dataset loaded via streaming
+# Config options: min_likes (filter by quote popularity), max_docs, seed, authors (filter by author list)
+# Each document includes: text, author, tags, and likes metadata
+goodreads_quotes:
+  positive_sum:
+    description: "Are these two quotes interesting when placed in conversation with each other? Could you write an interesting essay about them, without it feeling forced, artificial, or corny? Would it be interesting to study these quotes in conjunction?"
+    pairwise_sim_hint: "Two quotes are positively related if they create an interesting dialogue or conversation when placed together - they might complement each other, offer contrasting perspectives on the same theme, illuminate different aspects of a shared concept, or create a productive tension that would make for compelling analysis. They should feel naturally connected without being redundant, and their pairing should offer more insight than each quote alone. Avoid pairs that feel forced, artificial, or superficially connected (like only sharing a keyword). Look for pairs where you could genuinely write an interesting essay exploring their relationship."
+    category_schema_hint: "Consider relationship types: complementary-perspectives (different angles on same idea), productive-tension (contrasting but illuminating views), shared-deep-theme (not just surface keywords, but genuine thematic resonance), builds-upon (one extends or deepens the other), illustrates-applies (one abstract, one concrete example), dialectical (thesis-antithesis leading to synthesis), question-answer (one raises question, other addresses it), problem-solution (one identifies issue, other offers approach), cause-effect (one shows condition, other shows consequence), micro-macro (one personal/specific, other universal/general)."
+    tag_schema_hint: "Create tags for connection quality: genuine_resonance, forced_connection, superficial_similarity, deep_thematic_link, complementary_ideas, contrasting_productive, contrasting_contradictory, extends_thought, applies_concept, shares_metaphor, shares_wisdom, parallel_structure, illuminates_each_other, creates_dialogue, essay_worthy, naturally_paired, artificially_paired, redundant_together, synergistic_pair, intellectually_stimulating, emotionally_resonant, philosophically_connected, practically_applicable, abstract_concrete_pair, personal_universal_pair."
+    # for criteria, we probably want positive_sum: "Are these two quotes interesting when placed in conversation with each other? Could you write an interesting essay about them, without it feeling forced, artificial, or corny? Would it be interesting to study these quotes in conjuction?"

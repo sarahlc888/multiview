@@ -1,8 +1,7 @@
-# Benchmark configuration for MoralFables evaluation
-# Goal: Test prelabeled triplet generation with all 4 moral criteria
-run_name: "benchmark_generalize"
+# Benchmark configuration for prelabeled datasets
+run_name: "benchmark_prelabeled"
 logging:
-  level: INFO # DEBUG
+  level: INFO
   output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
@@ -11,75 +10,93 @@ step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 200  # Small dataset for quick testing
-    max_triplets: 10
-
-    num_synthetic_docs: 0
-    triplet_style: "lm_all"
-    add_synthetic_docs: false
-
-    candidate_strategy: "multi"  # BM25 + embedding + Jaccard
-    use_spurious_hard_negs: true   # Include spurious hard negatives in candidate pool
+    max_docs: 500
+    max_triplets: 100
+    triplet_style: "prelabeled"
+    prelabeled_selection: "hard_negatives"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
     embedding_preset: "hf_qwen3_embedding_8b"
-    max_num_candidates: 10  # Max candidates shown to LM judge (per strategy for 'multi')
-    n_schema_samples: 10
-    rate_triplet_quality: true
-    min_triplet_quality: 2 # 3  # Filter to keep only triplets with quality >= 3 (trivial or ideal)
-
-    prelabeled_selection: "hard_negatives"  # BM25-based selection
+    max_num_candidates: 10
+    rate_triplet_quality: false
+    min_triplet_quality: null
 
   task_list:
     - document_set: abstractsim
-      triplet_style: "prelabeled"
       criterion: abstract_similarity
+      max_docs: 1000
+      max_triplets: 100
+
+    - document_set: analogies
+      dataset_config: bats
+      criterion: analogy_type
       max_triplets: 10
-    # # Test all 4 moral criteria with prelabeled triplets
-    # - document_set: moralfables
-    #   triplet_style: "prelabeled"
-    #   criterion: teaching
-    #   max_triplets: 10
 
-    # - document_set: moralfables
-    #   triplet_style: "prelabeled"
-    #   criterion: setting
-    #   max_triplets: 10
+    - document_set: d5
+      criterion: description_0
+      max_docs: 5000
+      max_triplets: 10
 
-    # - document_set: moralfables
-    #   triplet_style: "prelabeled"
-    #   criterion: challenge
-    #   max_triplets: 10
+    - document_set: intent_emotion
+      criterion: intent_similarity
+      max_docs: 500
+      max_triplets: 256
+      config:
+        subset: intent
+        split: test
 
-    # - document_set: moralfables
-    #   triplet_style: "prelabeled"
-    #   criterion: outcome
-    #   max_triplets: 10
+    - document_set: intent_emotion
+      criterion: emotion_similarity
+      max_docs: 500
+      max_triplets: 256
+      config:
+        subset: emotion
+        split: test
+
+    - document_set: nytclustering
+      criterion: topic
+      max_docs: 500
+      max_triplets: 256
+      config:
+        subset: topic
+        split: test
+
+    - document_set: nytclustering
+      criterion: location
+      max_docs: 500
+      max_triplets: 256
+      config:
+        subset: location
+        split: test
+
+    - document_set: trex
+      criterion: relation
+      triplet_style: "kgc"
+      max_docs: 500
+      max_triplets: 50
+      min_relation_freq: 10
+      config:
+        max_docs: 500
+        split: validation
+        min_relation_freq: 10
 
 # Evaluation methods configuration
 methods_to_evaluate:
-  # Method 1: BM25 baseline (lexical similarity)
   bm25:
     - name: bm25_lexical
 
-  # Method 2: LM Judge Triplet (Gemini direct comparison)
   lm_judge_triplet:
-    # - name: gemini_flash_lite_triplet_with_annotation
-    #   preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini
-    # - name: gemini_flash_lite_triplet_no_annotation
-    #   preset: lmjudge_triplet_plaintext_binaryhard_gemini
     - name: gemini_flash_triplet_with_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
     - name: gemini_flash_triplet_no_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
 
-  # Method 3 & 4: Embeddings with/without instructions
   embeddings:
-    # WITH instruction prefix (default)
     - name: qwen3_8b_with_instructions
-      preset: hf_qwen3_embedding_8b
-      # Uses default instruction: "Represent this query for retrieval: "
+      preset: instr_hf_qwen3_embedding_8b
 
-    # WITHOUT instruction prefix (override to null)
     - name: qwen3_8b_no_instructions
       preset: hf_qwen3_embedding_8b
-      preset_overrides:
-        embed_query_instr_template: null  # Remove instruction prefix
+
+    - name: openai_text_embedding_3_small
+      preset: openai_embedding_small

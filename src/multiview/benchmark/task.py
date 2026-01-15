@@ -41,11 +41,17 @@ from multiview.benchmark.triplets.triplet_utils import (
 )
 from multiview.benchmark.triplets.utils import build_triplet_dicts
 from multiview.docsets import DOCSETS
+from multiview.docsets.d5_applic import D5ApplicabilityDocSet
+from multiview.docsets.d5_triplets import create_d5_applicability_triplets
+from multiview.docsets.intent_emotion import create_intent_emotion_triplets
+from multiview.docsets.kgc_base import create_kgc_triplets
 
 logger = logging.getLogger(__name__)
 
 TRIPLET_STYLE_RANDOM = "random"
 TRIPLET_STYLE_PRELABELED = "prelabeled"
+TRIPLET_STYLE_KGC = "kgc"
+TRIPLET_STYLE_INTENT_EMOTION = "intent_emotion"
 TRIPLET_STYLE_LM = "lm"
 TRIPLET_STYLE_LM_ALL = "lm_all"
 
@@ -100,6 +106,9 @@ class Task:
         dataset_config = {"max_docs": self.max_docs}
         if "split" in config:
             dataset_config["split"] = config["split"]
+        # Merge in docset-specific config if provided (e.g., subset for nytclustering)
+        if "config" in config:
+            dataset_config.update(config["config"])
         self.document_set = document_set_cls(config=dataset_config)
 
         self.documents = None
@@ -263,26 +272,72 @@ class Task:
                 max_triplets=self.max_triplets,
             )
         elif self.triplet_style == TRIPLET_STYLE_PRELABELED:
-            self.triplets = create_prelabeled_triplets(
+            # Check if this is D5 Applicability - use custom property-text matching
+            if isinstance(self.document_set, D5ApplicabilityDocSet):
+                logger.info(
+                    "Using D5 applicability property-text matching triplet creation"
+                )
+                self.triplets = create_d5_applicability_triplets(
+                    documents=self.documents,
+                    docset=self.document_set,
+                    max_triplets=self.max_triplets,
+                    selection_strategy=self.config.get(
+                        "prelabeled_selection", "hard_negatives"
+                    ),
+                    seed=self.config.get("seed", 42),
+                )
+            else:
+                self.triplets = create_prelabeled_triplets(
+                    documents=self.documents,
+                    annotations=self.document_annotations,
+                    max_triplets=self.max_triplets,
+                    selection_strategy=self.config.get(
+                        "prelabeled_selection", "hard_negatives"
+                    ),
+                    seed=self.config.get("seed", 42),
+                )
+        elif self.triplet_style == TRIPLET_STYLE_KGC:
+            # KGC triplets: all three share same relation type
+            self.triplets = create_kgc_triplets(
                 documents=self.documents,
-                annotations=self.document_annotations,
                 max_triplets=self.max_triplets,
-                selection_strategy=self.config.get(
-                    "prelabeled_selection", "hard_negatives"
-                ),
+                seed=self.config.get("seed", 42),
+            )
+        elif self.triplet_style == TRIPLET_STYLE_INTENT_EMOTION:
+            # IntentEmotion: use pre-made triplets from dataset
+            self.triplets = create_intent_emotion_triplets(
+                documents=self.documents,
+                max_triplets=self.max_triplets,
                 seed=self.config.get("seed", 42),
             )
         elif self.triplet_style in LM_TRIPLET_STYLES:
             hints = self._resolved_criterion_hints()
+
+            # Get embedding preset overrides from criterion metadata (e.g., embed_instr)
+            embedding_preset_name = self.config.get(
+                "embedding_preset", "hf_qwen3_embedding_8b"
+            )
+
+            criterion_metadata = (
+                self.document_set.get_criterion_metadata(self.criterion_name) or {}
+            )
+            embedding_preset_overrides = None
+            if "embed_instr" in criterion_metadata:
+                # For symmetric retrieval (summary-to-summary), use embed_doc_instr_template
+                # Clear embed_query_instr_template to prevent double-prepending
+                embedding_preset_overrides = {
+                    "embed_doc_instr_template": criterion_metadata["embed_instr"],
+                    "embed_query_instr_template": None,
+                }
+
             self.triplets = create_lm_triplets(
                 documents=self.documents,
                 annotations=self.document_annotations,
                 max_triplets=self.max_triplets,
                 candidate_strategy=self.config.get("candidate_strategy", "multi"),
                 use_spurious_hard_negs=self.config.get("use_spurious_hard_negs", True),
-                embedding_preset=self.config.get(
-                    "embedding_preset", "hf_qwen3_embedding_8b"
-                ),
+                embedding_preset=embedding_preset_name,
+                embedding_preset_overrides=embedding_preset_overrides,
                 lm_judge_preset=self.config.get(
                     "lm_judge_preset", "triplet_select_positive_gemini"
                 ),
