@@ -71,13 +71,6 @@ def hf_local_reranker_completions(
     if use_fp16 and device == "cuda":
         model_kwargs["dtype"] = torch.float16
 
-    # Try to use flash attention if available
-    try:
-        model_kwargs["attn_implementation"] = "flash_attention_2"
-        logger.info("Using Flash Attention 2")
-    except Exception:
-        logger.info("Flash Attention 2 not available, using default attention")
-
     logger.info("Loading model...")
     model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
     logger.info("✓ Model loaded")
@@ -177,7 +170,7 @@ def hf_local_hidden_state_completions(
     max_length: int = 2048,
     hidden_layer_idx: int = -1,
     is_chatml_prompt: bool = False,
-    force_prefill: str | None = None,
+    force_prefills: str | None = None,
     **kwargs,
 ) -> dict:
     """Get hidden state embeddings from local HuggingFace causal LM.
@@ -193,7 +186,7 @@ def hf_local_hidden_state_completions(
         max_length: Maximum sequence length
         hidden_layer_idx: Which layer to extract (-1 = last layer)
         is_chatml_prompt: Whether to apply chat template to prompts
-        force_prefill: Optional text to append after chat template
+        force_prefills: Optional text to append after chat template
         **kwargs: Additional parameters including:
             - use_fp16: Whether to use FP16 precision (default: True if cuda)
 
@@ -240,13 +233,6 @@ def hf_local_hidden_state_completions(
         if use_fp16 and device == "cuda":
             model_kwargs["dtype"] = torch.float16
 
-        # Try to use flash attention if available
-        try:
-            model_kwargs["attn_implementation"] = "flash_attention_2"
-            logger.info("Using Flash Attention 2")
-        except Exception:
-            logger.info("Flash Attention 2 not available, using default attention")
-
         logger.info(f"Loading model with config: {model_kwargs}")
         model = AutoModelForCausalLM.from_pretrained(model_name, **model_kwargs)
         logger.info("✓ Model loaded")
@@ -284,9 +270,13 @@ def hf_local_hidden_state_completions(
             for prompt in processed_prompts
         ]
 
-    # Add force_prefill if specified
-    if force_prefill:
-        processed_prompts = [p + force_prefill for p in processed_prompts]
+    # Add force_prefills if specified
+    if force_prefills:
+        assert len(force_prefills) == len(processed_prompts)
+        processed_prompts = [
+            p + force_prefill
+            for p, force_prefill in zip(processed_prompts, force_prefills, strict=True)
+        ]
 
     # Process in batches
     all_vectors = []

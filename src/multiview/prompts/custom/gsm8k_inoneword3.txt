@@ -6,30 +6,32 @@ A. simple sum or difference
 e.g. answer = a + b
 e.g. answer = a - b
 
-B. simple product
+B. simple product or quotient
 e.g. answer = a * b
-
-C. simple quotient
 e.g. answer = a / b
 
-D. sum of products (add multiple terms)
-e.g. answer = a*b + c*d
-
-E. fractional ratio of two sum-or-difference expressions
+C. parallel branches then combine
+e.g. sum of products: answer = a*b + c*d
+e.g. product of sums: answer = (a + b) * (c + d)
 e.g. answer = (a + b) / (c - d)
-e.g. answer = (a + b) / (c + d)
-
-F. product of sums (distributive structure)
-e.g. answer = (a + b) * (c + d)
-
-G. other type of parallel branches then combine (compute two sub-results, then combine)
 e.g. answer = (a + b) * (c - d)
 
-H. chained updates (multi-step state changes)
-e.g. answer = ((a + b) - c) * d
-e.g. answer = (a * b) + c
+D. chained update steps
+e.g. answer = a + b*c
+e.g. a * b / c
+e.g. answer = (c - b)/a
+e.g. ratio / proportion (cross-multiply) : a/b = c/d  =>  a*d = b*c
 
-I. parallel branches -> chained updates
+E. simple product or quotient
+e.g. answer = a * b
+e.g. answer = a / b
+
+F. multi-step chained updates
+e.g. answer = ((a + b) - c) * d
+
+G. multi-step after parallel structure
 e.g. answer = (a*b + c*d) / (a + c)
+
+H. other
 
 Instruction: choose the SINGLE best letter for the overall structure. If multiple apply, choose the best fit. Output ONLY the letter.
