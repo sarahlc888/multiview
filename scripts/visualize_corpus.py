@@ -175,6 +175,7 @@ def generate_embeddings(
     force_refresh: bool = False,
     criterion: str | None = None,
     in_one_word_context: str | None = None,
+    pseudologit_classes: str | None = None,
 ) -> np.ndarray:
     """Generate embeddings for documents.
 
@@ -185,11 +186,27 @@ def generate_embeddings(
         force_refresh: Force refresh cache
         criterion: Criterion for in-one-word (e.g., 'arithmetic')
         in_one_word_context: Context string for in-one-word embeddings
+        pseudologit_classes: Path to classes JSON for pseudologit embeddings
 
     Returns:
         Embeddings array
     """
     logger.info(f"Generating embeddings with {embedding_preset}")
+
+    # Prepare config overrides
+    config_overrides = {}
+
+    # Handle pseudologit classes override
+    if pseudologit_classes:
+        from multiview.inference.presets import get_preset
+
+        logger.info(f"Using pseudologit classes from: {pseudologit_classes}")
+
+        # Get the preset to merge extra_kwargs properly
+        preset_config = get_preset(embedding_preset)
+        merged_extra_kwargs = preset_config.extra_kwargs.copy()
+        merged_extra_kwargs["classes_file"] = pseudologit_classes
+        config_overrides["extra_kwargs"] = merged_extra_kwargs
 
     # Check if this is an in-one-word preset
     if is_inoneword_preset(embedding_preset):
@@ -214,6 +231,7 @@ def generate_embeddings(
             config=embedding_preset,
             cache_alias=cache_alias,
             force_refresh=force_refresh,
+            **config_overrides,
         )
     else:
         # Standard embedding generation
@@ -222,6 +240,7 @@ def generate_embeddings(
             config=embedding_preset,
             cache_alias=cache_alias,
             force_refresh=force_refresh,
+            **config_overrides,
         )
 
     # Convert to numpy array
@@ -750,6 +769,7 @@ def run_embedding_mode(args: argparse.Namespace):
         args.force_refresh,
         args.criterion,
         args.in_one_word_context,
+        args.pseudologit_classes,
     )
 
     # Step 3: Load annotations if needed
@@ -886,6 +906,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Context for in-one-word embeddings: either an inline string or path to a text file "
         "(e.g., 'Categories: addition, subtraction' or 'prompts/custom/my_context.txt'). "
         "Required for in-one-word presets.",
+    )
+    embed_group.add_argument(
+        "--pseudologit-classes",
+        help="Path to JSON file defining taxonomy classes for pseudologit embeddings "
+        "(e.g., 'prompts/custom/gsm8k_classes.json'). Overrides the classes_file in the preset.",
     )
 
     # Dimensionality reduction options

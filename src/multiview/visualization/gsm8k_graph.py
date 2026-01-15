@@ -548,7 +548,7 @@ class GSM8KComputationalGraph:
             width, height = size, size
 
             if node.node_type == "input":
-                color = "#64B5F6"  # bright blue
+                color = "#E0E0E0"  # light grey
                 label = f"{node.value}"
             else:  # operation
                 # Color by operation type - bright colors
@@ -571,7 +571,7 @@ class GSM8KComputationalGraph:
                 width,
                 height,
                 boxstyle="round,pad=0.1",
-                edgecolor="black",
+                edgecolor="none",
                 facecolor=color,
                 linewidth=1.5,
                 zorder=2,

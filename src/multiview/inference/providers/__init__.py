@@ -76,6 +76,13 @@ def get_completion_fn(provider: str) -> Callable:
             ).hf_local_reranker_completions,
             "transformers and torch packages required. Install with: pip install transformers torch",
         ),
+        "pseudologit": (
+            lambda: __import__(
+                "multiview.inference.providers.pseudologit",
+                fromlist=["pseudologit_completions"],
+            ).pseudologit_completions,
+            "pseudologit provider requires API provider dependencies (openai, google-genai, etc.)",
+        ),
     }
 
     if provider not in provider_registry:

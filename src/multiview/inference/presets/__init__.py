@@ -572,6 +572,56 @@ PRESET_REGISTRY = {
             "max_length": 2048,
         },
     ),
+    # ========================================================================
+    # PSEUDOLOGIT EMBEDDINGS
+    # ========================================================================
+    # Gemini 2.5 Flash Lite - different sample counts
+    "pseudologit_gemini_n10": InferenceConfig(
+        provider="pseudologit",
+        model_name="gemini-2.5-flash",
+        prompt_template="{document}",
+        parser="vector",
+        extra_kwargs={
+            "classes_file": "prompts/custom/gsm8k_classes.json",
+            "prompt_template": "prompts/custom/pseudologit_classify.txt",
+            "n_samples": 10,
+            "temperature": 0.7,
+            "provider": "gemini",
+            "max_tokens": 8192,
+            "max_workers": 5,
+        },
+    ),
+    "pseudologit_gemini_n50": InferenceConfig(
+        provider="pseudologit",
+        model_name="gemini-2.5-flash",
+        prompt_template="{document}",
+        parser="vector",
+        extra_kwargs={
+            "classes_file": "prompts/custom/gsm8k_classes.json",
+            "prompt_template": "prompts/custom/pseudologit_classify.txt",
+            "n_samples": 50,
+            "temperature": 0.7,
+            "provider": "gemini",
+            "max_tokens": 8192,
+            "max_workers": 5,
+        },
+    ),
+    # OpenAI GPT-4o-mini options
+    "pseudologit_openai_n100": InferenceConfig(
+        provider="pseudologit",
+        model_name="gpt-4o-mini",
+        prompt_template="{document}",
+        parser="vector",
+        extra_kwargs={
+            "classes_file": "prompts/custom/gsm8k_classes.json",
+            "prompt_template": "prompts/custom/pseudologit_classify.txt",
+            "n_samples": 100,
+            "temperature": 0.7,
+            "provider": "openai",
+            "max_tokens": 8192,
+            "max_workers": 10,
+        },
+    ),
 }
 
 
