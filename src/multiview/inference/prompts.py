@@ -9,27 +9,42 @@ Handles complex prompt formatting including:
 Ported from old repo with simplifications.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 import re
 
 from multiview.inference.presets import InferenceConfig
+from multiview.utils.prompt_utils import read_or_return
 
 logger = logging.getLogger(__name__)
 
 
-def get_format_keys(template: str) -> list[str]:
-    """Extract format keys from a template string.
+_ESCAPED_LBRACE = "\x00\x00"
+_ESCAPED_RBRACE = "\x01\x01"
 
-    Args:
-        template: Template string with {key} placeholders
 
-    Returns:
-        List of format keys found in template
+def _safe_format_template(template: str, kwargs: dict) -> str:
+    """Format a prompt template by substituting only {identifier} placeholders.
+
+    Many prompt templates contain literal braces (e.g., JSON examples). Using
+    Python's `str.format` would treat those as placeholders and raise KeyError.
     """
-    # Remove escaped braces so they're not matched
-    cleaned = template.replace("{{", "\x00\x00").replace("}}", "\x01\x01")
-    return re.findall(r"\{([^}:]+)(?::[^}]*)?\}", cleaned)
+    # Match Python's behavior for escaped braces.
+    working = template.replace("{{", _ESCAPED_LBRACE).replace("}}", _ESCAPED_RBRACE)
+
+    def _replace(match: re.Match) -> str:
+        key = match.group(1)
+        if key not in kwargs:
+            available = ", ".join(sorted(kwargs.keys()))
+            raise KeyError(
+                f"Missing template key '{key}'. Available keys: [{available}]"
+            )
+        return str(kwargs[key])
+
+    working = re.sub(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}", _replace, working)
+    return working.replace(_ESCAPED_LBRACE, "{").replace(_ESCAPED_RBRACE, "}")
 
 
 def _hash_bytes(payload: bytes) -> str:
@@ -74,36 +89,39 @@ def _build_image_signature(image_payload) -> str:
 
 def _build_packed_prompt(
     base_prompt: str,
-    embed_query_instr: str | None = None,
-    embed_doc_instr: str | None = None,
+    instruction: str | None = None,
     image=None,
     force_prefill: str | None = None,
+    query: str | None = None,
 ) -> str:
     """Build a packed prompt for cache key generation.
 
     Packed prompts include all components that affect the completion:
-    - Embedding instructions (prepended)
+    - Query (for rerankers)
+    - Embedding instruction (prepended)
     - Base prompt
     - Image signature (if present)
     - Force prefill (if present)
 
     Args:
         base_prompt: The main prompt text
-        embed_query_instr: Query-side embedding instruction
-        embed_doc_instr: Document-side embedding instruction
+        instruction: Embedding instruction
         image: Image payload (will be converted to signature)
         force_prefill: Forced prefill string
+        query: Query string (for providers like Voyage that need separate query/doc)
 
     Returns:
         Packed prompt string suitable for cache key generation
     """
     packed = base_prompt
 
-    # Prepend instructions (order matters!)
-    if embed_query_instr:
-        packed = embed_query_instr + packed
-    if embed_doc_instr:
-        packed = embed_doc_instr + packed
+    # Prepend query (if present) - critical for reranker cache keys
+    if query:
+        packed = f"Query: {query}\n{packed}"
+
+    # Prepend instruction
+    if instruction:
+        packed = instruction + packed
 
     # Append image signature
     if image is not None:
@@ -129,40 +147,40 @@ class PromptCollection:
         self,
         packed_prompts: list[str],
         prompts: list[str],
-        embed_query_instr: list[str] | None = None,
-        embed_doc_instr: list[str] | None = None,
+        instructions: list[str] | None = None,
         force_prefill: list[str] | None = None,
         images: list | None = None,
+        queries: list[str] | None = None,
     ):
         """Initialize prompt collection.
 
         Args:
             packed_prompts: Prompts packed with instructions (used as cache keys)
             prompts: Base prompts without instructions
-            embed_query_instr: Query-side embedding instructions (if any)
-            embed_doc_instr: Document-side embedding instructions (if any)
+            instructions: Embedding instructions (if any)
             force_prefill: Forced prefill strings (if any)
             images: Image payloads (if any)
+            queries: Query strings (for providers like Voyage that need separate query/doc)
         """
         self.packed_prompts = packed_prompts
         self.prompts = prompts
-        self.embed_query_instr = embed_query_instr
-        self.embed_doc_instr = embed_doc_instr
+        self.instructions = instructions
         self.force_prefill = force_prefill
         self.images = images
+        self.queries = queries
 
         # Validate lengths match
         assert prompts is not None
         assert packed_prompts is not None
         assert len(packed_prompts) == len(prompts)
-        if embed_query_instr is not None:
-            assert len(embed_query_instr) == len(prompts)
-        if embed_doc_instr is not None:
-            assert len(embed_doc_instr) == len(prompts)
+        if instructions is not None:
+            assert len(instructions) == len(prompts)
         if force_prefill is not None:
             assert len(force_prefill) == len(prompts)
         if images is not None:
             assert len(images) == len(prompts)
+        if queries is not None:
+            assert len(queries) == len(prompts)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for passing to completion functions."""
@@ -171,18 +189,18 @@ class PromptCollection:
             "packed_prompts": self.packed_prompts,
         }
 
-        if self.embed_query_instr is not None:
-            kwargs["embed_query_instrs"] = self.embed_query_instr
-        if self.embed_doc_instr is not None:
-            kwargs["embed_doc_instrs"] = self.embed_doc_instr
+        if self.instructions is not None:
+            kwargs["instructions"] = self.instructions
         if self.force_prefill is not None:
             kwargs["force_prefills"] = self.force_prefill
         if self.images is not None:
             kwargs["images"] = self.images
+        if self.queries is not None:
+            kwargs["queries"] = self.queries
 
         return kwargs
 
-    def dedup(self) -> tuple[list[int], "PromptCollection"]:
+    def dedup(self) -> tuple[list[int], PromptCollection]:
         """Deduplicate prompts based on packed_prompts.
 
         Returns:
@@ -205,14 +223,9 @@ class PromptCollection:
         remap_idxs = [deduped_packed_prompts.index(p) for p in self.packed_prompts]
 
         # Dedup other fields
-        deduped_embed_query_instr = (
-            [self.embed_query_instr[i] for i in idcs_to_keep]
-            if self.embed_query_instr is not None
-            else None
-        )
-        deduped_embed_doc_instr = (
-            [self.embed_doc_instr[i] for i in idcs_to_keep]
-            if self.embed_doc_instr is not None
+        deduped_instructions = (
+            [self.instructions[i] for i in idcs_to_keep]
+            if self.instructions is not None
             else None
         )
         deduped_force_prefill = (
@@ -223,14 +236,19 @@ class PromptCollection:
         deduped_images = (
             [self.images[i] for i in idcs_to_keep] if self.images is not None else None
         )
+        deduped_queries = (
+            [self.queries[i] for i in idcs_to_keep]
+            if self.queries is not None
+            else None
+        )
 
         return remap_idxs, PromptCollection(
             packed_prompts=deduped_packed_prompts,
             prompts=deduped_prompts,
-            embed_query_instr=deduped_embed_query_instr,
-            embed_doc_instr=deduped_embed_doc_instr,
+            instructions=deduped_instructions,
             force_prefill=deduped_force_prefill,
             images=deduped_images,
+            queries=deduped_queries,
         )
 
 
@@ -291,65 +309,65 @@ def format_prompts(
         if key in INPUT_KEY_ALIASES:
             format_kwargs[INPUT_KEY_ALIASES[key]] = values
 
+    # Load prompt template (from file if path, inline if string)
+    prompt_template = read_or_return(config.prompt_template)
+
     # Format base prompts
     prompts = []
     for i in range(n_items):
         kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-        prompt = config.prompt_template.format(**kwargs_i)
+        prompt = _safe_format_template(prompt_template, kwargs_i)
         prompts.append(prompt)
 
-    # Format embed query instructions (if specified)
-    embed_query_instr = None
-    if config.embed_query_instr_template is not None:
-        embed_query_instr = []
+    # Format embedding instructions (if specified)
+    instructions = None
+    if config.instruction is not None:
+        instruction_template = read_or_return(config.instruction)
+        instructions = []
         for i in range(n_items):
             kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            instr = config.embed_query_instr_template.format(**kwargs_i)
-            embed_query_instr.append(instr)
-
-    # Format embed doc instructions (if specified)
-    embed_doc_instr = None
-    if config.embed_doc_instr_template is not None:
-        embed_doc_instr = []
-        for i in range(n_items):
-            kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            instr = config.embed_doc_instr_template.format(**kwargs_i)
-            embed_doc_instr.append(instr)
+            instr = _safe_format_template(instruction_template, kwargs_i)
+            instructions.append(instr)
 
     # Format force prefills (if specified)
     force_prefill = None
     if config.force_prefill_template is not None:
+        force_prefill_template = read_or_return(config.force_prefill_template)
         force_prefill = []
         for i in range(n_items):
             kwargs_i = {k: v[i] for k, v in format_kwargs.items()}
-            prefill = config.force_prefill_template.format(**kwargs_i)
+            prefill = _safe_format_template(force_prefill_template, kwargs_i)
             force_prefill.append(prefill)
 
     # Handle images (if present)
     images = broadcasted_inputs.get("images")
 
+    # Handle queries (if present) - for providers like Voyage that need separate query/doc
+    queries = broadcasted_inputs.get("query")
+
     # Create packed prompts for caching
     # Packed prompts include all components to create unique cache keys
+    # CRITICAL: Must include query for rerankers to avoid cache collisions
     packed_prompts = [
         _build_packed_prompt(
             base_prompt=prompts[i],
-            embed_query_instr=embed_query_instr[i] if embed_query_instr else None,
-            embed_doc_instr=embed_doc_instr[i] if embed_doc_instr else None,
+            instruction=instructions[i] if instructions else None,
             image=images[i] if images else None,
             force_prefill=force_prefill[i] if force_prefill else None,
+            query=queries[i] if queries else None,
         )
         for i in range(n_items)
     ]
 
-    if verbose and len(prompts) > 0:
-        logger.info(f"Example formatted prompt:\n{prompts[0]}")
-        logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
+    # if verbose and len(prompts) > 0:
+    #     logger.info(f"Example formatted prompt:\n{prompts[0]}")
+    #     logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
 
     return PromptCollection(
         packed_prompts=packed_prompts,
         prompts=prompts,
-        embed_query_instr=embed_query_instr,
-        embed_doc_instr=embed_doc_instr,
+        instructions=instructions,
         force_prefill=force_prefill,
         images=images,
+        queries=queries,
     )

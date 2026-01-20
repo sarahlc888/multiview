@@ -14,12 +14,16 @@ export HF_API_KEY="your-huggingface-key"  # For HF embedding tests
 ```
 
 Note: Tests will be skipped if the relevant API key is not set.
+Additionally, tests marked `@pytest.mark.external` are skipped unless you pass `--run-external`.
 
 ## Running Tests
 
 Run all inference tests:
 ```bash
 uv run pytest tests/inference/ -v
+
+# Opt-in to external API/network tests
+uv run pytest tests/inference/ -v --run-external
 ```
 
 Run specific test files:

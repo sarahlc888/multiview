@@ -1,0 +1,12 @@
+
+TRIPLET EXAMPLE GUIDANCE:
+This example illustrates what makes a good NEGATIVE for this criterion.
+
+[Anchor document]
+{anchor_ex}
+[POSITIVE - Similar on criterion]
+{pos_ex}
+[GOOD NEGATIVE - CLEARLY different on criterion but superficially similar]
+{neg_ex}
+
+Your task: Find a candidate that is CLEARLY DIFFERENT from the anchor on the criterion (low T similarity), but looks similar on surface features (high S similarity). This creates a hard negative that would confuse a naive model.

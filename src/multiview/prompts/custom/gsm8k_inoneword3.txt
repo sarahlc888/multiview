@@ -1,0 +1,37 @@
+Consider the arithmetic structure of the solution.
+
+There are many different types of arithmetic “computational graphs”. Here is a compact taxonomy.
+
+A. simple sum or difference
+e.g. answer = a + b
+e.g. answer = a - b
+
+B. simple product or quotient
+e.g. answer = a * b
+e.g. answer = a / b
+
+C. parallel branches then combine
+e.g. sum of products: answer = a*b + c*d
+e.g. product of sums: answer = (a + b) * (c + d)
+e.g. answer = (a + b) / (c - d)
+e.g. answer = (a + b) * (c - d)
+
+D. chained update steps
+e.g. answer = a + b*c
+e.g. a * b / c
+e.g. answer = (c - b)/a
+e.g. ratio / proportion (cross-multiply) : a/b = c/d  =>  a*d = b*c
+
+E. simple product or quotient
+e.g. answer = a * b
+e.g. answer = a / b
+
+F. multi-step chained updates
+e.g. answer = ((a + b) - c) * d
+
+G. multi-step after parallel structure
+e.g. answer = (a*b + c*d) / (a + c)
+
+H. other
+
+Instruction: choose the SINGLE best letter for the overall structure. If multiple apply, choose the best fit. Output ONLY the letter.

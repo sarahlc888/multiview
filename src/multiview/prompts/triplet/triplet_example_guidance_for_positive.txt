@@ -1,0 +1,12 @@
+
+TRIPLET EXAMPLE GUIDANCE:
+This example illustrates what makes a good POSITIVE for this criterion.
+
+[Anchor document]
+{anchor_ex}
+[GOOD POSITIVE - Similar on criterion]
+{pos_ex}
+[GOOD NEGATIVE - Different on criterion]
+{neg_ex}
+
+Your task: Find a candidate similar to the anchor like the POSITIVE example above.

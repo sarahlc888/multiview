@@ -1,0 +1,133 @@
+# Benchmark configuration for ROCStories evaluation
+run_name: "benchmark_fuzzy"
+logging:
+  level: DEBUG
+  output_file: "outputs/logs/${run_name}.log"
+seed: 42
+use_cache: true
+step_through: false
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 20
+    max_triplets: 5
+    num_synthetic_docs: 0
+    triplet_style: "lm_all"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 10
+    n_schema_samples: 10
+    # schema_pool_size: 1000  # Optional: Fix schema generation to use first N docs (e.g., 1000)
+                              # This prevents schema regeneration when max_docs changes
+                              # If not set, schema uses all documents (default behavior)
+    rate_triplet_quality: true
+    min_triplet_quality: 2
+    # Consistency validation (NEW) - ensures swapped (a,c,b) gets Invalid rating
+    validate_consistency: true        # Enable consistency check (default: true)
+    consistency_max_invalid: 1        # Swapped triplet must be rated ≤1 Invalid (default: 1, strict)
+    prelabeled_selection: "hard_negatives"
+
+  task_list:
+    # - document_set: mmlu
+    #   criterion: blooms_taxonomy
+    - document_set: onion_headlines
+      criterion: joke_type
+      max_docs: 200
+      max_triplets: 50
+    # - document_set: onion_headlines
+    #   criterion: topic
+
+    # - document_set: arxiv_cs
+    #   criterion: research_topic
+    #   max_docs: 200
+
+
+    # - document_set: rocstories
+    #   criterion: seven_basic_plots
+
+
+    # - document_set: hackernews
+    #   criterion: angle_of_interest
+
+
+    # - document_set: moralfables
+    #   criterion: moral_lesson
+
+
+    # - document_set: onion_headlines
+    #   criterion: satire_style
+
+
+    # - document_set: gsm8k
+    #   criterion: math_topic
+    #   max_docs: 100
+
+
+    # - document_set: gsm8k
+    #   criterion: math_topic
+    #   max_docs: 100
+
+    #   config:
+    #     question_only: true
+
+    # - document_set: inb_ratemyprof
+    #   criterion: teaching_style
+
+
+    # - document_set: goodreads_quotes
+    #   criterion: theme
+
+
+    # - document_set: haiku
+    #   criterion: season_theme
+
+
+    # - document_set: dickinson
+    #   criterion: poetic_theme
+
+
+    # - document_set: inb_feedbacks
+    #   criterion: feedback_type
+
+
+
+    # - document_set: bills
+    #   criterion: policy_area
+    #   max_docs: 200
+
+    - document_set: aidanbench
+      criterion: functional_equivalence
+      max_docs: 100
+      max_triplets: 20
+      config:
+        question_id: 0
+
+    # - document_set: infinite_prompts
+    #   criterion: prompt_category
+    #   max_docs: 50
+
+
+# Evaluation methods configuration
+methods_to_evaluate:
+  bm25:
+    - name: bm25_lexical
+      preset: bm25_lexical
+
+  lm_judge_triplet:
+    - name: gemini_flash_triplet_with_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
+    - name: gemini_flash_triplet_no_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
+    - name: gemini_pro_triplet_with_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_pro
+    - name: gemini_pro_triplet_no_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_pro
+
+  embeddings:
+    - name: qwen3_8b_with_instructions
+      preset: instr_hf_qwen3_embedding_8b
+
+    - name: qwen3_8b_no_instructions
+      preset: hf_qwen3_embedding_8b

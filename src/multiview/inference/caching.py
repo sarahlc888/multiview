@@ -8,6 +8,8 @@ Improvements over old version:
 - Thread-safe and process-safe concurrent writes
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
@@ -15,6 +17,8 @@ import os
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
+
+from multiview.inference.cost_tracker import record_cache_hit
 
 try:
     import fcntl
@@ -79,6 +83,23 @@ def hash_prompt(prompt: str) -> str:
         Hash string (SHA256, truncated to 32 chars)
     """
     return hashlib.sha256(prompt.encode()).hexdigest()[:32]
+
+
+def estimate_tokens(text: str) -> int:
+    """Rough estimate of token count for a text string.
+
+    Uses a simple heuristic of ~4 characters per token (average for English).
+    This is a rough approximation for cost estimation purposes.
+
+    Args:
+        text: Text string to estimate tokens for
+
+    Returns:
+        Estimated token count
+    """
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
 
 
 def load_cached_completions(cache_path: str | None) -> dict:
@@ -199,10 +220,9 @@ def cached_fn_completions(
     fn_completions: Callable,
     completion_cache: dict,
     completion_cache_path: str | None = None,
-    completion_field_name: str = "completions",
     force_refresh: bool = False,
+    chunk_size: int | None = 2048,
     verbose: bool = False,
-    return_type: str = "list",
     mute_if_cache_hit: bool = False,
     **fn_completions_kwargs,
 ) -> list:
@@ -217,23 +237,28 @@ def cached_fn_completions(
         fn_completions: Completion function to call for uncached prompts
         completion_cache: Cache dictionary (will be modified in-place)
         completion_cache_path: Path to cache file on disk
-        completion_field_name: Key to use in cache for this completion type
         force_refresh: If True, ignore cache and recompute all
+        chunk_size: Optional max number of prompts per provider call
         verbose: Whether to log verbose output
-        return_type: "list" or "dict" - format of return value
         mute_if_cache_hit: If True, don't log when all prompts are cached
         **fn_completions_kwargs: Additional kwargs to pass to fn_completions
-            (e.g., force_prefills, embed_query_instrs, embed_doc_instrs, images)
+            (e.g., force_prefills, instructions, images)
 
     Returns:
-        List of completions (or dict with completion_field_name key)
+        List of completions (aligned to packed_prompts order)
     """
+    completion_field_name = "completions"
+
     # Initialize cache field if needed
     if completion_field_name not in completion_cache:
         completion_cache[completion_field_name] = {}
 
-    if verbose and len(packed_prompts) > 0:
-        logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
+    if len(packed_prompts) > 0:
+        if packed_prompts[0] != non_packed_prompts[0]:
+            logger.debug(f"Example packed prompt (cache key):\n{packed_prompts[0]}")
+        logger.debug(
+            f"Example non-packed prompt (sent to provider fn):\n{non_packed_prompts[0]}"
+        )
 
     # Hash prompts for cache keys
     prompt_hashes = [hash_prompt(p) for p in packed_prompts]
@@ -245,6 +270,7 @@ def cached_fn_completions(
         uncached_hashes = prompt_hashes
         uncached_indices = list(range(len(packed_prompts)))
         uncached_non_packed = non_packed_prompts
+        cached_indices = []
     else:
         # Find prompts not in cache (or with empty values)
         def is_non_empty(val):
@@ -260,16 +286,63 @@ def cached_fn_completions(
                 completion_cache[completion_field_name][prompt_hash].get("result")
             )
         ]
+        cached_indices = [
+            i
+            for i, prompt_hash in enumerate(prompt_hashes)
+            if prompt_hash in completion_cache[completion_field_name]
+            and is_non_empty(
+                completion_cache[completion_field_name][prompt_hash].get("result")
+            )
+        ]
         uncached_prompts = [packed_prompts[i] for i in uncached_indices]
         uncached_hashes = [prompt_hashes[i] for i in uncached_indices]
         uncached_non_packed = [non_packed_prompts[i] for i in uncached_indices]
 
+        # Record cache hits for cost tracking
+        if cached_indices and "model_name" in fn_completions_kwargs:
+            model_name = fn_completions_kwargs["model_name"]
+            for idx in cached_indices:
+                prompt_hash = prompt_hashes[idx]
+                cached_result = completion_cache[completion_field_name][prompt_hash][
+                    "result"
+                ]
+                packed_prompt = packed_prompts[idx]
+
+                # Estimate tokens for cost tracking
+                input_tokens = estimate_tokens(packed_prompt)
+
+                # Estimate output tokens based on result type
+                output_tokens = 0
+                if isinstance(cached_result, dict):
+                    if "text" in cached_result:
+                        output_tokens = estimate_tokens(cached_result["text"])
+                    # For embeddings (vector), no output tokens cost
+                elif isinstance(cached_result, str):
+                    output_tokens = estimate_tokens(cached_result)
+
+                record_cache_hit(model_name, input_tokens, output_tokens)
+
+        # Log cache hits
+        if cached_indices:
+            # Log at INFO level if all prompts are cached (so cache hits are visible)
+            # Otherwise log at DEBUG level to avoid noise when there are uncached prompts
+            if len(uncached_prompts) == 0:
+                logger.info(
+                    f"Cache hits: {len(cached_indices)}/{len(packed_prompts)} prompts "
+                    f"found in cache @ {completion_cache_path}"
+                )
+            else:
+                logger.debug(
+                    f"Cache hits: {len(cached_indices)}/{len(packed_prompts)} prompts "
+                    f"found in cache @ {completion_cache_path}"
+                )
+
         # Filter kwargs arrays to match uncached prompts
         for key in [
             "force_prefills",
-            "embed_query_instrs",
-            "embed_doc_instrs",
+            "instructions",
             "images",
+            "queries",
         ]:
             if key in fn_completions_kwargs:
                 fn_completions_kwargs[key] = [
@@ -279,47 +352,75 @@ def cached_fn_completions(
     # Log cache status
     if verbose or len(uncached_prompts) > 0:
         if not (mute_if_cache_hit and len(uncached_prompts) == 0):
+            cache_hit_info = ""
+            if not force_refresh and cached_indices:
+                cache_hit_info = f" ({len(cached_indices)} from cache)"
             logger.info(
                 f"Running {len(uncached_prompts)} uncached completions "
-                f"(out of {len(packed_prompts)} total) @ {completion_cache_path}"
+                f"(out of {len(packed_prompts)} total){cache_hit_info} @ {completion_cache_path}"
             )
 
     # Run completions for uncached prompts
     if len(uncached_prompts) > 0:
-        # Use non-packed prompts (base prompts without instructions/prefills)
-        # Instructions and prefills are passed separately via fn_completions_kwargs
-        # Packed prompts are only used as cache keys
-        uncached_completions = fn_completions(
-            prompts=uncached_non_packed,
-            **fn_completions_kwargs,
-        )
+        if chunk_size is None or chunk_size <= 0:
+            chunk_size = len(uncached_prompts)
 
-        # Validate output
-        assert len(uncached_non_packed) == len(
-            uncached_completions[completion_field_name]
-        ), (
-            f"Length mismatch: {len(uncached_non_packed)} prompts but "
-            f"{len(uncached_completions[completion_field_name])} completions"
-        )
+        if chunk_size < len(uncached_prompts):
+            logger.info(
+                f"Chunking {len(uncached_prompts)} uncached prompts into "
+                f"{(len(uncached_prompts) + chunk_size - 1) // chunk_size} batches "
+                f"of size {chunk_size}"
+            )
 
-        # Update cache with hashed keys and full prompts for debugging
-        for prompt, prompt_hash, result in zip(
-            uncached_prompts,
-            uncached_hashes,
-            uncached_completions[completion_field_name],
-            strict=False,
-        ):
-            completion_cache[completion_field_name][prompt_hash] = {
-                "result": result,
-                "prompt": prompt,  # Store full prompt for debugging
-            }
+        for start in range(0, len(uncached_prompts), chunk_size):
+            end = min(start + chunk_size, len(uncached_prompts))
+            chunk_prompts = uncached_prompts[start:end]
+            chunk_hashes = uncached_hashes[start:end]
+            chunk_non_packed = uncached_non_packed[start:end]
+
+            chunk_kwargs = fn_completions_kwargs.copy()
+            for key in [
+                "force_prefills",
+                "instructions",
+                "images",
+                "queries",
+            ]:
+                if key in chunk_kwargs:
+                    chunk_kwargs[key] = chunk_kwargs[key][start:end]
+
+            # Use non-packed prompts (base prompts without instructions/prefills)
+            # Instructions and prefills are passed separately via fn_completions_kwargs
+            # Packed prompts are only used as cache keys
+            uncached_completions = fn_completions(
+                prompts=chunk_non_packed,
+                **chunk_kwargs,
+            )
+
+            # Validate output
+            assert len(chunk_non_packed) == len(
+                uncached_completions[completion_field_name]
+            ), (
+                f"Length mismatch: {len(chunk_non_packed)} prompts but "
+                f"{len(uncached_completions[completion_field_name])} completions"
+            )
+
+            # Update cache with hashed keys and full prompts for debugging
+            for prompt, prompt_hash, result in zip(
+                chunk_prompts,
+                chunk_hashes,
+                uncached_completions[completion_field_name],
+                strict=False,
+            ):
+                completion_cache[completion_field_name][prompt_hash] = {
+                    "result": result,
+                    "prompt": prompt,  # Store full prompt for debugging
+                }
 
     # Validate cache has all prompts
-    if return_type == "dict":
-        for prompt_hash in prompt_hashes:
-            assert (
-                prompt_hash in completion_cache[completion_field_name]
-            ), f"Prompt hash not in cache: {prompt_hash}"
+    for prompt_hash in prompt_hashes:
+        assert (
+            prompt_hash in completion_cache[completion_field_name]
+        ), f"Prompt hash not in cache: {prompt_hash}"
 
     # Save cache to disk if we added new entries
     if len(uncached_prompts) > 0 and completion_cache_path is not None:
@@ -328,16 +429,21 @@ def cached_fn_completions(
         )
 
     # Return completions in requested format
-    if return_type == "list":
-        return [
-            completion_cache[completion_field_name][h]["result"] for h in prompt_hashes
-        ]
-    elif return_type == "dict":
-        return {
-            completion_field_name: [
-                completion_cache[completion_field_name][h]["result"]
-                for h in prompt_hashes
-            ]
-        }
-    else:
-        raise ValueError(f"Unsupported return_type: {return_type}")
+    if len(prompt_hashes) > 0:
+        example_cached_entry = completion_cache[completion_field_name][prompt_hashes[0]]
+        example_result = example_cached_entry["result"]
+
+        from multiview.constants import STEP_THROUGH
+
+        if isinstance(example_result, dict) and "text" in example_result:
+            logger.debug(f"Example result:\n{example_result['text']}")
+            if STEP_THROUGH:
+                __builtins__["breakpoint"]()  # Safe debug hook bypass
+        elif isinstance(example_result, dict) and "vector" in example_result:
+            logger.debug(f"Example result: {len(example_result['vector'])=}")
+        else:
+            logger.debug(f"Example result:\n{example_result}")
+            if STEP_THROUGH:
+                __builtins__["breakpoint"]()  # Safe debug hook bypass
+
+    return [completion_cache[completion_field_name][h]["result"] for h in prompt_hashes]

@@ -1,0 +1,10 @@
+
+TRIPLET EXAMPLE GUIDANCE:
+This example illustrates what makes a good triplet for this criterion.
+
+[Anchor document]
+{anchor_ex}
+[Positive document]
+{pos_ex}
+[Negative document]
+{neg_ex}

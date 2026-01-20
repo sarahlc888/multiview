@@ -1,0 +1,41 @@
+You are designing a tag schema to identify spurious similarities between documents.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERION OF INTEREST:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+{schema_hint}
+SAMPLE DOCUMENTS:
+{sample_documents}
+
+Your task is to create a tag schema that captures dimensions of variation that:
+1. Are NOT RELEVANT to the criterion "{criterion}"
+2. May cause two documents to APPEAR similar even though they differ on the criterion
+
+For example, if the criterion is "mathematical operations used", spurious tags might include:
+- Word problem context (shopping, time, school, etc.)
+- Presence of specific entities (money, people, objects)
+- Problem length (short, medium, long)
+- Numeric ranges used (small numbers, large numbers)
+
+These are properties that don't affect what operations are used, but might cause superficial similarity.
+
+IMPORTANT:
+- Tags should be BINARY (yes/no, present/absent)
+- Tags should be INDEPENDENT of the criterion
+- Tags should emphasize SUPERFICIAL similarities
+- Use as many tags as seems reasonable
+- Choose tags that seem to be generally useful. Do not "overfit" to the current set of sample documents.
+
+Think through your options, then output valid JSON:
+{
+  "reasoning": "What dimensions of variation are not relevant to the criterion? What tags are useful to describe these?",
+  "tags": [
+    {"name": "tag_name", "description": "when to apply this tag"},
+    ...
+  ]
+}

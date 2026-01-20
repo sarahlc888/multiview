@@ -1,0 +1,30 @@
+Given an anchor document, please find a document that is similar based on the specified criteria.
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+INSTRUCTIONS:
+- Select a document similar to the anchor, based on the criterion
+- Avoid choosing positives with very high lexical overlap; when tied on criteria, prefer candidates with lower lexical similarity.
+{similarity_note}- IMPORTANT: Annotations are noisy. Always verify against actual document content.
+- If there is NO clear positive match among the candidates, you may ABSTAIN by returning 0. Only abstain if none of the candidates are clearly similar based on the criterion.
+{triplet_example_section}
+ANCHOR DOCUMENT:
+{anchor_doc}
+
+ANCHOR ANNOTATION:
+{anchor_annotation}
+
+CANDIDATES:
+{candidates}
+
+Think out loud, then respond with valid JSON in this exact format:
+{
+  "reasoning": <thinking about which document is a strong positive match with respect to the criteria>,
+  "chosen_positive": [number from 1 to N, or 0 to abstain if no clear positive match]
+}
+
+IMPORTANT: make sure to response in JSON format.

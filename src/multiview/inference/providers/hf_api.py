@@ -22,8 +22,7 @@ def hf_embedding_completions(
         prompts: List of texts to embed (without instructions)
         model_name: Model name on HuggingFace Hub (e.g., "Qwen/Qwen2.5-Embedding-7B")
         **kwargs: Additional parameters including:
-            - embed_query_instrs: Optional list of query instructions to prepend
-            - embed_doc_instrs: Optional list of document instructions to prepend
+            - instructions: Optional list of instructions to prepend
 
     Returns:
         Dict with "completions" key containing list of completion dicts
@@ -50,17 +49,36 @@ def hf_embedding_completions(
     )
 
     # Handle embedding instructions by prepending them to prompts
-    embed_query_instrs = kwargs.pop("embed_query_instrs", None)
-    embed_doc_instrs = kwargs.pop("embed_doc_instrs", None)
+    instructions = kwargs.pop("instructions", None)
+
+    logger.debug(f"instructions: {instructions}")
+    logger.debug(f"prompts (before prepending): {prompts[:4]}")
 
     final_prompts = []
     for i, prompt in enumerate(prompts):
         final_prompt = prompt
-        if embed_query_instrs and i < len(embed_query_instrs):
-            final_prompt = embed_query_instrs[i] + final_prompt
-        if embed_doc_instrs and i < len(embed_doc_instrs):
-            final_prompt = embed_doc_instrs[i] + final_prompt
+
+        # Format instructions using the proper instruction-tuned format
+        # See: https://huggingface.co/Qwen/Qwen3-Embedding-8B
+        # Format: "Instruct: {task_description}\nQuery: {text}"
+        if instructions and i < len(instructions) and instructions[i]:
+            final_prompt = f"Instruct: {instructions[i]}\nQuery: {final_prompt}"
+
         final_prompts.append(final_prompt)
+
+    logger.debug(f"final_prompts (after prepending): {final_prompts[:4]}")
+
+    # Validate instructions were applied correctly
+    if instructions:
+        for i, (original, final) in enumerate(
+            zip(prompts, final_prompts, strict=False)
+        ):
+            if instructions and i < len(instructions) and instructions[i]:
+                assert final != original, f"Instruction not applied to prompt {i}"
+                assert final.startswith(
+                    "Instruct: "
+                ), f"Instruction format incorrect for prompt {i}"
+                assert instructions[i] in final, f"Instruction not in final prompt {i}"
 
     # Batch embeddings for efficiency (process all prompts at once)
     try:

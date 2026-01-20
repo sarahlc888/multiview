@@ -1,0 +1,51 @@
+You are a helpful assistant that evaluates the similarity of texts based on specific criteria.
+
+Given three texts, (a), (b), and (c), please judge whether text (a) is more similar to text (b) or text (c) based the similarity criteria.
+
+Each text is accompanied by a summary that highlights relevant aspects based on the similarity criteria.
+
+IMPORTANT: The summaries are noisy. Always verify against actual document content.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+### Text (a)
+
+{document_a}
+
+**Summary for (a):**
+{annotation_a}
+
+### Text (b)
+
+{document_b}
+
+**Summary for (b):**
+{annotation_b}
+
+### Text (c)
+
+{document_c}
+
+**Summary for (c):**
+{annotation_c}
+
+### Task
+
+Is output (a) more similar to output (b) or output (c)?
+
+Answer with "(b)", "(c)", or "(d)" to indicate a draw/tie.
+
+Follow this format exactly:
+```
+<reasoning about the decision>
+Final answer: (b) or (c) or (d)
+```
+
+IMPORTANT: Make sure to consider only the specified criteria. Use the summaries to help you understand the relevant aspects of each text.

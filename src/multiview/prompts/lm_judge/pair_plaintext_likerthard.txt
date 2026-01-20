@@ -1,0 +1,34 @@
+Given two texts -- (A) and (B) -- please judge how similar text (A) is to text (B).
+
+Please make this judgement based on the similarity criteria given below.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+### Text (A)
+
+{document_a}
+
+### Text (B)
+
+{document_b}
+
+### Task
+
+How similar are text (a) and (b) based on the similarity criteria?
+
+1: not at all similar
+2: somewhat similar
+3: moderately similar
+4: very similar
+5: extremely close match
+
+Consider only the provided criteria. Ignore irrelevant/extraneous aspects of the texts.
+
+Think out loud, then, provide a judgement in the format "Final judgement: [digit]".

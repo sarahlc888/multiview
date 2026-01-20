@@ -1,0 +1,19 @@
+Determine which tags apply to this document based on the criteria.
+
+CRITERIA: {criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+TAGS:
+{tag_schema}
+
+DOCUMENT:
+{document}
+
+For each tag, output 1 if it applies to this document, 0 if it does not.
+Output as a JSON object with reasoning and tags:
+{
+  "reasoning": "Briefly explain your tag decisions, especially for tags that apply",
+  "tags": {"tag_name": 0 or 1, ...}
+}

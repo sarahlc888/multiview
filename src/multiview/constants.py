@@ -45,6 +45,10 @@ INFERENCE_CACHE_PATH_TEMPLATE = str(
 # Can be overridden per-call with force_refresh or by setting USE_CACHE env var
 USE_CACHE = os.environ.get("USE_CACHE", "true").lower() in ("true", "1", "yes")
 
+# Global flag to enable/disable breakpoints for debugging
+# Set STEP_THROUGH=true in environment to enable breakpoints
+STEP_THROUGH = os.environ.get("STEP_THROUGH", "false").lower() in ("true", "1", "yes")
+
 # ============================================================================
 # Output Directories
 # ============================================================================
@@ -77,6 +81,9 @@ HF_API_KEY = os.environ.get(
     os.environ.get("HF_API_KEY", os.environ.get("HUGGINGFACE_API_KEY", None)),
 )
 
+# Voyage AI
+VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY", None)
+
 # ============================================================================
 # Environment Configuration
 # ============================================================================
@@ -91,6 +98,24 @@ os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", str(HF_CACHE_DIR))
 
 # Infinite Chats dataset configuration
 INFINITE_CHATS_DATASET_ID = "liweijiang/infinite-chats-taxonomy"
+
+# AidanBench dataset configuration
+AIDANBENCH_REPO_URL = "https://github.com/aidanmclaughlin/AidanBench.git"
+AIDANBENCH_CACHE_DIR = CACHE_ROOT / "AidanBench"
+AIDANBENCH_RESULTS_PATH = AIDANBENCH_CACHE_DIR / "results" / "results.json"
+
+# InstructLF dataset configuration
+INSTRUCTLF_REPO_URL = "https://github.com/allenai/instructLF.git"
+INSTRUCTLF_CACHE_DIR = CACHE_ROOT / "instructLF"
+INSTRUCTLF_INSPIRED_TRAIN = (
+    INSTRUCTLF_CACHE_DIR / "inspired" / "datasets" / "inspired_train.csv"
+)
+INSTRUCTLF_INSPIRED_TEST = (
+    INSTRUCTLF_CACHE_DIR / "inspired" / "datasets" / "inspired_test.csv"
+)
+INSTRUCTLF_BILLS_DATA = (
+    INSTRUCTLF_CACHE_DIR / "bills" / "data" / "topic_generation.jsonl"
+)
 
 # ============================================================================
 # Create directories

@@ -12,6 +12,16 @@ dependencies = [
     "datasets>=2.0.0,<3.0.0",
     "hydra-core>=1.3.0",
     "omegaconf>=2.3.0",
+    "rank-bm25>=0.2.2",
+    "google-genai>=1.57.0",
+    "beautifulsoup4>=4.0.0",
+    "requests>=2.0.0",
+    "torch>=2.0.0",
+    "transformers>=4.0.0",
+    "pylate>=1.0.0",
+    "numpy>=1.24.0",
+    "accelerate>=0.20.0",
+    "tqdm>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -27,10 +37,22 @@ providers = [
     "anthropic>=0.20.0",
     "google-genai>=0.2.0",
     "huggingface-hub>=0.20.0",
+    "voyageai>=0.3.0",
+]
+# Visualization tools
+viz = [
+    "matplotlib>=3.7.0",
+    "pandas>=2.0.0",
+    "jupyter>=1.0.0",
+    "scikit-learn>=1.3.0",
+    "umap-learn>=0.5.8",
+    "numba>=0.60.0",
+    "llvmlite>=0.44.0",
+    "pillow>=10.0.0",
 ]
 # All optional dependencies for full testing
 all = [
-    "multiview[dev,providers]",
+    "multiview[dev,providers,viz]",
 ]
 
 [tool.ruff]
@@ -66,4 +88,12 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "-v",
+]
+markers = [
+    "dev: lightweight sanity tests useful during development",
+    "integration: end-to-end or pipeline-level tests",
+    "external: tests that call external APIs / require network access",
+    "needs_gpu: tests that require CUDA GPU for model inference",
+    "needs_api: tests that require API keys and make API calls",
+    "slow: tests that take a long time to run (e.g., downloading/loading large models)",
 ]

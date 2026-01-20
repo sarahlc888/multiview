@@ -1,0 +1,30 @@
+Given an anchor document, please find a document that is DISSIMILAR to the anchor based on the specified criteria.
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+INSTRUCTIONS:
+- An ideal candidate is DIFFERENT from the anchor, based on the criterion, but LOOKS SIMILAR on the surface. Prefer candidates with high Lexical similarity (bm25). This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters.
+- Don't pick documents with "subtle" differences on the criterion -- we want clear criterion differences with superficial similarities
+{similarity_note}- IMPORTANT: Annotations are noisy. Always verify against actual document content.
+- If there is NO clear hard negative among the candidates (i.e., no candidate that is clearly different on the criterion while having surface similarity), you may ABSTAIN by returning 0. However, it's typically better to settle for a mediocre negative than to abstain.
+{triplet_example_section}
+ANCHOR DOCUMENT:
+{anchor_doc}
+
+ANCHOR ANNOTATION:
+{anchor_annotation}
+
+CANDIDATES:
+{candidates}
+
+Think out loud, then respond with valid JSON in this exact format:
+{
+  "reasoning": <thinking about which document is a strong negative match with respect to the criteria>,
+  "chosen_negative": [number from 1 to N, or 0 to abstain if no clear hard negative]
+}
+
+IMPORTANT: make sure to response in JSON format.

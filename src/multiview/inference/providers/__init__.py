@@ -12,12 +12,14 @@ from collections.abc import Callable
 logger = logging.getLogger(__name__)
 
 
-def get_completion_fn(provider: str, is_embedding: bool = False) -> Callable:
+def get_completion_fn(provider: str) -> Callable:
     """Get the completion function for a given provider.
 
     Args:
-        provider: Provider name ("openai", "anthropic", "hf_api")
-        is_embedding: If True, return embedding function; else text completion
+        provider: Provider name (e.g., "openai", "openai_embedding", "anthropic",
+                  "hf_embedding", "gemini", "hf_local_reranker",
+                  "hf_local_contextual_reranker", "voyage_reranker",
+                  "voyage_embedding", "hf_local_hidden_state")
 
     Returns:
         Completion function that takes prompts and returns completions
@@ -26,71 +28,101 @@ def get_completion_fn(provider: str, is_embedding: bool = False) -> Callable:
         ValueError: If provider is unknown
         ImportError: If required packages are not installed
     """
-    if provider == "openai":
-        if is_embedding:
-            try:
-                from .openai import openai_embedding_completions
+    # Registry of provider functions with lazy imports
+    provider_registry = {
+        "openai": (
+            lambda: __import__(
+                "multiview.inference.providers.openai", fromlist=["openai_completions"]
+            ).openai_completions,
+            "openai package not installed. Install with: pip install openai",
+        ),
+        "openai_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.openai",
+                fromlist=["openai_embedding_completions"],
+            ).openai_embedding_completions,
+            "openai package not installed. Install with: pip install openai",
+        ),
+        "anthropic": (
+            lambda: __import__(
+                "multiview.inference.providers.anthropic",
+                fromlist=["anthropic_completions"],
+            ).anthropic_completions,
+            "anthropic package not installed. Install with: pip install anthropic",
+        ),
+        "hf_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_api",
+                fromlist=["hf_embedding_completions"],
+            ).hf_embedding_completions,
+            "huggingface_hub package not installed. Install with: pip install huggingface_hub",
+        ),
+        "gemini": (
+            lambda: __import__(
+                "multiview.inference.providers.gemini", fromlist=["gemini_completions"]
+            ).gemini_completions,
+            "google-genai package not installed. Install with: pip install google-genai",
+        ),
+        "hf_local_hidden_state": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local",
+                fromlist=["hf_local_hidden_state_completions"],
+            ).hf_local_hidden_state_completions,
+            "transformers, torch, and numpy packages required. Install with: pip install transformers torch numpy",
+        ),
+        "hf_local_reranker": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local",
+                fromlist=["hf_local_reranker_completions"],
+            ).hf_local_reranker_completions,
+            "transformers and torch packages required. Install with: pip install transformers torch",
+        ),
+        "hf_local_contextual_reranker": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local",
+                fromlist=["hf_local_contextual_reranker_completions"],
+            ).hf_local_contextual_reranker_completions,
+            "transformers and torch packages required. Install with: pip install transformers torch",
+        ),
+        "hf_local_colbert": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local_colbert",
+                fromlist=["hf_local_colbert_completions"],
+            ).hf_local_colbert_completions,
+            "pylate, transformers, and torch packages required. Install with: pip install pylate transformers torch",
+        ),
+        "voyage_reranker": (
+            lambda: __import__(
+                "multiview.inference.providers.voyage",
+                fromlist=["voyage_reranker_completions"],
+            ).voyage_reranker_completions,
+            "voyageai package not installed. Install with: pip install voyageai",
+        ),
+        "voyage_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.voyage",
+                fromlist=["voyage_embedding_completions"],
+            ).voyage_embedding_completions,
+            "voyageai package not installed. Install with: pip install voyageai",
+        ),
+        "pseudologit": (
+            lambda: __import__(
+                "multiview.inference.providers.pseudologit",
+                fromlist=["pseudologit_completions"],
+            ).pseudologit_completions,
+            "pseudologit provider requires API provider dependencies (openai, google-genai, etc.)",
+        ),
+    }
 
-                return openai_embedding_completions
-            except ImportError as e:
-                logger.error(
-                    "openai package not installed. Install with: pip install openai"
-                )
-                raise e
-        else:
-            try:
-                from .openai import openai_completions
-
-                return openai_completions
-            except ImportError as e:
-                logger.error(
-                    "openai package not installed. Install with: pip install openai"
-                )
-                raise e
-
-    elif provider == "anthropic":
-        if is_embedding:
-            raise ValueError("Anthropic does not provide embedding models")
-        try:
-            from .anthropic import anthropic_completions
-
-            return anthropic_completions
-        except ImportError as e:
-            logger.error(
-                "anthropic package not installed. Install with: pip install anthropic"
-            )
-            raise e
-
-    elif provider == "hf_api":
-        if not is_embedding:
-            raise ValueError("hf_api provider currently only supports embeddings")
-        try:
-            from .hf_api import hf_embedding_completions
-
-            return hf_embedding_completions
-        except ImportError as e:
-            logger.error(
-                "huggingface_hub package not installed. Install with: pip install huggingface_hub"
-            )
-            raise e
-
-    elif provider == "gemini":
-        if is_embedding:
-            raise ValueError(
-                "Gemini does not provide embedding models (use OpenAI or HF API)"
-            )
-        try:
-            from .gemini import gemini_completions
-
-            return gemini_completions
-        except ImportError as e:
-            logger.error(
-                "google-genai package not installed. Install with: pip install google-genai"
-            )
-            raise e
-
-    else:
+    if provider not in provider_registry:
         raise ValueError(
             f"Unknown provider: {provider}. "
-            f"Available providers: openai, anthropic, hf_api, gemini"
+            f"Available providers: {', '.join(sorted(provider_registry.keys()))}"
         )
+
+    loader, error_msg = provider_registry[provider]
+    try:
+        return loader()
+    except ImportError as e:
+        logger.error(error_msg)
+        raise e

@@ -1,0 +1,44 @@
+Given two math problems (Problem 1 and Problem 2), your task is to write a new problem that combines the core arithmetic structure of Problem 1 with the superficial narrative/thematic elements of Problem 2.
+
+Reason through these steps.
+1. What is Problem 1's arithmetic structure, which we should preserve?
+2. What are the superficial narrative/thematic elements of Problem 2, which we should incorporate?
+
+Then, output a new problem after the delimiter "---FINAL OUTPUT---".
+
+## Example
+
+**Input:**
+Problem 1:
+Question: Cindy and Cheryl went to the candy store to buy treats for their second grade students. There are 23 kids in the class, and they bought a variety pack of 100 candies. If they give each kid 4 candies, how many candies will be left over?
+Answer: Cindy and Cheryl give out 23 * 4 = <<23*4=92>>92
+The amount leftover is 100 - 92 = <<100-92=8>>8
+#### 8
+
+Problem 2:
+Question: Rex the dog wanted to go to the park. Every day, when his owner Jack came home from work, there was a 20% chance that they went to the park together. What is the probability that they go to the park at least once this week?
+Answer: The probability they don't go any day is 0.8^7 = <<0.8^7=0.2097>>0.2097
+The probability they go at least once is 1 - 0.2097 = <<1-0.2097=0.7903>>0.7903
+#### 0.7903
+
+**Output:**
+1. arithmetic structure is 100 - (23 * 4)
+2. superficial narrative is about Rex the dog, Jack, park, tennis balls
+
+---FINAL OUTPUT---
+Question: Rex the dog wanted to go to the park. Jack brought 17 tennis balls to the park. There are 3 other dogs at the park, and Rex shares 2 balls with each dog. How many tennis balls does Rex have left to himself?
+Answer: Rex shares 3 * 2 = <<3*2=6>>6
+Rex has this many remaining: 17 - 6 = <<17-6=11>>11
+#### 8
+
+## Your Task
+
+**Input:**
+Problem 1:
+{document1}
+
+Problem 2:
+{document2}
+
+IMPORTANT:
+- Try not to have too much lexical overlap with Document 1. To this point, do not use exactly the same numbers as Document 1.

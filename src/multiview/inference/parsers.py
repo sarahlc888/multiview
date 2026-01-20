@@ -7,12 +7,76 @@ Ported from old repo with simplifications. Provides parsers for:
 - Dictionary fields (dict_parser)
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_json_string(text: str) -> str:
+    """Clean common JSON issues that LMs produce."""
+    cleaned = text
+    # Fix incorrectly escaped single quotes (\' -> ')
+    # In JSON, single quotes don't need escaping, so \' is always invalid
+    # Replace all \' with ' (single quotes are just regular chars in JSON strings)
+    cleaned = re.sub(r"\\'", "'", cleaned)
+
+    # Fix invalid escape sequences (like \$, \x, etc.)
+    # Valid JSON escapes: \", \\, \/, \b, \f, \n, \r, \t, \uXXXX
+    # First, protect valid \uXXXX sequences by temporarily replacing them
+    unicode_placeholders = {}
+    placeholder_counter = 0
+
+    def protect_unicode(match):
+        nonlocal placeholder_counter
+        placeholder = f"__UNICODE_PLACEHOLDER_{placeholder_counter}__"
+        placeholder_counter += 1
+        unicode_placeholders[placeholder] = match.group(0)
+        return placeholder
+
+    # Protect valid \uXXXX sequences
+    cleaned = re.sub(
+        r"\\u[0-9a-fA-F]{4}", protect_unicode, cleaned, flags=re.IGNORECASE
+    )
+
+    # Now fix invalid single-character escapes
+    # Valid single-character escapes: ", \, /, b, f, n, r, t
+    valid_single_escapes = {'"', "\\", "/", "b", "f", "n", "r", "t"}
+
+    def fix_invalid_escape(match):
+        char = match.group(1)
+        if char in valid_single_escapes:
+            return match.group(0)  # Keep valid escapes
+        # Remove the backslash (invalid escape -> just the char)
+        return char
+
+    # Replace invalid escapes
+    cleaned = re.sub(r"\\(.)", fix_invalid_escape, cleaned)
+
+    # Restore unicode sequences
+    for placeholder, unicode_seq in unicode_placeholders.items():
+        cleaned = cleaned.replace(placeholder, unicode_seq)
+
+    # Remove trailing commas before closing braces/brackets
+    cleaned = re.sub(r",(\s*[}\]])", r"\1", cleaned)
+    return cleaned
+
+
+def _try_parse_json(text: str, clean: bool = False) -> tuple[Any, Exception | None]:
+    """Try to parse JSON from text.
+
+    Returns:
+        Tuple of (parsed_json, error). If parsing succeeds, error is None.
+    """
+    try:
+        cleaned_text = _clean_json_string(text) if clean else text
+        return json.loads(cleaned_text), None
+    except json.JSONDecodeError as e:
+        return None, e
 
 
 def vector_parser(completion: dict, **kwargs) -> Any:
@@ -34,8 +98,31 @@ def vector_parser(completion: dict, **kwargs) -> Any:
         return completion
 
 
+def score_parser(completion: dict | int | float, **kwargs) -> float:
+    """Parse relevance scores from reranker completion.
+
+    Args:
+        completion: Completion dict from reranker model
+            Should have "score" key with relevance score (0-1)
+
+    Returns:
+        The score as a float
+    """
+    if isinstance(completion, dict):
+        if "score" not in completion:
+            raise ValueError(f"No score found in completion keys: {completion.keys()}")
+        return float(completion["score"])
+    elif isinstance(completion, int | float):
+        # Assume it's already a score
+        return float(completion)
+    else:
+        raise ValueError(f"Cannot parse score from type: {type(completion)}")
+
+
 def json_parser(
-    completion: str | dict, annotation_key: str | None = None, **kwargs
+    completion: str | dict,
+    annotation_key: str | None = None,
+    **kwargs,
 ) -> Any:
     """Parse JSON from completion text.
 
@@ -81,33 +168,148 @@ def json_parser(
 
     # Extract JSON from markdown code block if present
     if "```json" in completion:
-        match = re.search(r"```json(.*?)```", completion, re.DOTALL)
-        if match:
-            completion = match.group(1).strip()
+        # Find the first ```json block and extract only that one
+        # This handles both nested code blocks and multiple separate blocks
+        start_idx = completion.find("```json")
+        if start_idx != -1:
+            # Skip past the opening ```json
+            content_start = completion.find("\n", start_idx)
+            if content_start == -1:
+                content_start = start_idx + len("```json")
+            else:
+                content_start += 1  # Skip the newline
 
-    # Try to parse JSON
-    try:
-        json_loaded = json.loads(completion)
-    except json.JSONDecodeError:
-        # Try wrapping in braces (common LM mistake)
-        try:
-            json_loaded = json.loads(f"{{\n{completion}\n}}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from completion: {completion[:200]}")
-            raise ValueError(f"Invalid JSON in completion: {e}") from e
+            # Find the closing ``` for this specific block
+            # Look for ``` that appears on its own line (handles nested blocks in strings)
+            # Pattern: newline + ``` + newline/end
+            pattern = re.compile(r"\n```(?:\n|$)")
+            match = pattern.search(completion, content_start)
+
+            if match:
+                closing_match = match.start() + 1  # +1 to skip the newline before ```
+            else:
+                # Fallback: find first ``` after content_start
+                closing_match = completion.find("```", content_start)
+
+            if closing_match != -1 and closing_match > content_start:
+                completion = completion[content_start:closing_match].strip()
+            elif content_start > 0:
+                # No closing ``` found (possibly truncated) - extract to end
+                completion = completion[content_start:].strip()
+    elif "```" in completion:
+        # Try to extract from any code block - find first closing ``` after opening
+        first_backticks = completion.find("```")
+        if first_backticks != -1:
+            # Find the language tag if present
+            lang_end = completion.find("\n", first_backticks)
+            if lang_end == -1:
+                content_start = first_backticks + 3
+            else:
+                content_start = lang_end + 1
+
+            # Find the first closing ``` after the content starts
+            closing_backticks = completion.find("```", content_start)
+            if closing_backticks != -1 and closing_backticks > content_start:
+                completion = completion[content_start:closing_backticks].strip()
+            elif content_start > 0:
+                # No closing ``` found (possibly truncated) - extract to end
+                completion = completion[content_start:].strip()
+
+    # Clean up common issues
+    completion = completion.strip()
+
+    # Try multiple parsing strategies in order
+    # Note: We try cleaning early since LMs often produce invalid escape sequences
+    strategies = [
+        # Strategy 1: Clean and parse (try cleaning first since it's common)
+        lambda: _try_parse_json(completion, clean=True),
+        # Strategy 2: Direct parse (in case cleaning breaks valid JSON)
+        lambda: _try_parse_json(completion, clean=False),
+        # Strategy 3: Extract JSON from text and parse
+        lambda: _extract_and_parse_json(completion),
+        # Strategy 4: Wrap in braces if missing outer structure
+        lambda: _wrap_and_parse_json(completion),
+    ]
+
+    json_loaded = None
+    last_error = None
+    strategy_errors = []
+
+    for i, strategy in enumerate(strategies, 1):
+        json_loaded, error = strategy()
+        if json_loaded is not None:
+            break
+        if error:
+            strategy_errors.append(
+                f"Strategy {i}: {type(error).__name__}: {str(error)}"
+            )
+        last_error = error
+
+    if json_loaded is None:
+        # Log first strategy error for debugging (most informative)
+        first_error = strategy_errors[0] if strategy_errors else "All strategies failed"
+        logger.error(f"Failed to parse JSON: {first_error}. Preview: {completion=}")
+        raise ValueError(f"Invalid JSON in completion: {last_error}") from last_error
 
     # Extract annotation key if requested
     if annotation_key is None:
-        # Return full JSON (wrapped in list for consistency)
-        return json_loaded if isinstance(json_loaded, list) else [json_loaded]
+        # Return parsed JSON as-is (dict or list)
+        return json_loaded
 
     # Extract key from dict or list of dicts
     if isinstance(json_loaded, dict):
+        if annotation_key not in json_loaded:
+            logger.error(
+                f"Key '{annotation_key}' not found in parsed JSON. "
+                f"Available keys: {list(json_loaded.keys())}"
+            )
+            raise KeyError(
+                f"Key '{annotation_key}' not found in JSON. "
+                f"Available keys: {list(json_loaded.keys())}"
+            )
         return json_loaded[annotation_key]
     elif isinstance(json_loaded, list):
         return [item[annotation_key] for item in json_loaded]
     else:
         raise ValueError(f"Unexpected JSON type: {type(json_loaded)}")
+
+
+def _extract_and_parse_json(text: str) -> tuple[Any, Exception | None]:
+    """Extract JSON object/array from text and try to parse it."""
+    json_match = re.search(r"(\{.*\}|\[.*\])", text, re.DOTALL)
+    if not json_match:
+        return None, ValueError("No JSON object or array found")
+
+    extracted_json = json_match.group(1)
+    # Try parsing with cleaning first (common case), then without
+    json_loaded, error = _try_parse_json(extracted_json, clean=True)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    json_loaded, error2 = _try_parse_json(extracted_json, clean=False)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    # If we get here, both attempts failed - return the last error
+    return None, error2 or error or ValueError(
+        "Extracted JSON still invalid after cleaning"
+    )
+
+
+def _wrap_and_parse_json(text: str) -> tuple[Any, Exception | None]:
+    """Wrap text in braces if it looks like it's missing outer structure."""
+    text_stripped = text.strip()
+    # If text already has outer structure, this strategy doesn't apply
+    if text_stripped.startswith("{") or text_stripped.startswith("["):
+        return None, None
+
+    # Try wrapping, then with cleaning
+    json_loaded, error = _try_parse_json(f"{{{text}}}", clean=False)
+    if json_loaded is not None:
+        return json_loaded, None
+
+    json_loaded, error = _try_parse_json(f"{{{text}}}", clean=True)
+    return json_loaded, error
 
 
 def text_parser(completion: str | dict, **kwargs) -> str:
@@ -217,20 +419,65 @@ def regex_parser(
                 first_value = value
 
     if first_match is None:
-        logger.warning(f"No regex match found in completion: {text[:200]}")
+        logger.warning(f"No regex match found in completion: {text=}")
         return None
 
     return first_value
 
 
+def delimiter_parser(completion: str | dict, delimiter: str = "###", **kwargs) -> str:
+    """Parse completion by extracting text after a delimiter.
+
+    Useful for extracting final answers that come after a delimiter marker.
+
+    Args:
+        completion: Completion text (string or dict with "text" key)
+        delimiter: Delimiter string to split on (default: "###")
+
+    Returns:
+        Text after the last occurrence of the delimiter, stripped
+
+    Example:
+        >>> completion = "reasoning...\\n###\\nFinal answer here"
+        >>> delimiter_parser(completion, delimiter="###")
+        "Final answer here"
+    """
+    # Handle list input (from some APIs)
+    if isinstance(completion, list):
+        raise ValueError(f"Unexpected completion format: {type(completion[0])}")
+
+    # Extract text from dict if needed
+    if isinstance(completion, dict):
+        if "text" in completion:
+            text = completion["text"]
+        elif "content" in completion:
+            text = completion["content"]
+        else:
+            raise ValueError(f"No text/content in completion: {completion.keys()}")
+    else:
+        text = completion
+    # Split by delimiter and take everything after the last occurrence
+    if delimiter in text:
+        parts = text.split(delimiter)
+        result = parts[-1].strip()
+    else:
+        logger.warning(
+            f"Delimiter '{delimiter}' not found in completion. Try increasing max tokens and running with force_refresh=True (or deleting the cache file). {text=}"
+        )
+        result = None
+    return result
+
+
 # Registry for parser lookup
 PARSER_REGISTRY = {
     "vector": vector_parser,
+    "score": score_parser,
     "json": json_parser,
     "text": text_parser,
     "dict": dict_parser,
     "noop": noop_parser,
     "regex": regex_parser,
+    "delimiter": delimiter_parser,
 }
 
 

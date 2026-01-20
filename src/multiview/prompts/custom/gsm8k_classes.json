@@ -1,0 +1,16 @@
+{
+  "classes": ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+  "descriptions": {
+    "A": "simple sum or difference (e.g. answer = a + b, answer = a - b)",
+    "B": "simple product or quotient (e.g. answer = a * b, answer = a / b)",
+    "C": "parallel branches then combine (e.g. sum of products: answer = a*b + c*d, product of sums: answer = (a + b) * (c + d))",
+    "D": "chained update steps (e.g. answer = a + b*c, a * b / c, answer = (c - b)/a)",
+    "E": "simple product or quotient (e.g. answer = a * b, answer = a / b)",
+    "F": "multi-step chained updates with no parallelism (e.g. answer = ((a + b) - c) * d)",
+    "G": "nested parallel structure with asymmetric branching (e.g. answer = (a*b + c*d) / (a + c))",
+    "H": "nested parallel structure with symmetric branching (e.g. answer = (a*b + c*d) + (e/f + g*h))",
+    "I": "other"
+  },
+  "taxonomy_context": "Consider the arithmetic structure of the solution.\n\nThere are many different types of arithmetic \"computational graphs\". Here is a compact taxonomy.\n\nA. simple sum or difference\ne.g. answer = a + b\ne.g. answer = a - b\n\nB. simple product or quotient\ne.g. answer = a * b\ne.g. answer = a / b\n\nC. parallel branches then combine\ne.g. sum of products: answer = a*b + c*d\ne.g. product of sums: answer = (a + b) * (c + d)\ne.g. answer = (a + b) / (c - d)\ne.g. answer = (a + b) * (c - d)\n\nD. chained update steps\ne.g. answer = a + b*c\ne.g. a * b / c\ne.g. answer = (c - b)/a\ne.g. ratio / proportion (cross-multiply) : a/b = c/d  =>  a*d = b*c\n\nE. simple product or quotient\ne.g. answer = a * b\ne.g. answer = a / b\n\nF. multi-step chained updates\ne.g. answer = ((a + b) - c) * d\n\nG. multi-step after parallel structure\ne.g. answer = (a*b + c*d) / (a + c)\n\nH. other",
+  "instruction": "Instruction: think out loud and explain your reasoning, then choose the SINGLE best letter for the overall structure. For the final judgement, use this format exactly: 'The final answer is $\\boxed{<letter>}$'"
+}

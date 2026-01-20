@@ -1,0 +1,22 @@
+Classify this document into one of the given categories based on the criteria.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+
+CATEGORIES:
+{category_schema}
+
+DOCUMENT:
+{document}
+
+Output valid JSON with reasoning:
+{
+  "reasoning": "Consider which categories might be relevant. If multiple categories are applicable, choose the single best fit. Explain why this document fits this category based on the criteria",
+  "category": "exact_category_name"
+}

@@ -1,0 +1,79 @@
+# Met Museum Collection Images Benchmark
+# Example configuration for evaluating models on Met Museum artworks
+
+tasks:
+  # Artistic style clustering
+  - name: met_artistic_style
+    document_set: met_museum
+    criterion: artistic_style
+    triplet_style: lm_judge
+    config:
+      max_docs: 30
+      require_image: true
+
+    inference_config:
+      provider: gemini
+      model_name: gemini-2.0-flash-exp
+      temperature: 0.0
+      parser: text
+
+  # Department classification (known criterion)
+  - name: met_department
+    document_set: met_museum
+    criterion: department
+    triplet_style: discrete
+    config:
+      max_docs: 50
+      require_image: true
+
+    inference_config:
+      provider: gemini
+      model_name: gemini-2.0-flash-exp
+      temperature: 0.0
+      parser: text
+
+  # Cultural origin clustering
+  - name: met_culture
+    document_set: met_museum
+    criterion: culture
+    triplet_style: discrete
+    config:
+      max_docs: 40
+      require_image: true
+      departments: ["Asian Art", "Egyptian Art", "Greek and Roman Art"]
+
+    inference_config:
+      provider: gemini
+      model_name: gemini-2.0-flash-exp
+      temperature: 0.0
+      parser: text
+
+  # Historical period
+  - name: met_period
+    document_set: met_museum
+    criterion: period
+    triplet_style: discrete
+    config:
+      max_docs: 40
+      require_image: true
+
+    inference_config:
+      provider: gemini
+      model_name: gemini-2.0-flash-exp
+      temperature: 0.0
+      parser: text
+
+  # Medium/material clustering
+  - name: met_medium
+    document_set: met_museum
+    criterion: medium_type
+    triplet_style: lm_judge
+    config:
+      max_docs: 30
+      require_image: true
+
+    inference_config:
+      provider: gemini
+      model_name: gemini-2.0-flash-exp
+      temperature: 0.0
+      parser: text

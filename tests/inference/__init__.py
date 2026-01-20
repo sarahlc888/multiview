@@ -1,1 +1,1 @@
-"""Tests for inference module."""
+"""Tests for evaluation methods."""

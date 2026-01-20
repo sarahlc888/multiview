@@ -9,13 +9,12 @@ import os
 import pytest
 
 from multiview.inference import (
-    EMBED_PLAINTEXT_HFAPI,
-    LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI,
-    REWRITE_PLAINTEXT_FREEFORM_GEMINI,
     get_preset,
     list_presets,
     run_inference,
 )
+
+pytestmark = pytest.mark.dev
 
 
 class TestPresetListing:
@@ -41,19 +40,24 @@ class TestPresetListing:
     def test_get_preset(self):
         """Test getting annotator preset by name."""
         config = get_preset("embed_plaintext_hfapi")
-        assert config.provider == "hf_api"
+        assert config.provider == "hf_embedding"
         assert (
             config.model_name == "Qwen/Qwen3-Embedding-8B"
         )  # 4B not available via Inference API
-        assert config.is_embedding is True
 
     def test_direct_import(self):
-        """Test that annotator configs can be imported directly."""
-        assert EMBED_PLAINTEXT_HFAPI.provider == "hf_api"
-        assert REWRITE_PLAINTEXT_FREEFORM_GEMINI.provider == "gemini"
-        assert LMJUDGE_PAIR_PLAINTEXT_LIKERTHARD_GEMINI.provider == "gemini"
+        """Test that annotator configs can be accessed via get_preset()."""
+        embed_config = get_preset("embed_plaintext_hfapi")
+        assert embed_config.provider == "hf_embedding"
+
+        rewrite_config = get_preset("rewrite_plaintext_freeform_gemini")
+        assert rewrite_config.provider == "gemini"
+
+        lmjudge_config = get_preset("lmjudge_pair_plaintext_likerthard_gemini")
+        assert lmjudge_config.provider == "gemini"
 
 
+@pytest.mark.external
 class TestEmbedPlaintextHFAPI:
     """Test embed_plaintext_hfapi annotator."""
 
@@ -80,6 +84,7 @@ class TestEmbedPlaintextHFAPI:
         assert all(isinstance(x, (int, float)) for x in vector)
 
 
+@pytest.mark.external
 class TestRewritePlaintextFreeformGemini:
     """Test rewrite_plaintext_freeform_gemini annotator."""
 
@@ -95,7 +100,8 @@ class TestRewritePlaintextFreeformGemini:
                     "Machine learning is a subset of artificial intelligence. "
                     "It involves training algorithms on data to make predictions."
                 ],
-                "similarity_criteria": ["Main technical concepts"],
+                "criterion": ["concepts"],
+                "criterion_description": ["Main technical concepts"],
             },
             config="rewrite_plaintext_freeform_gemini",
         )
@@ -111,6 +117,7 @@ class TestRewritePlaintextFreeformGemini:
         )
 
 
+@pytest.mark.external
 class TestLMJudgePairLikert:
     """Test lmjudge_pair_plaintext_likerthard_gemini annotator."""
 
@@ -122,7 +129,8 @@ class TestLMJudgePairLikert:
         """Test Likert judge on similar texts (should be 4-5)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["The cat sat on the mat."],
                 "document_b": ["A feline was sitting on the rug."],
             },
@@ -144,7 +152,8 @@ class TestLMJudgePairLikert:
         """Test Likert judge on different texts (should be 1-3)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["The weather is nice today."],
                 "document_b": ["Quantum mechanics is complex."],
             },
@@ -157,6 +166,7 @@ class TestLMJudgePairLikert:
         assert 1 <= judgment <= 7
 
 
+@pytest.mark.external
 class TestLMJudgeTripletBinary:
     """Test lmjudge_triplet_plaintext_binaryhard_gemini annotator."""
 
@@ -168,7 +178,8 @@ class TestLMJudgeTripletBinary:
         """Test triplet judge picks the more similar text."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["Dogs are popular pets."],
                 "document_b": ["Cats are also popular pets."],  # Similar topic
                 "document_c": [
@@ -186,6 +197,7 @@ class TestLMJudgeTripletBinary:
         assert judgment == 1
 
 
+@pytest.mark.external
 class TestLMJudgePairBinary:
     """Test lmjudge_pair_norewrite_binaryhard_gemini annotator."""
 
@@ -197,7 +209,8 @@ class TestLMJudgePairBinary:
         """Test binary judge on same/matching texts (should be 0)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Main idea"],
+                "criterion": ["main_idea"],
+                "criterion_description": ["Main idea"],
                 "document_a": ["The earth is round."],
                 "document_b": ["Earth has a spherical shape."],
             },
@@ -219,7 +232,8 @@ class TestLMJudgePairBinary:
         """Test binary judge on different texts (should be 1)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["Python is a programming language."],
                 "document_b": ["Elephants are large mammals."],
             },
@@ -255,7 +269,7 @@ class TestAnnotatorWithOverrides:
         from multiview.inference import get_preset
 
         config = get_preset("embed_plaintext_hfapi")
-        assert config.provider == "hf_api"
+        assert config.provider == "hf_embedding"
         assert (
             config.model_name == "Qwen/Qwen3-Embedding-8B"
         )  # 4B not available via Inference API

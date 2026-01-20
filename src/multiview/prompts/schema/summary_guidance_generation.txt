@@ -1,0 +1,30 @@
+Create guidelines for annotating how documents relate to a criterion.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
+{summary_hint}
+SAMPLE DOCUMENTS:
+{sample_documents}
+
+Your task is to create a "golden" demonstration for how to create a criteria annotation.
+
+The annotation should include two sections:
+1) Annotation trace: freeform text with justification and explicit references to the document
+2) Final summary: concise, structured summary
+  - Prefer not to use prose. The format should be as structured as possible. If the hint specifies a desired format, the final summary should follow that format.
+  - If two documents are similar with respect to the criterion, their final summaries should have high lexical overlap
+  - IMPORTANT: Should not explicitly reference or quote the document. The summary should be invariant to everything except the most essential criteria-specific attributes.
+
+Include a demonstration showing both outputs for one example document.
+
+Output valid JSON:
+{
+  "reasoning": "<thinking out loud about how to provide a good demonstration>",
+  "summary_guidance": "..."
+}

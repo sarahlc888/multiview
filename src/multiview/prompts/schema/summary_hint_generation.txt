@@ -1,0 +1,36 @@
+Below are a few randomly sampled documents from a corpus. We are going to analyze these documents using this criteria: "{criterion}"
+
+Our downstream goal is to create concise summaries that describe how each document relates to this criteria. However, the criteria is just a short free text string, which could be somewhat ambiguous. In order to make it easier to create consistent, high-quality summaries, we need to provide a more detailed description.
+
+Your task is to create this richer description.
+
+For example, for a straightforward criteria like "color" for a dataset of images, we could
+create a criteria description such as "What are the dominant color or colors in the image,
+e.g. red, orange, yellow, green, blue, purple, grey, white, black, brown". Since color
+is a property that has discrete categories, the description lists out salient categories
+almost like class labels.
+
+For a more complex criteria like "literary themes" for a dataset of short stories, we could
+create a criteria description such as: "literary themes: what are some of the biggest thematic
+preoccupations of the story? Does the story relate to any universal themes like love,
+mortality, greed? Does the story make reference to any well-known prior works?" Even
+though there are not clear "class labels" to use here, it is useful to provide examples
+of some archetypes that could appear.
+
+DOCUMENT TYPE:
+{document_type}
+
+CRITERIA CONTEXT:
+{criterion_description}
+
+SAMPLE DOCUMENTS:
+{sample_documents}
+
+YOUR TASK:
+Create a richer criteria description for "{criterion}" that will help create downstream summaries.
+
+Be specific and provide examples where helpful. Keep it under 200 words.
+
+Think out loud, then output your final criteria description after the delimiter.
+
+After the delimiter "---FINAL OUTPUT---", return ONLY the criteria description text.
