@@ -19,7 +19,7 @@ but in practice, this capability is limited.
     - Crossword clues by clue type
     - Haiku by literal images
     - Haiku by meaning evoked
-- See [TASK_TABLE.md](TASK_TABLE.md) for additional examples.
+- See [TASK_TABLE.md](../TASK_TABLE.md) for additional examples.
 
 ## Related work
 - Conditional semantic similarity is a canonical task in computer vision and NLP, but existing benchmarks focus primarily on simple conditions and sentence-length texts.
