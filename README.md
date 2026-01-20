@@ -31,7 +31,7 @@ For each document set, we create triplets for at least two different criteria.
 
 
 ## Examples
-See [TASK_TABLE.md](TASK_TABLE.md) for example triplets for all tasks.
+See [TASKS_TABLE.md](TASKS_TABLE.md) for example triplets for all tasks.
 
 ## Development
 
