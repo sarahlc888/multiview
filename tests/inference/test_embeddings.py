@@ -82,6 +82,101 @@ class TestOpenAIEmbeddings:
 
 
 @pytest.mark.external
+class TestVoyageEmbeddings:
+    """Test Voyage AI embedding models."""
+
+    @pytest.mark.skipif(
+        not os.getenv("VOYAGE_API_KEY"),
+        reason="VOYAGE_API_KEY not set",
+    )
+    def test_voyage_4_lite_embedding(self):
+        """Test Voyage 4 Lite embedding."""
+        config = InferenceConfig(
+            provider="voyage_embedding",
+            model_name="voyage-4-lite",
+            prompt_template="{text}",
+            parser="vector",
+        )
+
+        results = run_inference(
+            inputs={"text": ["Hello world"]},
+            config=config,
+        )
+
+        assert len(results) == 1
+        vector = results[0]
+        # Voyage 4 Lite default dimension is 1024
+        assert isinstance(vector, list)
+        assert len(vector) == 1024
+        assert all(isinstance(x, (int, float)) for x in vector)
+
+    @pytest.mark.skipif(
+        not os.getenv("VOYAGE_API_KEY"),
+        reason="VOYAGE_API_KEY not set",
+    )
+    def test_voyage_4_lite_preset(self):
+        """Test Voyage 4 Lite using preset."""
+        results = run_inference(
+            inputs={"document": ["First text", "Second text"]},
+            config="voyage_4_lite",
+        )
+
+        assert len(results) == 2
+        for vector in results:
+            assert isinstance(vector, list)
+            assert len(vector) == 1024
+
+    @pytest.mark.skipif(
+        not os.getenv("VOYAGE_API_KEY"),
+        reason="VOYAGE_API_KEY not set",
+    )
+    def test_voyage_4_lite_custom_dimension(self):
+        """Test Voyage 4 Lite with custom output dimension."""
+        config = InferenceConfig(
+            provider="voyage_embedding",
+            model_name="voyage-4-lite",
+            prompt_template="{text}",
+            parser="vector",
+            extra_kwargs={"output_dimension": 512},
+        )
+
+        results = run_inference(
+            inputs={"text": ["Test text"]},
+            config=config,
+        )
+
+        assert len(results) == 1
+        vector = results[0]
+        # Should have 512 dimensions as specified
+        assert isinstance(vector, list)
+        assert len(vector) == 512
+
+    @pytest.mark.skipif(
+        not os.getenv("VOYAGE_API_KEY"),
+        reason="VOYAGE_API_KEY not set",
+    )
+    def test_voyage_4_lite_with_instruction(self):
+        """Test Voyage 4 Lite with instruction."""
+        config = InferenceConfig(
+            provider="voyage_embedding",
+            model_name="voyage-4-lite",
+            prompt_template="{text}",
+            instruction="Query: ",
+            parser="vector",
+        )
+
+        results = run_inference(
+            inputs={"text": ["What is machine learning?"]},
+            config=config,
+        )
+
+        assert len(results) == 1
+        vector = results[0]
+        assert isinstance(vector, list)
+        assert len(vector) == 1024
+
+
+@pytest.mark.external
 class TestHuggingFaceEmbeddings:
     """Test HuggingFace API embedding models."""
 
@@ -144,12 +239,12 @@ class TestHuggingFaceEmbeddings:
         reason="HF_TOKEN not set",
     )
     def test_hf_embedding_with_query_instruction(self):
-        """Test HF embeddings with query instruction."""
+        """Test HF embeddings with instruction."""
         config = InferenceConfig(
             provider="hf_embedding",
             model_name="Qwen/Qwen3-Embedding-8B",
             prompt_template="{text}",
-            embed_query_instr_template="Represent this query for retrieval: ",
+            instruction="Represent this query for retrieval: ",
             parser="vector",
         )
 
@@ -277,7 +372,7 @@ class TestEmbeddingInstructions:
         reason="HF_TOKEN not set",
     )
     def test_query_instruction_applied(self):
-        """Test that query instruction is properly applied."""
+        """Test that instruction is properly applied."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache_path = Path(tmpdir) / "instr_cache.json"
 
@@ -285,7 +380,7 @@ class TestEmbeddingInstructions:
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_query_instr_template="Query: ",
+                instruction="Query: ",
                 parser="vector",
             )
 
@@ -319,7 +414,7 @@ class TestEmbeddingInstructions:
         reason="HF_TOKEN not set",
     )
     def test_doc_instruction_applied(self):
-        """Test that document instruction is properly applied."""
+        """Test that instruction is properly applied."""
         with tempfile.TemporaryDirectory() as tmpdir:
             cache_path = Path(tmpdir) / "doc_instr_cache.json"
 
@@ -327,7 +422,7 @@ class TestEmbeddingInstructions:
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_doc_instr_template="Document: ",
+                instruction="Document: ",
                 parser="vector",
             )
 
@@ -364,12 +459,12 @@ class TestEmbeddingInstructions:
             # Same text, different instructions
             base_text = "machine learning"
 
-            # Query side
+            # First instruction
             config_query = InferenceConfig(
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_query_instr_template="Query: ",
+                instruction="Query: ",
                 parser="vector",
             )
 
@@ -379,12 +474,12 @@ class TestEmbeddingInstructions:
                 cache_path=str(cache_path),
             )
 
-            # Doc side
+            # Different instruction
             config_doc = InferenceConfig(
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_doc_instr_template="Document: ",
+                instruction="Document: ",
                 parser="vector",
             )
 
@@ -420,7 +515,7 @@ class TestEmbeddingInstructions:
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_query_instr_template=None,
+                instruction=None,
                 parser="vector",
             )
 
@@ -435,7 +530,7 @@ class TestEmbeddingInstructions:
                 provider="hf_embedding",
                 model_name="Qwen/Qwen3-Embedding-8B",
                 prompt_template="{text}",
-                embed_query_instr_template="Represent this query for retrieval: ",
+                instruction="Represent this query for retrieval: ",
                 parser="vector",
             )
 

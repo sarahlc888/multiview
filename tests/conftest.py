@@ -16,7 +16,7 @@ def pytest_addoption(parser):
 
 def pytest_configure(config):
     """Configure logging for tests."""
-    setup_logging(level="INFO")
+    setup_logging(level="DEBUG")
 
 
 def pytest_collection_modifyitems(config, items):

@@ -17,8 +17,18 @@ logger = logging.getLogger(__name__)
 def evaluate_with_bm25(
     documents: list[str],
     triplet_ids: list[tuple[int, int, int]],
+    preset: str = "bm25_lexical",
 ) -> dict[str, Any]:
-    """Evaluate triplets using BM25 scoring."""
+    """Evaluate triplets using BM25 scoring.
+
+    Args:
+        documents: List of document texts
+        triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
+        preset: BM25 preset name (e.g., "bm25_lexical", "bm25_raw")
+
+    Returns:
+        Dict with positive_scores, negative_scores, and triplet_logs
+    """
     if not triplet_ids:
         logger.warning("No triplets provided for evaluation")
         return {
@@ -27,7 +37,7 @@ def evaluate_with_bm25(
             "triplet_logs": [],
         }
 
-    logger.info(f"Evaluating {len(triplet_ids)} triplets with BM25")
+    logger.info(f"Evaluating {len(triplet_ids)} triplets with BM25 (preset={preset})")
     logger.info(f"Building BM25 matrix over {len(documents)} documents")
 
     similarity_matrix = compute_bm25_matrix(documents)
@@ -53,6 +63,7 @@ def evaluate_with_bm25(
             {
                 "triplet_idx": i,
                 "method_type": "bm25",
+                "preset": preset,
                 "anchor_id": anchor_id,
                 "positive_id": positive_id,
                 "negative_id": negative_id,
@@ -62,6 +73,8 @@ def evaluate_with_bm25(
                 "positive_score": float(pos_score),
                 "negative_score": float(neg_score),
                 "outcome": outcome,
+                "correct": outcome == 1,
+                "is_tie": outcome == 0,
             }
         )
 

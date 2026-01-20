@@ -49,7 +49,7 @@ class AbstractSimDocSet(BaseDocSet):
 
     DATASET_PATH = "biu-nlp/abstract-sim"
     DESCRIPTION = "Wikipedia sentences with abstract descriptions (good/bad)"
-    KNOWN_CRITERIA = ["abstract_similarity"]
+    KNOWN_CRITERIA = ["abstract_similarity", "abstraction_level"]
 
     # Metadata for LM-based criteria (descriptions, schema hints, etc.)
     CRITERION_METADATA = ABSTRACTSIM_CRITERIA
@@ -65,18 +65,18 @@ class AbstractSimDocSet(BaseDocSet):
         # Will be populated during load_documents()
         self.PRECOMPUTED_ANNOTATIONS = {}
 
+        # Store operational metadata for triplet generation
+        # Maps document_text -> metadata dict
+        self._triplet_metadata: dict[str, dict] = {}
+
     def load_documents(self) -> list[Any]:
         """Load Wikipedia sentences and descriptions from HuggingFace.
 
-        For each row, creates documents with n*2 labeling:
-        1. Sentence: row_X_class_0
-        2. Good descriptions: row_X_class_0 (same as sentence)
-        3. Bad descriptions: row_X_class_1
-
-        This guarantees that triplets only use within-row matches.
+        Documents are simple strings (sentences and descriptions).
+        Metadata for triplet generation is stored in self._triplet_metadata.
 
         Returns:
-            List of document dicts: {"text": str, "abstract_similarity": str}
+            List of document strings
         """
         logger.info(f"Loading Abstract-Sim from HuggingFace: {self.DATASET_PATH}")
 
@@ -90,7 +90,7 @@ class AbstractSimDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode with max_docs={max_docs}")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             logger.debug(f"Loading full dataset split: {split}")
             dataset = load_dataset(self.DATASET_PATH, split=split)
@@ -98,6 +98,7 @@ class AbstractSimDocSet(BaseDocSet):
 
         # Extract documents with n*2 labeling
         documents = []
+        metadata_list = []  # Temporary list to store metadata during loading
         doc_count = 0
 
         for row_idx, example in enumerate(dataset):
@@ -118,14 +119,15 @@ class AbstractSimDocSet(BaseDocSet):
                 label_class_0 = f"row_{row_idx}_class_0"
                 label_class_1 = f"row_{row_idx}_class_1"
 
-                # Add sentence as document (class_0)
-                # Mark as anchor so prelabeled triplet creation uses it
-                documents.append(
+                # Add sentence - just the text
+                documents.append(sentence)
+                metadata_list.append(
                     {
                         "text": sentence,
                         "abstract_similarity": label_class_0,
-                        "is_anchor": True,  # Marker for triplet anchor selection
-                        "is_sentence": True,  # Also mark as sentence for clarity
+                        "abstraction_level": "concrete",
+                        "is_anchor": True,
+                        "is_sentence": True,
                     }
                 )
                 doc_count += 1
@@ -138,10 +140,12 @@ class AbstractSimDocSet(BaseDocSet):
                         else str(good_desc)
                     )
                     if good_text:
-                        documents.append(
+                        documents.append(good_text)
+                        metadata_list.append(
                             {
                                 "text": good_text,
                                 "abstract_similarity": label_class_0,
+                                "abstraction_level": "abstract",
                             }
                         )
                         doc_count += 1
@@ -152,10 +156,12 @@ class AbstractSimDocSet(BaseDocSet):
                         bad_desc.strip() if isinstance(bad_desc, str) else str(bad_desc)
                     )
                     if bad_text:
-                        documents.append(
+                        documents.append(bad_text)
+                        metadata_list.append(
                             {
                                 "text": bad_text,
                                 "abstract_similarity": label_class_1,
+                                "abstraction_level": "abstract",
                             }
                         )
                         doc_count += 1
@@ -174,8 +180,11 @@ class AbstractSimDocSet(BaseDocSet):
             f"(split: {split})"
         )
 
-        # Build precomputed annotations
-        self._build_precomputed_annotations(documents)
+        # Deduplicate before building metadata lookups
+        documents = self._deduplicate(documents)
+
+        # Build metadata lookups
+        self._build_metadata_lookups(metadata_list)
 
         return documents
 
@@ -183,13 +192,11 @@ class AbstractSimDocSet(BaseDocSet):
         """Extract text from a document.
 
         Args:
-            document: A document (dict or string)
+            document: A document (string)
 
         Returns:
             Text content
         """
-        if isinstance(document, dict):
-            return document.get("text", "")
         return str(document) if document else ""
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -197,54 +204,88 @@ class AbstractSimDocSet(BaseDocSet):
 
         Supports:
         - word_count: from base class
-        - abstract_similarity: the row label (row_X_positive or row_X_negative)
+        - abstract_similarity: the row label (from PRECOMPUTED_ANNOTATIONS)
+        - abstraction_level: "concrete" or "abstract" (from PRECOMPUTED_ANNOTATIONS)
+
+        Note: Documents are strings, so criterion values come from PRECOMPUTED_ANNOTATIONS.
+        Use get_precomputed_annotation() to access these.
 
         Args:
-            document: A document
+            document: A document (string)
             criterion: The criterion name
 
         Returns:
-            Criterion value for abstract_similarity, or None
+            Criterion value or None
         """
-        if criterion == "abstract_similarity":
-            if isinstance(document, dict):
-                return document.get("abstract_similarity")
+        if criterion in ["abstract_similarity", "abstraction_level"]:
+            # Criterion values are stored in PRECOMPUTED_ANNOTATIONS
+            # The caller should use get_precomputed_annotation() instead
             return None
 
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
 
-    def _build_precomputed_annotations(self, documents: list[dict]) -> None:
-        """Build precomputed annotations from loaded documents.
+    def _build_metadata_lookups(self, metadata_list: list[dict]) -> None:
+        """Build metadata lookups from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": label}}
-        where label is "row_X_class_0" or "row_X_class_1"
+        Creates:
+        1. PRECOMPUTED_ANNOTATIONS["abstract_similarity"]: {document_text: {"prelabel": "row_X_class_0/1"}}
+        2. PRECOMPUTED_ANNOTATIONS["abstraction_level"]: {document_text: {"prelabel": "concrete"/"abstract"}}
+        3. self._triplet_metadata: {document_text: metadata_dict}
 
         Args:
-            documents: List of document dicts with 'text' and 'abstract_similarity' fields
+            metadata_list: List of metadata dicts with 'text' and other fields
         """
-        annotations = {}
+        sim_annotations = {}
+        level_annotations = {}
         n_class_0 = 0
         n_class_1 = 0
+        n_concrete = 0
+        n_abstract = 0
 
-        for doc in documents:
-            if isinstance(doc, dict):
-                text = doc.get("text")
-                label = doc.get("abstract_similarity")
+        for meta in metadata_list:
+            text = meta.get("text")
+            if not text:
+                continue
 
-                if text and label:
-                    annotations[text] = {"criterion_value": label}
+            sim_label = meta.get("abstract_similarity")
+            level_label = meta.get("abstraction_level")
 
-                    # Track stats
-                    if "_class_0" in label:
-                        n_class_0 += 1
-                    elif "_class_1" in label:
-                        n_class_1 += 1
+            # Build precomputed annotations for criteria
+            if sim_label:
+                sim_annotations[text] = {"prelabel": sim_label}
 
-        self.PRECOMPUTED_ANNOTATIONS["abstract_similarity"] = annotations
+                # Track stats
+                if "_class_0" in sim_label:
+                    n_class_0 += 1
+                elif "_class_1" in sim_label:
+                    n_class_1 += 1
+
+            if level_label:
+                level_annotations[text] = {"prelabel": level_label}
+
+                # Track stats
+                if level_label == "concrete":
+                    n_concrete += 1
+                elif level_label == "abstract":
+                    n_abstract += 1
+
+            # Store full metadata for triplet generation
+            self._triplet_metadata[text] = meta
+
+        self.PRECOMPUTED_ANNOTATIONS["abstract_similarity"] = sim_annotations
+        self.PRECOMPUTED_ANNOTATIONS["abstraction_level"] = level_annotations
 
         logger.info(
             f"Built precomputed annotations for abstract_similarity: "
-            f"{len(annotations)} documents "
+            f"{len(sim_annotations)} documents "
             f"({n_class_0} class_0, {n_class_1} class_1 labels)"
+        )
+        logger.info(
+            f"Built precomputed annotations for abstraction_level: "
+            f"{len(level_annotations)} documents "
+            f"({n_concrete} concrete, {n_abstract} abstract labels)"
+        )
+        logger.info(
+            f"Built triplet metadata for {len(self._triplet_metadata)} documents"
         )

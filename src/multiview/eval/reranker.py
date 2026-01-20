@@ -21,7 +21,6 @@ def evaluate_with_reranker(
     documents: list[str],
     triplet_ids: list[tuple[int, int, int]],
     reranker_preset: str = "qwen3_reranker_8b",
-    instruction: str | None = None,
     cache_alias: str | None = None,
     run_name: str | None = None,
     preset_overrides: dict | None = None,
@@ -37,10 +36,10 @@ def evaluate_with_reranker(
         documents: List of document texts
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         reranker_preset: Inference preset to use (e.g., "qwen3_reranker_8b")
-        instruction: Optional custom instruction (default: retrieval instruction)
         cache_alias: Optional cache identifier
         run_name: Optional experiment/run name for cache organization
         preset_overrides: Optional preset configuration overrides
+                         Use instruction to set embedding instruction
 
     Returns:
         Dict with positive_scores, negative_scores, and triplet_logs
@@ -58,30 +57,22 @@ def evaluate_with_reranker(
     logger.info(f"Evaluating {len(triplet_ids)} triplets with reranker")
     logger.info(f"Using preset: {reranker_preset}")
 
-    # Default instruction if not provided
-    if instruction is None:
-        instruction = (
-            "Given a web search query, retrieve relevant passages that answer the query"
-        )
-
     # Prepare inputs for all query-document pairs
     # For each triplet, we need two scores: (anchor, positive) and (anchor, negative)
     queries = []
     docs = []
-    instructions = []
 
     for anchor_id, positive_id, negative_id in triplet_ids:
         # Add (anchor, positive) pair
         queries.append(documents[anchor_id])
         docs.append(documents[positive_id])
-        instructions.append(instruction)
 
         # Add (anchor, negative) pair
         queries.append(documents[anchor_id])
         docs.append(documents[negative_id])
-        instructions.append(instruction)
 
     # Get all scores using run_inference
+    # Instructions are handled via instruction field in preset_overrides
     logger.info(
         f"Computing scores for {len(queries)} query-document pairs via inference system"
     )
@@ -89,12 +80,10 @@ def evaluate_with_reranker(
     inference_kwargs = {"verbose": False}
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
-
     scores = run_inference(
         inputs={
             "query": queries,
             "document": docs,
-            "instruction": instructions,
         },
         config=reranker_preset,
         cache_alias=cache_alias,

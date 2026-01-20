@@ -75,7 +75,7 @@ def validate_synthesis(
         output_dir: Directory to save validation reports
         task_name: Name of the task
         triplets: Optional list of triplets (anchor_idx, pos_idx, neg_idx)
-        quality_ratings: Optional list of quality ratings (1-4) for each triplet
+        quality_ratings: Optional list of quality ratings (1-5) for each triplet
 
     Returns:
         Dict with validation statistics
@@ -133,7 +133,11 @@ def validate_synthesis(
         validation_records.append(record)
 
     # Compute aggregate statistics
-    stats = compute_validation_statistics(validation_records)
+    stats = compute_validation_statistics(
+        records=validation_records,
+        triplets=triplets,
+        num_original_docs=num_original,
+    )
 
     # Compute triplet quality statistics if provided
     triplet_stats = None
@@ -171,7 +175,7 @@ def analyze_triplet_quality_by_synthesis(
 
     Args:
         triplets: List of (anchor_idx, pos_idx, neg_idx) tuples
-        quality_ratings: List of quality ratings (1-4) for each triplet
+        quality_ratings: List of quality ratings (1-5) for each triplet
         num_original_docs: Number of original (non-synthetic) documents
 
     Returns:
@@ -207,16 +211,18 @@ def analyze_triplet_quality_by_synthesis(
                 "rating_2": 0,
                 "rating_3": 0,
                 "rating_4": 0,
+                "rating_5": 0,
                 "rating_1_pct": 0.0,
                 "rating_2_pct": 0.0,
                 "rating_3_pct": 0.0,
                 "rating_4_pct": 0.0,
+                "rating_5_pct": 0.0,
                 "mean": 0.0,
                 "median": 0.0,
             }
 
         total = len(ratings)
-        rating_counts = {i: ratings.count(i) for i in range(1, 5)}
+        rating_counts = {i: ratings.count(i) for i in range(1, 6)}
 
         return {
             "count": total,
@@ -224,10 +230,12 @@ def analyze_triplet_quality_by_synthesis(
             "rating_2": rating_counts[2],
             "rating_3": rating_counts[3],
             "rating_4": rating_counts[4],
+            "rating_5": rating_counts[5],
             "rating_1_pct": float(rating_counts[1] / total * 100),
             "rating_2_pct": float(rating_counts[2] / total * 100),
             "rating_3_pct": float(rating_counts[3] / total * 100),
             "rating_4_pct": float(rating_counts[4] / total * 100),
+            "rating_5_pct": float(rating_counts[5] / total * 100),
             "mean": float(np.mean(ratings)),
             "median": float(np.median(ratings)),
         }
@@ -240,15 +248,32 @@ def analyze_triplet_quality_by_synthesis(
     }
 
 
-def compute_validation_statistics(records: list[dict]) -> dict:
+def compute_validation_statistics(
+    records: list[dict],
+    triplets: list[tuple] | None = None,
+    num_original_docs: int | None = None,
+) -> dict:
     """Compute aggregate statistics from validation records.
 
     Args:
         records: List of validation record dicts
+        triplets: Optional list of (anchor_idx, pos_idx, neg_idx) tuples
+        num_original_docs: Optional number of original (non-synthetic) documents
 
     Returns:
         Dict with statistics broken down by document type
     """
+    # Calculate used_synthetic_docs if triplets are provided
+    used_synthetic_docs = 0
+    if triplets is not None and num_original_docs is not None:
+        # Find all unique synthetic document indices used in triplets
+        synthetic_doc_indices = set()
+        for anchor_idx, pos_idx, neg_idx in triplets:
+            for doc_idx in [anchor_idx, pos_idx, neg_idx]:
+                if doc_idx >= num_original_docs:
+                    synthetic_doc_indices.add(doc_idx)
+        used_synthetic_docs = len(synthetic_doc_indices)
+
     # Separate by type
     hard_pos = [r for r in records if r["type"] == "hard_positive"]
     hard_neg = [r for r in records if r["type"] == "hard_negative"]
@@ -283,8 +308,10 @@ def compute_validation_statistics(records: list[dict]) -> dict:
             ),
         }
 
+    # Build stats dict with used_synthetic_docs as second field
     stats = {
         "total_synthetic_docs": len(records),
+        "used_synthetic_docs": used_synthetic_docs,
         "num_hard_positives": len(hard_pos),
         "num_hard_negatives": len(hard_neg),
     }

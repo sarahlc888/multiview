@@ -27,6 +27,14 @@ try:
 except ImportError:
     HAS_UMAP = False
 
+try:
+    from scipy.cluster.hierarchy import dendrogram, linkage
+    from scipy.spatial.distance import pdist
+
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+
 
 class DimensionalityReducer(ABC):
     """Abstract base class for dimensionality reduction methods."""
@@ -407,3 +415,103 @@ class SOMReducer(DimensionalityReducer):
         self._coords = self._build_coords()
         self._train(embeddings)
         return self._map_to_grid(embeddings)
+
+
+class DendrogramReducer(DimensionalityReducer):
+    """Hierarchical clustering dendrogram for dimensionality reduction.
+
+    This reducer uses scipy's hierarchical clustering to create a dendrogram
+    structure, then extracts leaf positions for 2D visualization. Best used
+    with image thumbnails to show the hierarchical clustering visually.
+    """
+
+    def __init__(
+        self,
+        method: str = "average",
+        metric: str = "euclidean",
+        optimal_ordering: bool = True,
+        **kwargs,
+    ):
+        """Initialize dendrogram reducer.
+
+        Args:
+            method: Linkage method for hierarchical clustering.
+                Options: 'single', 'complete', 'average', 'weighted', 'centroid',
+                'median', 'ward' (default: 'average')
+            metric: Distance metric (default: 'euclidean').
+                For 'ward' method, only 'euclidean' is supported.
+            optimal_ordering: If True, reorder linkage to minimize distance
+                between successive leaves (default: True)
+            **kwargs: Additional arguments passed to scipy.cluster.hierarchy.linkage
+        """
+        if not HAS_SCIPY:
+            raise ImportError(
+                "scipy is required for dendrogram. "
+                "Install it with: pip install scipy"
+            )
+
+        self.method = method
+        self.metric = metric
+        self.optimal_ordering = optimal_ordering
+        self.kwargs = kwargs
+        self.linkage_matrix = None
+        self.dendrogram_data = None
+
+    def fit_transform(self, embeddings: np.ndarray) -> np.ndarray:
+        """Apply hierarchical clustering and extract leaf positions.
+
+        Args:
+            embeddings: Input embeddings of shape (n_samples, n_features)
+
+        Returns:
+            2D coordinates of shape (n_samples, 2) where:
+            - x-coordinate: horizontal position from dendrogram leaf ordering
+            - y-coordinate: set to 0 (leaves are at bottom of dendrogram)
+        """
+        embeddings = embeddings.astype(np.float32)
+
+        # Compute linkage matrix
+        if self.method == "ward":
+            # Ward requires euclidean distance
+            self.linkage_matrix = linkage(
+                embeddings,
+                method=self.method,
+                metric="euclidean",
+                optimal_ordering=self.optimal_ordering,
+                **self.kwargs,
+            )
+        else:
+            # Compute pairwise distances first for other methods
+            distances = pdist(embeddings, metric=self.metric)
+            self.linkage_matrix = linkage(
+                distances,
+                method=self.method,
+                optimal_ordering=self.optimal_ordering,
+                **self.kwargs,
+            )
+
+        # Generate dendrogram structure (without plotting)
+        self.dendrogram_data = dendrogram(
+            self.linkage_matrix,
+            no_plot=True,
+        )
+
+        # Extract leaf positions
+        # dendrogram_data['leaves'] gives the order of original samples at the bottom
+        # dendrogram_data['icoord'] and 'dcoord' give the dendrogram structure
+        leaf_order = self.dendrogram_data["leaves"]
+
+        # Create position mapping: original_index -> x_position
+        n_samples = len(leaf_order)
+        coords_2d = np.zeros((n_samples, 2), dtype=np.float32)
+
+        # Map each sample to its position in the dendrogram ordering
+        for new_pos, original_idx in enumerate(leaf_order):
+            coords_2d[original_idx, 0] = new_pos
+            coords_2d[original_idx, 1] = 0  # All leaves at y=0
+
+        # Normalize x-coordinates to [0, 1] range
+        if n_samples > 1:
+            coords_2d[:, 0] /= n_samples - 1
+
+        return coords_2d

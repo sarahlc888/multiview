@@ -16,6 +16,7 @@ class RocStoriesDocSet(BaseDocSet):
 
     DATASET_PATH = "mintujupally/ROCStories"
     DESCRIPTION = "ROCStories short stories"
+    DOCUMENT_TYPE = "Simple story made up of a few sentences"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     KNOWN_CRITERIA = []
@@ -34,7 +35,7 @@ class RocStoriesDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42).take(max_docs)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, split=split)
             if max_docs is not None:
@@ -53,7 +54,7 @@ class RocStoriesDocSet(BaseDocSet):
                 break
 
         logger.debug(f"Loaded {len(documents)} documents from ROCStories")
-        return documents
+        return self._deduplicate(documents)
 
     def _build_story(self, item: dict) -> str:
         if "story" in item and item["story"]:

@@ -19,10 +19,12 @@ def generate_category_schema(
     documents: list[str],
     criterion: str,
     criterion_description: str,
+    document_type: str,
     n_samples: int = 10,
     schema_hint: str | None = None,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    config: str = "category_schema_generation_gemini",
 ) -> dict:
     """Generate a category schema from sample documents.
 
@@ -30,10 +32,12 @@ def generate_category_schema(
         documents: List of document strings to sample from
         criterion: Criterion name (e.g., "arithmetic_operations")
         criterion_description: Description of what the criterion means
+        document_type: Type of documents being classified (e.g., "math word problem", "story", "sentence")
         n_samples: Number of documents to sample for schema generation
         schema_hint: Optional hint about what categories to create
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        config: Inference config name to use (default: "category_schema_generation_gemini")
 
     Returns:
         Category schema dict with structure:
@@ -56,7 +60,11 @@ def generate_category_schema(
     )
 
     # Prepare inputs with template variables
+    if not document_type:
+        raise ValueError("document_type is required for category schema generation")
+
     inputs = {
+        "document_type": [document_type],
         "criterion": [criterion],
         "criterion_description": [criterion_description or ""],
         "schema_hint": [schema_hint_formatted],
@@ -66,7 +74,7 @@ def generate_category_schema(
     # Generate schema using inference
     results = run_inference(
         inputs=inputs,
-        config="category_schema_generation_gemini",
+        config=config,
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=True,
@@ -95,8 +103,10 @@ def classify_documents_batch(
     criterion: str,
     criterion_description: str,
     category_schema: dict,
+    document_type: str,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    config: str = "category_classify_gemini",
 ) -> list[dict]:
     """Classify multiple documents into categories.
 
@@ -105,8 +115,10 @@ def classify_documents_batch(
         criterion: Criterion name
         criterion_description: Criterion description
         category_schema: Category schema dict
+        document_type: Type of documents being classified (e.g., "math word problem", "story", "sentence")
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        config: Inference config name to use (default: "category_classify_gemini")
 
     Returns:
         List of annotation dicts:
@@ -122,8 +134,12 @@ def classify_documents_batch(
     )
 
     # Prepare inputs
+    if not document_type:
+        raise ValueError("document_type is required for document classification")
+
     inputs = {
         "document": documents,
+        "document_type": [document_type] * len(documents),
         "criterion": [criterion] * len(documents),
         "criterion_description": [criterion_description or ""] * len(documents),
         "category_schema": [categories_text] * len(documents),
@@ -132,7 +148,7 @@ def classify_documents_batch(
     # Run inference
     results = run_inference(
         inputs=inputs,
-        config="category_classify_gemini",
+        config=config,
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=False,

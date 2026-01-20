@@ -72,7 +72,7 @@ class MoralFablesDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs})")
             dataset = load_dataset(dataset_path, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             logger.debug("Loading full dataset")
             dataset = load_dataset(dataset_path, split=split)
@@ -124,6 +124,9 @@ class MoralFablesDocSet(BaseDocSet):
                 break
 
         logger.debug(f"Loaded {len(documents)} moral fable documents")
+
+        # Deduplicate before building precomputed annotations
+        documents = self._deduplicate(documents)
 
         # Build precomputed annotations for all criteria
         self._build_precomputed_annotations(metadata_list)
@@ -177,7 +180,7 @@ class MoralFablesDocSet(BaseDocSet):
         """Build precomputed annotations from loaded documents.
 
         Creates mappings for all known criteria:
-        {document_text: {"criterion_value": criterion_value}}
+        {document_text: {"prelabel": prelabel_value}}
 
         Args:
             documents: List of document dicts with 'text' and criterion fields
@@ -188,10 +191,10 @@ class MoralFablesDocSet(BaseDocSet):
             for doc in documents:
                 if isinstance(doc, dict):
                     text = doc.get("text")
-                    criterion_value = doc.get(criterion)
+                    prelabel_value = doc.get(criterion)
 
-                    if text and criterion_value:
-                        annotations[text] = {"criterion_value": criterion_value}
+                    if text and prelabel_value:
+                        annotations[text] = {"prelabel": prelabel_value}
 
             self.PRECOMPUTED_ANNOTATIONS[criterion] = annotations
 

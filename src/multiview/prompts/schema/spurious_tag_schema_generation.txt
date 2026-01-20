@@ -1,5 +1,8 @@
 You are designing a tag schema to identify spurious similarities between documents.
 
+DOCUMENT TYPE:
+{document_type}
+
 CRITERION OF INTEREST:
 {criterion}
 
@@ -26,6 +29,7 @@ IMPORTANT:
 - Tags should be INDEPENDENT of the criterion
 - Tags should emphasize SUPERFICIAL similarities
 - Use as many tags as seems reasonable
+- Choose tags that seem to be generally useful. Do not "overfit" to the current set of sample documents.
 
 Think through your options, then output valid JSON:
 {

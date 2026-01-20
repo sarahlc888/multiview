@@ -81,6 +81,9 @@ HF_API_KEY = os.environ.get(
     os.environ.get("HF_API_KEY", os.environ.get("HUGGINGFACE_API_KEY", None)),
 )
 
+# Voyage AI
+VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY", None)
+
 # ============================================================================
 # Environment Configuration
 # ============================================================================

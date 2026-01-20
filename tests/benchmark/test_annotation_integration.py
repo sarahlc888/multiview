@@ -143,10 +143,10 @@ class TestTaskAnnotationIntegration:
         task.load_documents()
         task.annotate_documents()
 
-        # Verify annotations have criterion_value
+        # Verify annotations have prelabel
         for ann in task.document_annotations:
-            assert "criterion_value" in ann
-            assert isinstance(ann["criterion_value"], (int, float, str, type(None)))
+            assert "prelabel" in ann
+            assert isinstance(ann["prelabel"], (int, float, str, type(None)))
 
     @pytest.mark.skip(reason="Requires API key and makes real API calls")
     def test_annotation_with_all_config_options(self):
@@ -309,6 +309,251 @@ class TestAnnotationWithDifferentDatasets:
             assert "tags" in ann
             assert "spurious_tags" in ann
             assert "summary" in ann
+
+
+class TestTripletStyleIntegration:
+    """Tests for new triplet styles (lm_category, lm_tags, lm_summary)."""
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    @pytest.mark.parametrize("triplet_style", ["lm_category", "lm_tags", "lm_summary", "lm_all"])
+    def test_triplet_style_end_to_end(self, triplet_style):
+        """Test complete pipeline for each style."""
+        task = Task(
+            config={
+                "document_set": "gsm8k",
+                "criterion": "arithmetic_operations",
+                "triplet_style": triplet_style,
+                "max_docs": 10,
+                "max_triplets": 5,
+                "n_schema_samples": 5,
+            }
+        )
+
+        # Load documents
+        task.load_documents()
+        assert len(task.documents) == 10
+
+        # Annotate documents
+        task.annotate_documents()
+        assert len(task.document_annotations) == 10
+
+        # Verify annotation structure based on style
+        for ann in task.document_annotations:
+            if triplet_style == "lm_category":
+                assert "category" in ann
+                assert "category_schema" in ann
+                # Should not have tags or summary
+                assert "tags" not in ann
+                assert "summary" not in ann
+
+            elif triplet_style == "lm_tags":
+                assert "tags" in ann
+                assert "spurious_tags" in ann
+                assert "tag_schema" in ann
+                assert "spurious_tag_schema" in ann
+                # Should not have category or summary
+                assert "category" not in ann
+                assert "summary" not in ann
+
+            elif triplet_style == "lm_summary":
+                assert "summary" in ann
+                assert "summary_guidance" in ann
+                # Should not have category or tags
+                assert "category" not in ann
+                assert "tags" not in ann
+
+            elif triplet_style == "lm_all":
+                # Should have all
+                assert "category" in ann
+                assert "tags" in ann
+                assert "spurious_tags" in ann
+                assert "summary" in ann
+
+        # Create triplets
+        task.create_triplets()
+        assert len(task.triplets) > 0
+        assert len(task.triplets) <= 5
+        assert all(len(triplet) == 3 for triplet in task.triplets)
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_lm_category_triplets(self):
+        """Test category-based triplet creation."""
+        task = Task(
+            config={
+                "document_set": "gsm8k",
+                "criterion": "arithmetic_operations",
+                "criterion_description": "Types of arithmetic operations used",
+                "triplet_style": "lm_category",
+                "max_docs": 15,
+                "max_triplets": 5,
+                "category_schema_hint": "Focus on addition, subtraction, multiplication, division",
+            }
+        )
+
+        task.load_documents()
+        task.annotate_documents()
+        task.create_triplets()
+
+        # Verify triplets created
+        assert len(task.triplets) > 0
+
+        # Verify annotations have categories
+        categories_present = set()
+        for ann in task.document_annotations:
+            if ann.get("category"):
+                categories_present.add(ann["category"])
+
+        # Should have multiple categories for meaningful triplets
+        assert len(categories_present) >= 2
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_lm_tags_triplets(self):
+        """Test tag-based triplet creation."""
+        task = Task(
+            config={
+                "document_set": "gsm8k",
+                "criterion": "problem_features",
+                "criterion_description": "Features and characteristics of math problems",
+                "triplet_style": "lm_tags",
+                "max_docs": 15,
+                "max_triplets": 5,
+                "tag_schema_hint": "Include tags for: multi-step, word problem, real-world context",
+            }
+        )
+
+        task.load_documents()
+        task.annotate_documents()
+        task.create_triplets()
+
+        # Verify triplets created
+        assert len(task.triplets) > 0
+
+        # Verify annotations have tags
+        for ann in task.document_annotations:
+            assert "tags" in ann
+            assert isinstance(ann["tags"], dict)
+            assert "spurious_tags" in ann
+            assert isinstance(ann["spurious_tags"], dict)
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_lm_summary_triplets(self):
+        """Test summary-based triplet creation."""
+        task = Task(
+            config={
+                "document_set": "gsm8k",
+                "criterion": "solution_approach",
+                "criterion_description": "The approach used to solve the problem",
+                "triplet_style": "lm_summary",
+                "max_docs": 15,
+                "max_triplets": 5,
+                "summary_hint": "Focus on the solution method and steps",
+            }
+        )
+
+        task.load_documents()
+        task.annotate_documents()
+        task.create_triplets()
+
+        # Verify triplets created
+        assert len(task.triplets) > 0
+
+        # Verify annotations have summaries
+        for ann in task.document_annotations:
+            assert "summary" in ann
+            assert isinstance(ann["summary"], dict)
+            assert "final_summary" in ann["summary"]
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_bm25_heuristic_integration(self):
+        """Test BM25 heuristic mode for lm_category triplet selection.
+
+        This test verifies that:
+        1. use_bm25_heuristic config parameter is passed correctly
+        2. Triplets are created without LM judge calls
+        3. Category constraints are still maintained
+        """
+        task = Task(
+            config={
+                "document_set": "gsm8k",
+                "criterion": "arithmetic_operations",
+                "criterion_description": "Types of arithmetic operations used",
+                "triplet_style": "lm_category",
+                "use_bm25_heuristic": True,  # Enable BM25 heuristic
+                "max_docs": 20,
+                "max_triplets": 10,
+                "n_schema_samples": 5,
+            }
+        )
+
+        # Load and annotate documents (annotation still needs LM)
+        task.load_documents()
+        task.annotate_documents()
+
+        # Verify annotations have categories
+        assert len(task.document_annotations) == 20
+        for ann in task.document_annotations:
+            assert "category" in ann
+            assert "category_schema" in ann
+
+        # Create triplets using BM25 heuristic
+        task.create_triplets()
+
+        # Verify triplets created
+        assert len(task.triplets) > 0, "Should create triplets with BM25 heuristic"
+        assert len(task.triplets) <= 10, "Should respect max_triplets limit"
+
+        # Verify category constraints are maintained
+        categories_by_idx = {
+            idx: ann["category"]
+            for idx, ann in enumerate(task.document_annotations)
+        }
+
+        for i, (anchor_idx, pos_idx, neg_idx) in enumerate(task.triplets[:3]):  # Check first 3
+            anchor_cat = categories_by_idx[anchor_idx]
+            pos_cat = categories_by_idx[pos_idx]
+            neg_cat = categories_by_idx[neg_idx]
+
+            print(f"\nTriplet {i} (BM25 heuristic):")
+            print(f"  Anchor [{anchor_idx}] category: {anchor_cat}")
+            print(f"  Positive [{pos_idx}] category: {pos_cat}")
+            print(f"  Negative [{neg_idx}] category: {neg_cat}")
+
+            # Verify category constraints
+            assert anchor_cat == pos_cat, \
+                "Anchor and positive should share category with BM25 heuristic"
+            assert anchor_cat != neg_cat, \
+                "Anchor and negative should have different categories with BM25 heuristic"
+
+            # Verify all indices are distinct
+            assert anchor_idx != pos_idx
+            assert anchor_idx != neg_idx
+            assert pos_idx != neg_idx
+
+        print(f"\n✓ BM25 heuristic created {len(task.triplets)} valid category triplets")
+
+    def test_triplet_style_constants(self):
+        """Test that new triplet style constants are defined."""
+        from multiview.benchmark.task import (
+            TRIPLET_STYLE_LM_CATEGORY,
+            TRIPLET_STYLE_LM_TAGS,
+            TRIPLET_STYLE_LM_SUMMARY,
+            LM_TRIPLET_STYLES,
+            RICH_ANNOTATION_STYLES,
+        )
+
+        # Verify constants exist
+        assert TRIPLET_STYLE_LM_CATEGORY == "lm_category"
+        assert TRIPLET_STYLE_LM_TAGS == "lm_tags"
+        assert TRIPLET_STYLE_LM_SUMMARY == "lm_summary"
+
+        # Verify they're in the sets
+        assert TRIPLET_STYLE_LM_CATEGORY in LM_TRIPLET_STYLES
+        assert TRIPLET_STYLE_LM_TAGS in LM_TRIPLET_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY in LM_TRIPLET_STYLES
+
+        assert TRIPLET_STYLE_LM_CATEGORY in RICH_ANNOTATION_STYLES
+        assert TRIPLET_STYLE_LM_TAGS in RICH_ANNOTATION_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY in RICH_ANNOTATION_STYLES
 
 
 if __name__ == "__main__":

@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any
 
 from multiview.benchmark.artifacts import save_method_triplet_logs_jsonl
-from multiview.benchmark.evaluation_utils import evaluate_method
+from multiview.benchmark.evaluation_utils import (
+    compute_instruction_sensitivity,
+    evaluate_method,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +38,9 @@ class Benchmark:
         if self.method_log_output_dir:
             self.method_log_output_dir.mkdir(parents=True, exist_ok=True)
 
-    def evaluate(self, method_configs: dict[str, list[dict]]) -> dict[str, Any]:
+    def evaluate(
+        self, method_configs: dict[str, list[dict]]
+    ) -> tuple[dict[str, Any], dict[str, dict[str, float | None]]]:
         """Evaluate all methods on all tasks.
 
         Args:
@@ -58,22 +63,32 @@ class Benchmark:
                 }
 
         Returns:
-            Dict with structure:
-            {
-                "task_name": {
-                    "method_name": {
-                        "accuracy": float,
-                        "n_correct": int,
-                        "n_incorrect": int,
-                        "n_ties": int,
-                        "n_total": int,
-                    },
-                    ...
-                },
-                ...
-            }
+            Tuple of (results, instruction_sensitivity):
+            - results: Dict with structure:
+              {
+                  "task_name": {
+                      "method_name": {
+                          "accuracy": float,
+                          "n_correct": int,
+                          "n_incorrect": int,
+                          "n_ties": int,
+                          "n_total": int,
+                      },
+                      ...
+                  },
+                  ...
+              }
+            - instruction_sensitivity: Dict with structure:
+              {
+                  "task_name": {
+                      "method_name": float | None,
+                      ...
+                  },
+                  ...
+              }
         """
         results = {}
+        skipped_methods = []  # Track skipped methods for summary
 
         logger.info(f"Evaluating {len(self.tasks)} tasks")
 
@@ -126,6 +141,13 @@ class Benchmark:
                         if method_results.get("skipped"):
                             reason = method_results.get("reason", "Unknown reason")
                             logger.info(f"      Skipped: {reason}")
+                            skipped_methods.append(
+                                {
+                                    "task": task_name,
+                                    "method": method_name,
+                                    "reason": reason,
+                                }
+                            )
                         else:
                             logger.info(
                                 f"      Result: {task_results[method_name]['accuracy']:.2%} accuracy "
@@ -148,4 +170,24 @@ class Benchmark:
             results[task_name] = task_results
 
         logger.info("Benchmark evaluation complete")
-        return results
+
+        # Print summary of skipped methods
+        if skipped_methods:
+            logger.info("\n" + "=" * 80)
+            logger.info("SKIPPED METHODS SUMMARY")
+            logger.info("=" * 80)
+            for skip in skipped_methods:
+                logger.info(f"  [{skip['task']}] {skip['method']}: {skip['reason']}")
+            logger.info("=" * 80 + "\n")
+        else:
+            logger.info("No methods were skipped")
+
+        # Compute instruction sensitivity
+        logger.info("Computing instruction sensitivity...")
+        instruction_sensitivity = compute_instruction_sensitivity(
+            results=results,
+            method_configs=method_configs,
+            tasks=self.tasks,
+        )
+
+        return results, instruction_sensitivity

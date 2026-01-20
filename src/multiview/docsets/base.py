@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class BaseDocSet(ABC):
@@ -17,6 +20,7 @@ class BaseDocSet(ABC):
     Subclasses must define:
     - DATASET_PATH: Path to the document_set
     - DESCRIPTION: Human-readable description
+    - DOCUMENT_TYPE: Human-readable description of document type (e.g., "math word problem")
     - KNOWN_CRITERIA: List of criteria that can be extracted deterministically
       (word_count is automatically included)
     """
@@ -24,10 +28,12 @@ class BaseDocSet(ABC):
     # Subclasses must define these
     DATASET_PATH: str
     DESCRIPTION: str
+    DOCUMENT_TYPE: str = "document"  # Default fallback
     KNOWN_CRITERIA: list[str] = []
 
     # Optional: Metadata for LM-based criteria (schema hints, descriptions, etc.)
-    # Format: {criterion_name: {description: str, category_schema_hint: str, ...}}
+    # Format: {criterion_name: {description: str, default_hint: str, category_schema_hint: str, ...}}
+    # Hint resolution: specific hint > default_hint > None
     #
     # Note: values may be non-strings (e.g., dicts for structured hints like
     # triplet_example_hint), so we type this as Any.
@@ -38,7 +44,7 @@ class BaseDocSet(ABC):
     SYNTHESIS_CONFIGS: dict[str, dict[str, str]] = {}
 
     # Optional: Pre-computed annotations for datasets with gold labels
-    # Format: {criterion_name: {document_text: {"criterion_value": value}}}
+    # Format: {criterion_name: {document_text: {"prelabel": value}}}
     # Subclasses can populate this to skip LM-based annotation generation
     PRECOMPUTED_ANNOTATIONS: dict[str, dict[str, dict]] = {}
 
@@ -60,10 +66,56 @@ class BaseDocSet(ABC):
         Note: For dataset loading with max_docs < 100, use streaming mode
         to efficiently assemble the data without loading the entire dataset.
 
+        Important: Subclasses should call self._deduplicate(documents) before
+        returning to ensure no duplicate documents exist.
+
         Returns:
             List of documents
         """
         pass
+
+    def _deduplicate(self, documents: list[Any]) -> list[Any]:
+        """Remove duplicate documents based on text content.
+
+        This prevents issues where anchor and positive could be the same document,
+        which creates trivial triplets that don't test anything meaningful.
+
+        Args:
+            documents: List of documents (can be strings or dicts)
+
+        Returns:
+            List of unique documents (preserving order of first occurrence)
+        """
+        if not documents:
+            return documents
+
+        original_count = len(documents)
+        seen_texts = {}  # text -> first index where it appears
+        unique_docs = []
+
+        for idx, doc in enumerate(documents):
+            # Extract text from document (handle both dicts and strings)
+            text = self.get_document_text(doc)
+
+            # Keep only first occurrence of each unique text
+            if text not in seen_texts:
+                seen_texts[text] = idx
+                unique_docs.append(doc)
+            else:
+                first_idx = seen_texts[text]
+                logger.debug(
+                    f"Removing duplicate document at index {idx} "
+                    f"(duplicate of document at index {first_idx})"
+                )
+
+        num_duplicates = original_count - len(unique_docs)
+        if num_duplicates > 0:
+            logger.warning(
+                f"Removed {num_duplicates} duplicate document(s) "
+                f"({original_count} -> {len(unique_docs)} documents)"
+            )
+
+        return unique_docs
 
     @abstractmethod
     def get_document_text(self, document: Any) -> str:
@@ -122,7 +174,7 @@ class BaseDocSet(ABC):
 
         Returns:
             Dict mapping document text -> annotation dict
-            (e.g., {"doc text": {"criterion_value": "value"}})
+            (e.g., {"doc text": {"prelabel": "value"}})
             Returns empty dict if no precomputed annotations exist
         """
         return self.PRECOMPUTED_ANNOTATIONS.get(criterion, {})

@@ -1,294 +1,105 @@
-"""Main experiment pipeline."""
+"""Run evaluation on pre-generated triplets."""
 
 from __future__ import annotations
 
-import json
 import logging
-import random
-from pathlib import Path
 
 import hydra
-import numpy as np
 from omegaconf import DictConfig
 
-import multiview.constants
-from multiview.benchmark.artifacts import (
-    save_task_annotations,
-    save_task_documents,
-    save_task_triplets,
-)
+from multiview.benchmark.artifacts import load_documents_from_jsonl
 from multiview.benchmark.benchmark import Benchmark
-from multiview.benchmark.synthesis.validation import validate_synthesis
 from multiview.benchmark.task import Task
-from multiview.benchmark.triplets.quality_assurance import QUALITY_SCALE
 from multiview.inference.cost_tracker import print_summary as print_cost_summary
-from multiview.utils.logging_utils import setup_logging_from_config
+from multiview.utils.script_utils import (
+    save_benchmark_results,
+    setup_benchmark_config,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def log_triplet_quality_distribution(
-    *, stats: dict, task_name: str, min_quality: int | None = None
-) -> None:
-    """Log triplet quality distribution in a readable format."""
-    logger.info("=" * 60)
-    logger.info(f"QUALITY DISTRIBUTION - {task_name}")
-    logger.info("=" * 60)
-    logger.info(f"Total triplets rated: {stats['n_total']}")
-    logger.info("")
-    logger.info("Rating | Label      | Count | Percentage")
-    logger.info("-------|------------|-------|------------")
-
-    for level in [4, 3, 2, 1]:  # best → worst
-        count = stats["counts"][level]
-        pct = stats["percentages"][level]
-        label = QUALITY_SCALE[level]["class"]
-        logger.info(f"   {level}   | {label:10s} | {count:5d} | {pct:5.1f}%")
-
-    if min_quality is not None and "n_filtered" in stats:
-        n_total = stats["n_total"]
-        n_kept = stats["n_kept"]
-        n_filtered = stats["n_filtered"]
-        kept_pct = (n_kept / n_total * 100) if n_total else 0.0
-        filtered_pct = (n_filtered / n_total * 100) if n_total else 0.0
-        logger.info("")
-        logger.info(f"Filtering (min_quality >= {min_quality}):")
-        logger.info(f"  Kept:     {n_kept:5d} ({kept_pct:5.1f}%)")
-        logger.info(f"  Removed:  {n_filtered:5d} ({filtered_pct:5.1f}%)")
-
-    logger.info("=" * 60)
-
-
-def set_seed(seed: int):
-    """Set random seed for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    logger.info(f"Set random seed to {seed}")
-
-
 @hydra.main(config_path="../configs", config_name="benchmark", version_base=None)
 def main(cfg: DictConfig):
-    setup_logging_from_config(cfg)
-
-    # Apply step_through config to constants module
-    if hasattr(cfg, "step_through"):
-        multiview.constants.STEP_THROUGH = cfg.step_through
-        logger.debug(f"Set STEP_THROUGH to {cfg.step_through}")
-
-    logger.info(f"Running benchmark: {cfg.run_name}")
-    seed = getattr(cfg, "seed", 42)  # Default to 42 if not specified
-    logger.debug(f"Using seed from config: {seed}")
-    set_seed(seed)
+    seed, output_base = setup_benchmark_config(cfg)
+    logger.info(f"Running evaluation: {cfg.run_name} with {seed=}")
 
     # Setup output directories
-    output_base = Path("outputs") / cfg.run_name
-    triplets_dir = output_base / "triplets"
-    documents_dir = output_base / "documents"
-    annotations_dir = output_base / "annotations"
     results_dir = output_base / "results"
     method_logs_dir = output_base / "method_logs"
     results_dir.mkdir(parents=True, exist_ok=True)
     method_logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # create tasks
+    # Check for cached triplets first
+    logger.info(f"Looking for cached triplets in {output_base}")
+
+    triplets_dir = output_base / "triplets"
+    documents_dir = output_base / "documents"
+    if not triplets_dir.exists() or not documents_dir.exists():
+        logger.error(f"✗ Evaluation artifacts not found in {output_base}")
+        logger.error("")
+        logger.error("To generate evaluation artifacts, run:")
+        logger.error(f"  python scripts/create_eval.py run_name={cfg.run_name}")
+        logger.error("")
+        raise FileNotFoundError(
+            "Missing evaluation artifacts. Run create_eval.py first."
+        )
+
+    # Load tasks from saved artifacts
+    # create_eval.py saves artifacts to subdirectories (triplets/, documents/, etc.)
+    triplets_cache_dir = str(output_base / "triplets")
+    documents_cache_dir = str(output_base / "documents")
+
     tasks = []
     for task_spec in cfg.tasks.task_list:
+        # Set triplet_cache_dir to point to the triplets subdirectory
         cur_task = Task(
-            config={**cfg.tasks.defaults, **task_spec, "run_name": cfg.run_name}
+            config={
+                **cfg.tasks.defaults,
+                **task_spec,
+                "run_name": cfg.run_name,
+                "triplet_cache_dir": triplets_cache_dir,
+                "reuse_cached_triplets": cfg.get("reuse_cached_triplets", True),
+            }
         )
-        cur_task.load_documents()
-        cur_task.augment_with_synthetic_documents()
-        if cur_task.triplet_style != "random":
-            cur_task.annotate_documents()
 
-        cur_task.create_triplets()
+        task_name = cur_task.get_task_name()
 
-        # Rate and filter triplet quality if enabled
-        # When annotations exist, automatically compares with/without for insights
-        if cfg.tasks.defaults.get("rate_triplet_quality", False):
-            min_quality = cfg.tasks.defaults.get("min_triplet_quality")
-
-            if cur_task.document_annotations is not None:
-                # Automatic comparison mode - rate with both methods
-                comparison = cur_task.compare_quality_ratings_with_without_annotations()
-
-                # Filter conservatively: keep only triplets that pass threshold in BOTH cases
-                if min_quality is not None:
-                    ratings_without = comparison["ratings_without_annotations"][
-                        "ratings"
-                    ]
-                    ratings_with = comparison["ratings_with_annotations"]["ratings"]
-
-                    # Keep triplet only if BOTH ratings >= min_quality
-                    keep_mask = [
-                        (r_w is not None and r_w >= min_quality)
-                        and (r_a is not None and r_a >= min_quality)
-                        for r_w, r_a in zip(ratings_without, ratings_with, strict=False)
-                    ]
-
-                    n_total = len(cur_task.triplets)
-                    filtered_triplets = [
-                        triplet
-                        for i, triplet in enumerate(cur_task.triplets)
-                        if keep_mask[i]
-                    ]
-                    filtered_ratings = [
-                        rating for i, rating in enumerate(ratings_with) if keep_mask[i]
-                    ]
-
-                    n_kept = len(filtered_triplets)
-                    n_filtered = n_total - n_kept
-
-                    logger.info(
-                        f"Filtered triplets requiring BOTH ratings >= {min_quality}"
-                    )
-                    logger.info(
-                        f"  Kept: {n_kept}/{n_total} ({n_kept/n_total*100:.1f}%)"
-                    )
-                    logger.info(
-                        f"  Filtered out: {n_filtered}/{n_total} ({n_filtered/n_total*100:.1f}%)"
-                    )
-
-                    cur_task.triplets = filtered_triplets
-                    cur_task.triplet_quality_ratings = filtered_ratings
-
-                    # Use the "with annotations" stats for logging, but add filter info
-                    quality_stats = comparison["ratings_with_annotations"]
-                    quality_stats.update(
-                        {
-                            "n_filtered": n_filtered,
-                            "n_kept": n_kept,
-                            "filter_mode": "both_must_pass",
-                        }
-                    )
-                else:
-                    quality_stats = comparison["ratings_with_annotations"]
-            else:
-                # No annotations: standard rating with filtering
-                quality_stats = cur_task.rate_triplet_quality(min_quality=min_quality)
-
-            log_triplet_quality_distribution(
-                stats=quality_stats,
-                task_name=cur_task.get_task_name(),
-                min_quality=min_quality,
+        # Check if cached triplets are available
+        if not cur_task.can_use_cached_triplets():
+            logger.error(f"✗ No cached triplets found for {task_name}")
+            logger.error("")
+            logger.error("To generate evaluation artifacts, run:")
+            logger.error(f"  python scripts/create_eval.py run_name={cfg.run_name}")
+            logger.error("")
+            raise FileNotFoundError(
+                f"Missing cached triplets for {task_name}. Run create_eval.py first."
             )
 
-        # Validate synthetic annotations if synthesis was performed
-        if (
-            cur_task.document_annotations is not None
-            and cur_task.add_synthetic_docs
-            and cur_task.synthesis_metadata
-        ):
-            validation_dir = output_base / "validation"
-            validate_synthesis(
-                documents=cur_task.documents,
-                annotations=cur_task.document_annotations,
-                synthesis_metadata=cur_task.synthesis_metadata,
-                output_dir=validation_dir,
-                task_name=cur_task.get_task_name(),
-                triplets=cur_task.triplets,
-                quality_ratings=cur_task.triplet_quality_ratings,
-            )
+        logger.info(f"✓ Loading cached artifacts for {task_name}")
+        # Load triplets directly without re-checking cache
+        if not cur_task.try_load_cached_triplets(triplets_cache_dir):
+            raise RuntimeError(f"Failed to load cached triplets for {task_name}")
+        # Load cached documents (includes synthetic docs from previous run)
+        # The cached triplet indices reference these exact documents
+        cur_task.documents = load_documents_from_jsonl(
+            output_dir=documents_cache_dir,
+            task_name=task_name,
+        )
+        logger.info(
+            f"  Loaded {len(cur_task.documents)} cached documents (including synthetic)"
+        )
 
-        # Save documents and annotations
-        save_task_documents(cur_task, documents_dir)
-        if cur_task.document_annotations is not None:
-            save_task_annotations(cur_task, annotations_dir)
-
-        triplets_file = save_task_triplets(cur_task, triplets_dir)
-        logger.info(f"✓ Saved triplets to {triplets_file}")
         tasks.append(cur_task)
 
     # create benchmark object
     benchmark = Benchmark(tasks, method_log_output_dir=str(method_logs_dir))
 
     # evaluate multiview representation methods
-    results = benchmark.evaluate(cfg.methods_to_evaluate)
+    results, instruction_sensitivity = benchmark.evaluate(cfg.methods_to_evaluate)
 
-    # Save results in multiple formats
-    import csv
-
-    # 1. JSON format (machine-readable, full detail)
-    results_file = results_dir / "results.json"
-    with open(results_file, "w") as f:
-        json.dump(results, f, indent=2)
-    logger.info(f"Saved JSON results to {results_file}")
-
-    # 2. CSV format (spreadsheet-friendly)
-    csv_file = results_dir / "results.csv"
-    with open(csv_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [
-                "task",
-                "method",
-                "accuracy",
-                "n_correct",
-                "n_incorrect",
-                "n_ties",
-                "n_total",
-            ]
-        )
-        for task_name, methods in results.items():
-            for method_name, metrics in methods.items():
-                writer.writerow(
-                    [
-                        task_name,
-                        method_name,
-                        f"{metrics.get('accuracy', 0):.4f}",
-                        metrics.get("n_correct", 0),
-                        metrics.get("n_incorrect", 0),
-                        metrics.get("n_ties", 0),
-                        metrics.get("n_total", 0),
-                    ]
-                )
-    logger.info(f"Saved CSV results to {csv_file}")
-
-    # 3. Markdown format (human-readable documentation)
-    md_file = results_dir / "results.md"
-    with open(md_file, "w") as f:
-        f.write("# Benchmark Results\n\n")
-        f.write(f"**Run**: {cfg.run_name}\n\n")
-        f.write("---\n\n")
-        for task_name, methods in results.items():
-            f.write(f"## {task_name}\n\n")
-            f.write("| Method | Accuracy | Correct | Total |\n")
-            f.write("|--------|----------|---------|-------|\n")
-            for method_name, metrics in methods.items():
-                acc = metrics.get("accuracy", 0)
-                correct = metrics.get("n_correct", 0)
-                total = metrics.get("n_total", 0)
-                f.write(f"| {method_name} | {acc:.2%} | {correct} | {total} |\n")
-            f.write("\n")
-    logger.info(f"Saved markdown summary to {md_file}")
-
-    # 4. Console summary table
-    logger.info("\n" + "=" * 80)
-    logger.info("EVALUATION RESULTS SUMMARY")
-    logger.info("=" * 80)
-    for task_name, methods in results.items():
-        logger.info(f"\nTask: {task_name}")
-        for method_name, metrics in methods.items():
-            acc = metrics.get("accuracy", 0)
-            correct = metrics.get("n_correct", 0)
-            total = metrics.get("n_total", 0)
-
-            # Skip methods that were skipped (0/0)
-            if total == 0:
-                continue
-
-            # For LM judge triplet methods, display out of 8 (half of 16 due to bidirectional eval)
-            if "triplet" in method_name:
-                display_correct = correct / 2
-                display_total = total // 2
-                logger.info(
-                    f"  {method_name:35s}: {acc:6.2%} ({display_correct:.1f}/{display_total} correct)"
-                )
-            else:
-                logger.info(
-                    f"  {method_name:35s}: {acc:6.2%} ({correct}/{total} correct)"
-                )
-    logger.info("=" * 80 + "\n")
+    # Save results in multiple formats and log summary
+    save_benchmark_results(results, results_dir, cfg.run_name, instruction_sensitivity)
 
     # Print API cost summary
     print_cost_summary()

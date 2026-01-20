@@ -2,12 +2,17 @@
 
 This module loads metadata for LM-based criteria annotations from available_criteria.yaml.
 Each criterion includes:
-- description: What the criterion measures
-- pairwise_sim_hint: Hint for generating pairwise similarity comparisons (optional)
-- category_schema_hint: Guidance for creating category-based schemas
-- tag_schema_hint: Guidance for creating tag-based schemas
-- summary_hint: Combined guidance + desired format for summaries (optional)
+- description: What the criterion measures (brief)
+- default_hint: Default hint used for all hint types if specific hints not provided (optional)
+- category_schema_hint: Guidance for creating category-based schemas (optional)
+- tag_schema_hint: Guidance for creating tag-based schemas (optional)
+- summary_hint: Rich description + format guidance for summaries (optional, auto-generated if not provided)
 - triplet_example_hint: Example triplet guidance for LM triplet selection (optional)
+
+Hint resolution order:
+1. Specific hint field (e.g., category_schema_hint)
+2. default_hint (if specific hint not provided)
+3. Auto-generation or None
 
 The YAML values can be either inline text or file references (e.g., "prompts/criteria/file.txt").
 """
@@ -67,29 +72,34 @@ def load_criteria_metadata():
 _CRITERIA_BY_DATASET = load_criteria_metadata()
 
 # Backward compatibility: expose individual dataset criteria as module-level variables
+ANALOGIES_CRITERIA = _CRITERIA_BY_DATASET.get("analogies", {})
 GSM8K_CRITERIA = _CRITERIA_BY_DATASET.get("gsm8k", {})
 CROSSWORD_CRITERIA = _CRITERIA_BY_DATASET.get("crossword", {})
 ROCSTORIES_CRITERIA = _CRITERIA_BY_DATASET.get("rocstories", {})
 ABSTRACTSIM_CRITERIA = _CRITERIA_BY_DATASET.get("abstractsim", {})
 HACKERNEWS_CRITERIA = _CRITERIA_BY_DATASET.get("hackernews", {})
-ONION_NEWS_CRITERIA = _CRITERIA_BY_DATASET.get("onion_news", {})
-INTENT_EMOTION_CRITERIA = _CRITERIA_BY_DATASET.get("intent_emotion", {})
-NYTCLUSTERING_CRITERIA = _CRITERIA_BY_DATASET.get("nytclustering", {})
+ONION_NEWS_CRITERIA = _CRITERIA_BY_DATASET.get("onion_headlines", {})
+INTENT_EMOTION_CRITERIA = _CRITERIA_BY_DATASET.get("inb_intent_emotion", {})
+NYTCLUSTERING_CRITERIA = _CRITERIA_BY_DATASET.get("inb_nytclustering", {})
 TRIZ40_CRITERIA = _CRITERIA_BY_DATASET.get("triz40", {})
-RATEMYPROF_CRITERIA = _CRITERIA_BY_DATASET.get("ratemyprof", {})
-FEEDBACKS_CRITERIA = _CRITERIA_BY_DATASET.get("feedbacks", {})
-FEWREL_CRITERIA = _CRITERIA_BY_DATASET.get("fewrel", {})
-FEWNERD_CRITERIA = _CRITERIA_BY_DATASET.get("fewnerd", {})
-FEWEVENT_CRITERIA = _CRITERIA_BY_DATASET.get("fewevent", {})
-INSTRUCTSTSB_CRITERIA = _CRITERIA_BY_DATASET.get("instructstsb", {})
+RATEMYPROF_CRITERIA = _CRITERIA_BY_DATASET.get("inb_ratemyprof", {})
+FEEDBACKS_CRITERIA = _CRITERIA_BY_DATASET.get("inb_feedbacks", {})
+FEWREL_CRITERIA = _CRITERIA_BY_DATASET.get("inb_fewrel", {})
+FEWNERD_CRITERIA = _CRITERIA_BY_DATASET.get("inb_fewnerd", {})
+FEWEVENT_CRITERIA = _CRITERIA_BY_DATASET.get("inb_fewevent", {})
+INSTRUCTSTSB_CRITERIA = _CRITERIA_BY_DATASET.get("inb_instructstsb", {})
 ARXIV_CS_CRITERIA = _CRITERIA_BY_DATASET.get("arxiv_cs", {})
-WN18RR_CRITERIA = _CRITERIA_BY_DATASET.get("wn18rr", {})
-FB15K237_CRITERIA = _CRITERIA_BY_DATASET.get("fb15k237", {})
 TREX_CRITERIA = _CRITERIA_BY_DATASET.get("trex", {})
 HAIKU_CRITERIA = _CRITERIA_BY_DATASET.get("haiku", {})
+DICKINSON_CRITERIA = _CRITERIA_BY_DATASET.get("dickinson", {})
+INFINITE_PROMPTS_CRITERIA = _CRITERIA_BY_DATASET.get("infinite_prompts", {})
 INSPIRED_CRITERIA = _CRITERIA_BY_DATASET.get("inspired", {})
 BILLS_CRITERIA = _CRITERIA_BY_DATASET.get("bills", {})
 GOODREADS_QUOTES_CRITERIA = _CRITERIA_BY_DATASET.get("goodreads_quotes", {})
+ARXIV_ABSTRACT_SENTENCES_CRITERIA = _CRITERIA_BY_DATASET.get(
+    "arxiv_abstract_sentences", {}
+)
+MMLU_CRITERIA = _CRITERIA_BY_DATASET.get("mmlu", {})
 
 # Main criteria lookup - used by the task system
 DATASET_CRITERIA = _CRITERIA_BY_DATASET

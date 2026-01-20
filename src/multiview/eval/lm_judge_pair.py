@@ -59,10 +59,15 @@ def evaluate_with_lm_judge_pair(
     logger.info(f"Using preset: {lm_judge_preset}")
 
     has_annotations = annotations is not None and len(annotations) > 0
-    criterion_text = criterion_description or criterion
+
+    # Build similarity_criteria field from criterion and description
+    if criterion_description:
+        similarity_criteria = f"{criterion}: {criterion_description}"
+    else:
+        similarity_criteria = criterion
 
     positive_pairs_inputs = {
-        "similarity_criteria": [criterion_text] * len(triplets),
+        "similarity_criteria": [similarity_criteria] * len(triplets),
         "document_a": [t["anchor"] for t in triplets],
         "document_b": [t["positive"] for t in triplets],
     }
@@ -87,7 +92,7 @@ def evaluate_with_lm_judge_pair(
     )
 
     negative_pairs_inputs = {
-        "similarity_criteria": [criterion_text] * len(triplets),
+        "similarity_criteria": [similarity_criteria] * len(triplets),
         "document_a": [t["anchor"] for t in triplets],
         "document_b": [t["negative"] for t in triplets],
     }
@@ -132,10 +137,12 @@ def evaluate_with_lm_judge_pair(
             "cache_alias_positive": f"{cache_alias}_positive" if cache_alias else None,
             "cache_alias_negative": f"{cache_alias}_negative" if cache_alias else None,
             "criterion": criterion,
-            "criterion_description": criterion_text,
+            "criterion_description": criterion_description,
             "positive_score": pos_score,
             "negative_score": neg_score,
             "outcome": outcome,
+            "correct": outcome == 1 if outcome is not None else None,
+            "is_tie": outcome == 0 if outcome is not None else None,
             "anchor": t.get("anchor"),
             "positive": t.get("positive"),
             "negative": t.get("negative"),

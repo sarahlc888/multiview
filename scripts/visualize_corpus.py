@@ -41,6 +41,30 @@ Usage examples:
         --output outputs/viz/gsm8k_graphs \\
         --max-docs 100
 
+    # Dendrogram with image thumbnails (hierarchical clustering)
+    python scripts/visualize_corpus.py \\
+        --dataset gsm8k \\
+        --embedding-preset hf_qwen3_embedding_8b \\
+        --reducer dendrogram \\
+        --dendrogram-method average \\
+        --marker-type thumbnail \\
+        --output outputs/viz/gsm8k_dendrogram \\
+        --max-docs 50 \\
+        --figsize 24,12
+
+    # Dendrogram with grid layout and cluster coloring
+    python scripts/visualize_corpus.py \\
+        --dataset gsm8k \\
+        --embedding-preset hf_qwen3_embedding_8b \\
+        --reducer dendrogram \\
+        --dendrogram-method average \\
+        --marker-type thumbnail \\
+        --dendrogram-images-per-row 15 \\
+        --dendrogram-num-clusters 8 \\
+        --output outputs/viz/gsm8k_dendrogram_grid \\
+        --max-docs 100 \\
+        --figsize 24,16
+
     # GSM8K computational graph mode
     python scripts/visualize_corpus.py \\
         --mode gsm8k_graphs \\
@@ -70,6 +94,7 @@ from multiview.utils.logging_utils import setup_logging  # noqa: E402
 from multiview.utils.prompt_utils import read_or_return  # noqa: E402
 from multiview.visualization import (  # noqa: E402
     CorpusVisualizer,
+    DendrogramReducer,
     PCAReducer,
     SOMReducer,
     TSNEReducer,
@@ -163,11 +188,6 @@ def load_documents_from_dataset(
     return documents, doc_texts
 
 
-def is_inoneword_preset(preset_name: str) -> bool:
-    """Check if preset is an in-one-word preset."""
-    return "inoneword" in preset_name.lower()
-
-
 def generate_embeddings(
     doc_texts: list[str],
     embedding_preset: str,
@@ -193,10 +213,22 @@ def generate_embeddings(
     """
     logger.info(f"Generating embeddings with {embedding_preset}")
 
+    # Build inputs dict dynamically based on provided arguments
+    inputs = {"document": doc_texts}
+
+    # Add context if provided (for any preset that uses it, like inoneword)
+    if in_one_word_context:
+        context_text = read_or_return(in_one_word_context)
+        context_preview = context_text[:100] + (
+            "..." if len(context_text) > 100 else ""
+        )
+        logger.info(f"Using context: {context_preview}")
+        inputs["context"] = context_text
+
     # Prepare config overrides
     config_overrides = {}
 
-    # Handle pseudologit classes override
+    # Add pseudologit classes override if provided
     if pseudologit_classes:
         from multiview.inference.presets import get_preset
 
@@ -208,40 +240,14 @@ def generate_embeddings(
         merged_extra_kwargs["classes_file"] = pseudologit_classes
         config_overrides["extra_kwargs"] = merged_extra_kwargs
 
-    # Check if this is an in-one-word preset
-    if is_inoneword_preset(embedding_preset):
-        if not in_one_word_context:
-            raise ValueError(
-                "In-one-word presets require --in-one-word-context to be specified "
-                "(e.g., --in-one-word-context 'Categories: addition, subtraction, multiplication, division' "
-                "or --in-one-word-context prompts/custom/my_context.txt)"
-            )
-
-        # Load context from file if it's a path, otherwise use as-is
-        context_text = read_or_return(in_one_word_context)
-        context_preview = context_text[:100] + (
-            "..." if len(context_text) > 100 else ""
-        )
-        logger.info(f"Using in-one-word context: {context_preview}")
-
-        # Run inference with in-one-word using the new prompt template format
-        # The preset's prompt_template will handle formatting: "{context}\nText: {document}"
-        results = run_inference(
-            inputs={"document": doc_texts, "context": context_text},
-            config=embedding_preset,
-            cache_alias=cache_alias,
-            force_refresh=force_refresh,
-            **config_overrides,
-        )
-    else:
-        # Standard embedding generation
-        results = run_inference(
-            inputs={"document": doc_texts},
-            config=embedding_preset,
-            cache_alias=cache_alias,
-            force_refresh=force_refresh,
-            **config_overrides,
-        )
+    # Run inference with dynamically built inputs
+    results = run_inference(
+        inputs=inputs,
+        config=embedding_preset,
+        cache_alias=cache_alias,
+        force_refresh=force_refresh,
+        **config_overrides,
+    )
 
     # Convert to numpy array
     embeddings = np.array(results, dtype=np.float32)
@@ -310,6 +316,12 @@ def create_reducer(args: argparse.Namespace, n_samples: int | None = None):
             iterations=args.som_iterations,
             random_state=args.random_state,
             unique_assignment=args.som_unique_assignment,
+        )
+    elif args.reducer == "dendrogram":
+        return DendrogramReducer(
+            method=args.dendrogram_method,
+            metric=args.dendrogram_metric,
+            optimal_ordering=True,
         )
     else:
         raise ValueError(f"Unknown reducer: {args.reducer}")
@@ -680,6 +692,48 @@ def create_som_grid_composite(
     save_som_manifest(image_paths, assignments, reducer.rows, reducer.cols, args.output)
 
 
+def create_dendrogram_plot(
+    visualizer: CorpusVisualizer,
+    embeddings: np.ndarray,
+    image_paths: list[str],
+    figsize: tuple,
+    args: argparse.Namespace,
+):
+    """Create dendrogram visualization with images.
+
+    Args:
+        visualizer: CorpusVisualizer instance
+        embeddings: Document embeddings
+        image_paths: List of image paths for thumbnails
+        figsize: Figure size tuple
+        args: Command-line arguments
+    """
+    logger.info(f"Reducing {len(embeddings)} embeddings to dendrogram ordering...")
+
+    # Fit the dendrogram reducer to get the hierarchical clustering
+    embeddings_arr = np.array(embeddings, dtype=np.float32)
+    visualizer.reducer.fit_transform(embeddings_arr)
+
+    logger.info("Creating dendrogram visualization with images...")
+
+    # Create the dendrogram plot
+    fig, ax = visualizer.plot_dendrogram_with_images(
+        image_paths=image_paths,
+        figsize=figsize,
+        title=args.title,
+        image_size=args.dendrogram_image_size,
+        orientation=args.dendrogram_orientation,
+        images_per_row=args.dendrogram_images_per_row,
+        num_clusters=args.dendrogram_num_clusters,
+    )
+
+    # Save the figure
+    output_file = f"{args.output}.{args.format}"
+    logger.info(f"Saving to {output_file}...")
+    fig.savefig(output_file, dpi=args.dpi, bbox_inches="tight")
+    logger.info(f"Saved visualization: {output_file}")
+
+
 def create_scatter_plot(
     visualizer: CorpusVisualizer,
     embeddings: np.ndarray,
@@ -732,8 +786,16 @@ def visualize(
     figsize = tuple(map(float, args.figsize.split(",")))
     visualizer = CorpusVisualizer(reducer=reducer)
 
+    # Check for dendrogram with images
+    if args.reducer == "dendrogram":
+        if not image_paths:
+            raise ValueError(
+                "Dendrogram visualization requires image thumbnails. "
+                "Use --marker-type thumbnail with a compatible dataset."
+            )
+        create_dendrogram_plot(visualizer, embeddings, image_paths, figsize, args)
     # Check if we should use grid composite (SOM with images)
-    if args.reducer == "som" and image_paths and isinstance(reducer, SOMReducer):
+    elif args.reducer == "som" and image_paths and isinstance(reducer, SOMReducer):
         create_som_grid_composite(visualizer, reducer, embeddings, image_paths, args)
     else:
         create_scatter_plot(
@@ -918,8 +980,8 @@ def create_argument_parser() -> argparse.ArgumentParser:
     reducer_group.add_argument(
         "--reducer",
         default="tsne",
-        choices=["tsne", "pca", "umap", "som"],
-        help="Dimensionality reduction method (default: tsne)",
+        choices=["tsne", "pca", "umap", "som", "dendrogram"],
+        help="Dimensionality reduction method (default: tsne). Note: dendrogram requires image thumbnails.",
     )
     reducer_group.add_argument(
         "--random-state",
@@ -979,6 +1041,53 @@ def create_argument_parser() -> argparse.ArgumentParser:
         dest="som_unique_assignment",
         action="store_false",
         help="Allow multiple samples per node",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-method",
+        default="average",
+        choices=[
+            "single",
+            "complete",
+            "average",
+            "weighted",
+            "centroid",
+            "median",
+            "ward",
+        ],
+        help="Dendrogram linkage method (default: average)",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-metric",
+        default="euclidean",
+        help="Dendrogram distance metric (default: euclidean)",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-orientation",
+        default="top",
+        choices=["top", "bottom", "left", "right"],
+        help="Dendrogram orientation (default: top)",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-image-size",
+        type=float,
+        default=0.8,
+        help="Dendrogram image size relative to spacing (default: 0.8)",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-images-per-row",
+        type=int,
+        default=None,
+        help="Number of images per row in grid layout below dendrogram. "
+        "Arranges leaf images in multiple rows for better visibility. "
+        "Example: --dendrogram-images-per-row 15 (default: None, auto-calculated)",
+    )
+    reducer_group.add_argument(
+        "--dendrogram-num-clusters",
+        type=int,
+        default=None,
+        help="Number of clusters to color-code in dendrogram. "
+        "Colors dendrogram branches and image borders by cluster membership. "
+        "Example: --dendrogram-num-clusters 8 (default: None, auto ~10%% of samples)",
     )
 
     # Visualization options

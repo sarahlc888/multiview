@@ -21,7 +21,8 @@ class GoodreadsQuotesDocSet(BaseDocSet):
     """Goodreads quotes dataset.
 
     Analyzes quotes and their potential for interesting pairwise conversations
-    and connections. Each quote includes the text, author, tags, and popularity.
+    and connections. Documents are dicts with 'text', 'author', 'tags', and 'likes' fields.
+    Metadata is preserved for filtering and analysis.
 
     Config parameters:
         split (str): Dataset split to use (default: "train")
@@ -44,7 +45,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
 
     # Metadata
     DATASET_PATH = "EhsanShahbazi/goodreads-quotes"
-    DESCRIPTION = "Quotes from Goodreads with author, tags, and popularity metadata"
+    DESCRIPTION = "Quotes from Goodreads with author, tags, and likes metadata"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     # word_count is automatically included by base class
@@ -60,7 +61,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
         """Load quotes from Hugging Face using streaming mode.
 
         Returns:
-            List of quote dictionaries with text, author, tags, and likes
+            List of quote strings formatted as "{text}\n- {author}"
         """
         logger.info(f"Loading Goodreads quotes from Hugging Face: {self.DATASET_PATH}")
 
@@ -126,7 +127,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
                 if min_likes is not None and likes < min_likes:
                     continue
 
-                # Create document
+                # Create document as dict with metadata
                 doc = {
                     "text": quote_text,
                     "author": author,
@@ -187,7 +188,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
                 if min_likes is not None and likes < min_likes:
                     continue
 
-                # Create document with metadata
+                # Create document as dict with metadata
                 doc = {
                     "text": quote_text,
                     "author": author,
@@ -222,7 +223,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
                 logger.info(f"Adding {len(curated_docs)} curated quotes")
                 documents.extend(curated_docs)
 
-        return documents
+        return self._deduplicate(documents)
 
     def _load_curated_quotes(self, authors_filter=None, min_likes=None) -> list[Any]:
         """Load manually curated quotes from data/curated_quotes.json.
@@ -232,7 +233,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
             min_likes: Optional minimum likes threshold
 
         Returns:
-            List of curated quote documents
+            List of curated quote strings formatted as "{text}\n- {author}"
         """
         # Find the data directory relative to the project root
         # __file__ is in src/multiview/docsets/, so go up 4 levels to project root
@@ -266,11 +267,13 @@ class GoodreadsQuotesDocSet(BaseDocSet):
                 if min_likes is not None and likes < min_likes:
                     continue
 
-                # Create document in same format as Goodreads quotes
+                # Create document as dict with metadata
+                text = quote_data.get("quote", "")
+                tags = quote_data.get("tags", "")
                 doc = {
-                    "text": quote_data.get("quote", ""),
+                    "text": text,
                     "author": author,
-                    "tags": quote_data.get("tags", ""),
+                    "tags": tags,
                     "likes": likes,
                 }
                 documents.append(doc)
@@ -286,25 +289,26 @@ class GoodreadsQuotesDocSet(BaseDocSet):
         """Extract text from a document.
 
         Args:
-            document: Document dict or string
+            document: Document dict with 'text' and 'author' fields
 
         Returns:
-            Quote text
+            Quote text formatted as: {text}\n- {author}
         """
         if isinstance(document, dict):
-            return document.get("text", "")
+            text = document.get("text", "")
+            author = document.get("author", "Unknown")
+            return f"{text}\n- {author}"
         return str(document)
 
     def get_known_criterion_value(self, document: Any, criterion: str) -> Any:
         """Get the known criterion value for a document.
 
         Args:
-            document: Document dict
+            document: Document string
             criterion: Criterion name
 
         Returns:
-            Criterion value or None
+            None (documents are strings, no metadata available)
         """
-        if isinstance(document, dict) and criterion in document:
-            return document[criterion]
+        # Documents are now strings, not dicts, so no metadata is available
         return None

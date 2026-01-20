@@ -971,7 +971,7 @@ class TRIZ40DocSet(BaseDocSet):
     def _build_precomputed_annotations(self, documents: list[dict]) -> None:
         """Build precomputed annotations from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": label}}
+        Creates a mapping: {document_text: {"prelabel": label}}
         where label is a comma-separated list of TRIZ principles
 
         Args:
@@ -985,7 +985,7 @@ class TRIZ40DocSet(BaseDocSet):
                 label = doc.get("triz_principle")
 
                 if text and label:
-                    annotations[text] = {"criterion_value": label}
+                    annotations[text] = {"prelabel": label}
 
         self.PRECOMPUTED_ANNOTATIONS["triz_principle"] = annotations
 

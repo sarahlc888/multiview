@@ -6,9 +6,14 @@ Each text is accompanied by a summary that highlights relevant aspects based on 
 
 IMPORTANT: The summaries are noisy. Always verify against actual document content.
 
-### Similarity criteria
+DOCUMENT TYPE:
+{document_type}
 
-{similarity_criteria}
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
 
 ### Text (a)
 

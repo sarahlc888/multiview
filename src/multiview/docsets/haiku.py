@@ -23,10 +23,11 @@ class HaikuDocSet(BaseDocSet):
     """
 
     # Metadata
-    DATASET_PATH = "statworx/haiku"
+    DATASET_PATH = "taucris/haiku_333K"  # "statworx/haiku"
     DESCRIPTION = (
         "English haiku poems with analysis of deeper meanings and philosophical themes"
     )
+    DOCUMENT_TYPE = "Haiku poem"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     # word_count is automatically included by base class
@@ -53,7 +54,7 @@ class HaikuDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42).take(max_docs)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, split=split)
             if max_docs is not None:

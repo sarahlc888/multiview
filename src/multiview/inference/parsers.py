@@ -191,8 +191,11 @@ def json_parser(
                 # Fallback: find first ``` after content_start
                 closing_match = completion.find("```", content_start)
 
-            if closing_match is not None and closing_match > content_start:
+            if closing_match != -1 and closing_match > content_start:
                 completion = completion[content_start:closing_match].strip()
+            elif content_start > 0:
+                # No closing ``` found (possibly truncated) - extract to end
+                completion = completion[content_start:].strip()
     elif "```" in completion:
         # Try to extract from any code block - find first closing ``` after opening
         first_backticks = completion.find("```")
@@ -206,8 +209,11 @@ def json_parser(
 
             # Find the first closing ``` after the content starts
             closing_backticks = completion.find("```", content_start)
-            if closing_backticks > content_start:
+            if closing_backticks != -1 and closing_backticks > content_start:
                 completion = completion[content_start:closing_backticks].strip()
+            elif content_start > 0:
+                # No closing ``` found (possibly truncated) - extract to end
+                completion = completion[content_start:].strip()
 
     # Clean up common issues
     completion = completion.strip()
@@ -242,7 +248,7 @@ def json_parser(
     if json_loaded is None:
         # Log first strategy error for debugging (most informative)
         first_error = strategy_errors[0] if strategy_errors else "All strategies failed"
-        logger.error(f"Failed to parse JSON: {first_error}. Preview: {completion=}...")
+        logger.error(f"Failed to parse JSON: {first_error}. Preview: {completion=}")
         raise ValueError(f"Invalid JSON in completion: {last_error}") from last_error
 
     # Extract annotation key if requested
@@ -413,7 +419,7 @@ def regex_parser(
                 first_value = value
 
     if first_match is None:
-        logger.warning(f"No regex match found in completion: {text[:200]}")
+        logger.warning(f"No regex match found in completion: {text=}")
         return None
 
     return first_value

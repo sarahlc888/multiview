@@ -116,7 +116,8 @@ def format_category_context(categories: list[str]) -> str:
 def evaluate_with_in_one_word(
     documents: list[str],
     triplet_ids: list[tuple[int, int, int]],
-    annotations: list[dict],
+    category_context: str | None = None,
+    annotations: list[dict] | None = None,
     preset: str = "inoneword_hf_qwen3_8b",
     cache_alias: str | None = None,
     run_name: str | None = None,
@@ -125,7 +126,7 @@ def evaluate_with_in_one_word(
     """Evaluate triplets using in-one-word hidden state extraction.
 
     This method:
-    1. Extracts category schemas from annotations
+    1. Gets category context from parameter or annotations
     2. Builds prompts with category context + document text
     3. Runs inference to get hidden state embeddings
     4. Evaluates triplets using cosine similarity
@@ -133,7 +134,11 @@ def evaluate_with_in_one_word(
     Args:
         documents: List of document texts
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
-        annotations: List of annotation dicts with category_schema field (REQUIRED)
+        category_context: Freetext category context string for prompts.
+                         If not provided, will be extracted/formatted from annotations.
+        annotations: Optional list of annotation dicts. If category_context not provided,
+                    will look for 'category_context' field or fall back to extracting
+                    from 'category_schema' field for backwards compatibility.
         preset: Inference preset to use (default: "inoneword_hf_qwen3_8b")
         cache_alias: Optional cache identifier
         run_name: Optional experiment/run name for cache organization
@@ -149,10 +154,31 @@ def evaluate_with_in_one_word(
         - triplet_logs: Detailed per-triplet information
 
     Raises:
-        ValueError: If annotations are missing or lack category schemas
+        ValueError: If neither category_context nor annotations are provided
     """
-    # Validate annotations
-    validate_annotations(annotations)
+    # Determine category_context source: parameter or annotations
+    if category_context is None:
+        # Must extract from annotations
+        if annotations is None:
+            raise ValueError(
+                "Either 'category_context' parameter or 'annotations' must be provided"
+            )
+
+        # Try to get category_context directly from annotation
+        if "category_context" in annotations[0]:
+            category_context = annotations[0]["category_context"]
+            logger.info("Using category_context from annotations")
+        else:
+            # Fall back to extracting from category_schema for backwards compatibility
+            logger.info(
+                "No 'category_context' in annotations, falling back to category_schema"
+            )
+            validate_annotations(annotations)
+            categories = get_category_list(annotations[0])
+            category_context = format_category_context(categories)
+            logger.info(f"Formatted category context from {len(categories)} categories")
+    else:
+        logger.info("Using category_context from parameter")
 
     if not triplet_ids:
         logger.warning("No triplets provided for evaluation")
@@ -167,14 +193,6 @@ def evaluate_with_in_one_word(
 
     logger.info(f"Evaluating {len(triplet_ids)} triplets with in-one-word method")
     logger.info(f"Using preset: {preset}")
-
-    # Extract category schema from first annotation
-    # (all annotations should have same schema for a given criterion)
-    categories = get_category_list(annotations[0])
-    logger.info(f"Found {len(categories)} categories: {categories[:5]}...")
-
-    # Build category context for prompt
-    category_context = format_category_context(categories)
     logger.debug(f"Category context:\n{category_context}")
 
     # Build prompts: category context + document text
@@ -234,6 +252,8 @@ def evaluate_with_in_one_word(
                 "positive_score": pos_score,
                 "negative_score": neg_score,
                 "outcome": outcome,
+                "correct": outcome == 1,
+                "is_tie": outcome == 0,
             }
         )
 

@@ -34,7 +34,7 @@ class CrosswordCluesDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42).take(max_docs)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, split=split)
             if max_docs is not None:
@@ -55,7 +55,7 @@ class CrosswordCluesDocSet(BaseDocSet):
                 break
 
         logger.debug(f"Loaded {len(documents)} documents from Crossword clues")
-        return documents
+        return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
         return document if isinstance(document, str) else ""

@@ -9,6 +9,7 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import ANALOGIES_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,9 @@ class AnalogiesDocSet(BaseDocSet):
 
     DATASET_PATH = "relbert/analogy_questions"
     DESCRIPTION = "Word analogy pairs (stem and answer)"
+    DOCUMENT_TYPE = "Word analogy pair"
     KNOWN_CRITERIA = ["analogy_type"]  # prefix field (e.g., "country-capital")
+    CRITERION_METADATA = ANALOGIES_CRITERIA
 
     def __init__(self, config: dict | None = None):
         """Initialize AnalogiesDocSet.
@@ -80,7 +83,7 @@ class AnalogiesDocSet(BaseDocSet):
             dataset = load_dataset(
                 self.DATASET_PATH, dataset_config, split=split, streaming=True
             )
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             # Load all splits first, then select the desired split
             # This avoids split parsing issues in datasets 2.x
@@ -138,6 +141,9 @@ class AnalogiesDocSet(BaseDocSet):
 
         logger.debug(f"Loaded {len(documents)} word pair documents from Analogies")
 
+        # Deduplicate before building precomputed annotations
+        documents = self._deduplicate(documents)
+
         # Build precomputed annotations for analogy_type criterion
         self._build_precomputed_annotations(metadata_list)
 
@@ -171,7 +177,7 @@ class AnalogiesDocSet(BaseDocSet):
     def _build_precomputed_annotations(self, documents: list[dict]) -> None:
         """Build precomputed annotations from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": analogy_type}}
+        Creates a mapping: {document_text: {"prelabel": analogy_type}}
 
         Args:
             documents: List of document dicts with 'text' and 'analogy_type' fields
@@ -184,7 +190,7 @@ class AnalogiesDocSet(BaseDocSet):
                 analogy_type = doc.get("analogy_type")
 
                 if text and analogy_type:
-                    annotations[text] = {"criterion_value": analogy_type}
+                    annotations[text] = {"prelabel": analogy_type}
 
         self.PRECOMPUTED_ANNOTATIONS["analogy_type"] = annotations
 

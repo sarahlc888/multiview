@@ -19,11 +19,13 @@ def generate_tag_schema(
     documents: list[str],
     criterion: str,
     criterion_description: str,
+    document_type: str | None = None,
     n_samples: int = 10,
     schema_hint: str | None = None,
     is_spurious: bool = False,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    config: str | None = None,
 ) -> dict:
     """Generate a tag schema from sample documents.
 
@@ -31,11 +33,15 @@ def generate_tag_schema(
         documents: List of document strings to sample from
         criterion: Criterion name
         criterion_description: Description of what the criterion means
+        document_type: Type of documents (e.g., "news article", "math problem")
         n_samples: Number of documents to sample for schema generation
         schema_hint: Optional hint about what tags to create
         is_spurious: If True, generate spurious tags (surface-level properties)
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        config: Inference config name to use. If None, defaults to
+            "spurious_tag_schema_generation_gemini" for spurious tags or
+            "tag_schema_generation_gemini" for regular tags.
 
     Returns:
         Tag schema dict with structure:
@@ -62,17 +68,21 @@ def generate_tag_schema(
     inputs = {
         "criterion": [criterion],
         "criterion_description": [criterion_description or ""],
+        "document_type": [document_type or "document"],
         "schema_hint": [schema_hint_formatted],
         "sample_documents": [sample_docs_str],
         "n_samples": [str(len(sample_docs))],
     }
 
-    # Use preset based on tag type
-    preset_name = (
-        "spurious_tag_schema_generation_gemini"
-        if is_spurious
-        else "tag_schema_generation_gemini"
-    )
+    # Use preset based on tag type (if not explicitly provided)
+    if config is None:
+        preset_name = (
+            "spurious_tag_schema_generation_gemini"
+            if is_spurious
+            else "tag_schema_generation_gemini"
+        )
+    else:
+        preset_name = config
 
     # Generate schema using inference
     results = run_inference(
@@ -100,9 +110,11 @@ def generate_spurious_tag_schema(
     documents: list[str],
     criterion: str,
     criterion_description: str,
+    document_type: str | None = None,
     n_samples: int = 10,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    config: str | None = None,
 ) -> dict:
     """Generate spurious tag schema (surface-level properties).
 
@@ -112,9 +124,11 @@ def generate_spurious_tag_schema(
         documents: List of document strings to sample from
         criterion: Criterion name
         criterion_description: Description of what the criterion means
+        document_type: Type of documents (e.g., "news article", "math problem")
         n_samples: Number of documents to sample for schema generation
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        config: Inference config name to use (default: "spurious_tag_schema_generation_gemini")
 
     Returns:
         Spurious tag schema dict
@@ -123,11 +137,13 @@ def generate_spurious_tag_schema(
         documents=documents,
         criterion=criterion,
         criterion_description=criterion_description,
+        document_type=document_type,
         n_samples=n_samples,
         schema_hint="Focus on surface-level properties independent of the criterion",
         is_spurious=True,
         cache_alias=cache_alias,
         run_name=run_name,
+        config=config,
     )
 
 
@@ -138,6 +154,7 @@ def apply_tags_batch(
     tag_schema: dict,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    config: str = "tag_apply_gemini",
 ) -> list[dict]:
     """Apply binary tags to multiple documents.
 
@@ -148,6 +165,7 @@ def apply_tags_batch(
         tag_schema: Tag schema dict
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        config: Inference config name to use (default: "tag_apply_gemini")
 
     Returns:
         List of annotation dicts:
@@ -171,7 +189,7 @@ def apply_tags_batch(
     # Run inference
     results = run_inference(
         inputs=inputs,
-        config="tag_apply_gemini",
+        config=config,
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=False,

@@ -1,0 +1,134 @@
+# Benchmark configuration for testing reranker implementations
+# Tests rerankers on existing Onion headlines triplets
+run_name: "benchmark_reranker_test"
+logging:
+  level: DEBUG
+  output_file: "outputs/logs/${run_name}.log"
+seed: 42
+use_cache: true
+step_through: false
+
+# Task configuration - use existing triplets
+tasks:
+  defaults:
+    max_docs: 50
+    max_triplets: 10  # Small test set for quick validation
+    num_synthetic_docs: 0
+    triplet_style: "lm_all"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 10
+    n_schema_samples: 10
+    rate_triplet_quality: true
+    prelabeled_selection: "hard_negatives"
+
+  task_list:
+    - document_set: onion_headlines
+      criterion: joke_type
+      max_docs: 200
+      max_triplets: 50
+
+# Evaluation methods - test local reranker implementations
+# Note: Voyage reranker excluded (requires API key)
+methods_to_evaluate:
+  # CPU-based rerankers (will download models but should work without API keys)
+  reranker:
+    - name: qwen3_reranker_cpu
+      preset: qwen3_reranker_8b_cpu
+
+    - name: contextual_reranker_cpu
+      preset: contextual_reranker_6b_cpu
+
+  query_relevance_vectors:
+    # Default configuration: k=10, dev_set=25, Gemini expansion, OpenAI embeddings
+    - name: "qrv_gemini_openai_k10_dev25"
+      expansion_preset: "query_relevance_scores_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_expansions: 10
+      dev_set_size: 25
+
+    # Test with different embedding model (Qwen)
+    - name: "qrv_gemini_qwen_k10_dev25"
+      expansion_preset: "query_relevance_scores_gemini"
+      embedding_preset: "hf_qwen3_embedding_8b"
+      num_expansions: 10
+      dev_set_size: 25
+
+    # Test with fewer expansions (k=5) and smaller dev set
+    - name: "qrv_gemini_openai_k5_dev10"
+      expansion_preset: "query_relevance_scores_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_expansions: 5
+      dev_set_size: 10
+
+    # Test with more expansions (k=20) and larger dev set
+    - name: "qrv_gemini_openai_k20_dev30"
+      expansion_preset: "query_relevance_scores_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_expansions: 20
+      dev_set_size: 30
+
+  # Multisummary: Generate k summaries per document, embed them, use max-similarity
+  multisummary:
+    # Default configuration: k=5, Gemini summaries, OpenAI embeddings
+    - name: "multisummary_gemini_openai_k5"
+      summary_preset: "document_to_summaries_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_summaries: 5
+
+    # Test with more summaries (k=10)
+    - name: "multisummary_gemini_openai_k10"
+      summary_preset: "document_to_summaries_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_summaries: 10
+
+    # Test with fewer summaries (k=3)
+    - name: "multisummary_gemini_openai_k3"
+      summary_preset: "document_to_summaries_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_summaries: 3
+
+    # Test with different embedding model (Qwen)
+    - name: "multisummary_gemini_qwen_k5"
+      summary_preset: "document_to_summaries_gemini"
+      embedding_preset: "hf_qwen3_embedding_8b"
+      num_summaries: 5
+
+  # Baseline: regular embeddings for comparison
+  embeddings:
+    - name: "openai_embedding_small_baseline"
+      preset: "openai_embedding_small"
+    - name: "qwen3_8b_baseline"
+      preset: "hf_qwen3_embedding_8b"
+    - name: qwen3_8b
+      preset: hf_qwen3_embedding_8b
+    - name: openai_small
+      preset: openai_embedding_small
+
+  # Pseudologit methods: Sample model N times to get distribution over classes
+  pseudologit:
+    - name: pseudologit_n10
+      preset: pseudologit_gemini_n10
+      classes_file: prompts/custom/gsm8k_classes.json
+
+    - name: pseudologit_n50
+      preset: pseudologit_gemini_n50
+      classes_file: prompts/custom/gsm8k_classes.json
+
+  # In-one-word methods: Force model to output single word, extract hidden states
+  in_one_word:
+    # Config-based categories (no annotations needed)
+    - name: inoneword_custom_categories
+      preset: inoneword_hf_qwen3_8b
+      categories: ["addition", "subtraction", "multiplication", "division", "other"]
+      category_context: "Classify the math problem type"
+
+    # Annotation-based categories (fallback to task annotations)
+    - name: inoneword_from_annotations
+      preset: inoneword_hf_qwen3_8b
+      # No categories specified - will extract from annotations if available
+
+
+# Output directory
+outputs_dir: outputs/${run_name}

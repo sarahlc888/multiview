@@ -20,20 +20,20 @@ def test_outcomes_from_pair_scores_tie_tolerance() -> None:
     assert outcomes_from_pair_scores(pos, neg, tie_tol=0.0) == [-1, 0, 1]
 
 
-def test_metrics_from_outcomes_excludes_ties_from_accuracy() -> None:
-    metrics = metrics_from_outcomes([1, 1, 0, -1])  # judged=3, correct=2
+def test_metrics_from_outcomes_penalizes_ties_as_incorrect() -> None:
+    metrics = metrics_from_outcomes([1, 1, 0, -1])  # total=4, correct=2, tie counts as incorrect
     assert metrics["n_total"] == 4
     assert metrics["n_correct"] == 2
-    assert metrics["n_incorrect"] == 1
+    assert metrics["n_incorrect"] == 2  # includes 1 tie + 1 wrong
     assert metrics["n_ties"] == 1
-    assert metrics["accuracy"] == 2 / 3
+    assert metrics["accuracy"] == 2 / 4  # 2 correct out of 4 total
 
 
 def test_metrics_from_outcomes_all_ties_accuracy_zero() -> None:
-    metrics = metrics_from_outcomes([0, 0, 0])
+    metrics = metrics_from_outcomes([0, 0, 0])  # all ties count as incorrect
     assert metrics["n_total"] == 3
     assert metrics["n_correct"] == 0
-    assert metrics["n_incorrect"] == 0
+    assert metrics["n_incorrect"] == 3  # all 3 ties counted as incorrect
     assert metrics["n_ties"] == 3
     assert metrics["accuracy"] == 0.0
 

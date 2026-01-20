@@ -242,7 +242,7 @@ def cached_fn_completions(
         verbose: Whether to log verbose output
         mute_if_cache_hit: If True, don't log when all prompts are cached
         **fn_completions_kwargs: Additional kwargs to pass to fn_completions
-            (e.g., force_prefills, embed_query_instrs, embed_doc_instrs, images)
+            (e.g., force_prefills, instructions, images)
 
     Returns:
         List of completions (aligned to packed_prompts order)
@@ -254,7 +254,11 @@ def cached_fn_completions(
         completion_cache[completion_field_name] = {}
 
     if len(packed_prompts) > 0:
-        logger.debug(f"Example prompt:\n{non_packed_prompts[0]}")
+        if packed_prompts[0] != non_packed_prompts[0]:
+            logger.debug(f"Example packed prompt (cache key):\n{packed_prompts[0]}")
+        logger.debug(
+            f"Example non-packed prompt (sent to provider fn):\n{non_packed_prompts[0]}"
+        )
 
     # Hash prompts for cache keys
     prompt_hashes = [hash_prompt(p) for p in packed_prompts]
@@ -336,9 +340,9 @@ def cached_fn_completions(
         # Filter kwargs arrays to match uncached prompts
         for key in [
             "force_prefills",
-            "embed_query_instrs",
-            "embed_doc_instrs",
+            "instructions",
             "images",
+            "queries",
         ]:
             if key in fn_completions_kwargs:
                 fn_completions_kwargs[key] = [
@@ -377,9 +381,9 @@ def cached_fn_completions(
             chunk_kwargs = fn_completions_kwargs.copy()
             for key in [
                 "force_prefills",
-                "embed_query_instrs",
-                "embed_doc_instrs",
+                "instructions",
                 "images",
+                "queries",
             ]:
                 if key in chunk_kwargs:
                     chunk_kwargs[key] = chunk_kwargs[key][start:end]

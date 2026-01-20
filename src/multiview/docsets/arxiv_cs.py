@@ -1,14 +1,13 @@
 """ArXiv CS papers document set loader.
 
-Loads CS paper abstracts from HuggingFace (mteb/ArxivClassification) for
-classification by paper type/methodology.
+Loads CS paper abstracts from HuggingFace (librarian-bots/arxiv-metadata-snapshot)
+filtered by cs.ai category.
 """
 
 import logging
 from typing import Any
 
-from datasets import load_dataset
-
+from multiview.docsets.arxiv_utils import ARXIV_DATASET_PATH, load_arxiv_abstracts
 from multiview.docsets.base import BaseDocSet
 from multiview.docsets.criteria_metadata import ARXIV_CS_CRITERIA
 
@@ -18,20 +17,18 @@ logger = logging.getLogger(__name__)
 class ArxivCSDocSet(BaseDocSet):
     """ArXiv CS papers document set.
 
-    Loads CS paper abstracts from the mteb/ArxivClassification dataset.
+    Loads CS paper abstracts from the librarian-bots/arxiv-metadata-snapshot dataset,
+    filtered by cs.ai category.
 
     Config parameters:
         max_docs (int, optional): Maximum number of documents to load
         split (str): Dataset split to use (default: "train")
-
-    Implementation notes:
-        - Uses streaming mode when max_docs < 100 for efficiency
-        - Contains full paper text/abstracts (can be quite long)
     """
 
     # Metadata
-    DATASET_PATH = "mteb/ArxivClassification"
-    DESCRIPTION = "ArXiv CS paper abstracts for classification by paper type"
+    DATASET_PATH = ARXIV_DATASET_PATH
+    DESCRIPTION = "ArXiv CS AI paper abstracts filtered by cs.ai category"
+    DOCUMENT_TYPE = "Abstract for a computer science research paper"
 
     # Known criteria (only deterministic ones)
     KNOWN_CRITERIA = []  # word_count auto-included by base class
@@ -45,35 +42,25 @@ class ArxivCSDocSet(BaseDocSet):
         Returns:
             List of paper abstract strings
         """
-        logger.info(f"Loading ArXiv CS papers from HuggingFace: {self.DATASET_PATH}")
-
         # Get config params
         max_docs = self.config.get("max_docs")
         split = self.config.get("split", "train")
-        use_streaming = max_docs is not None and max_docs < 100
 
-        if use_streaming:
-            logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
-            dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42)
-        else:
-            dataset = load_dataset(self.DATASET_PATH, split=split)
-            if max_docs is not None:
-                dataset = dataset.shuffle(seed=42)
-
-        # Load documents
+        # Load abstracts using shared utility
         documents = []
-        for example in dataset:
-            text = example.get("text", "")
-            if text:
-                documents.append(text)
+        for example in load_arxiv_abstracts(
+            category_filter="cs.AI",
+            max_abstracts=max_docs,
+            split=split,
+            seed=42,
+        ):
+            # Extract abstract text
+            abstract = example.get("abstract", "")
+            if abstract:
+                documents.append(abstract)
 
-            # Respect max_docs
-            if max_docs is not None and len(documents) >= max_docs:
-                break
-
-        logger.debug(f"Loaded {len(documents)} ArXiv CS papers")
-        return documents
+        logger.info(f"Loaded {len(documents)} ArXiv CS AI papers")
+        return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
         """Extract text from a document.

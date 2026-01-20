@@ -232,7 +232,7 @@ class D5DocSet(BaseDocSet):
             summary_text = f"This document is labeled as '{criterion_value}' for the descriptor: {descriptor_text}"
 
             annotations[doc_text] = {
-                "criterion_value": criterion_value,
+                "prelabel": criterion_value,
                 "summary": {"final_summary": summary_text},
             }
 

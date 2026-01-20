@@ -20,19 +20,21 @@ def generate_pairwise_sim_hint(
     documents: list[str],
     criterion: str,
     criterion_description: str,
+    document_type: str | None = None,
     n_samples: int = 10,
     cache_alias: str | None = None,
     run_name: str | None = None,
 ) -> dict:
-    """Generate a pairwise similarity hint from sample documents.
+    """Generate a summary hint from sample documents.
 
     Takes a brief criterion name and description, samples documents, and generates
-    a more detailed hint that helps compare documents for pairwise similarity.
+    a richer description that helps create structured summaries.
 
     Args:
         documents: List of document strings to sample from
         criterion: Criterion name (e.g., "arithmetic_operations")
         criterion_description: Brief description of what the criterion means
+        document_type: Type of documents (e.g., "haiku", "math problem")
         n_samples: Number of documents to sample
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
@@ -40,7 +42,7 @@ def generate_pairwise_sim_hint(
     Returns:
         Dict with structure:
         {
-            "pairwise_sim_hint": "Pairwise similarity hint (str)",
+            "summary_hint": "Summary hint (str)",
         }
     """
     # Sample documents deterministically based on criterion
@@ -51,6 +53,7 @@ def generate_pairwise_sim_hint(
 
     # Prepare inputs
     inputs = {
+        "document_type": [document_type or "document"],
         "criterion": [criterion],
         "criterion_description": [criterion_description or ""],
         "sample_documents": [sample_docs_str],
@@ -59,7 +62,7 @@ def generate_pairwise_sim_hint(
     # Generate hint using inference
     results = run_inference(
         inputs=inputs,
-        config="pairwise_sim_hint_generation_gemini",
+        config="summary_hint_generation_gemini",
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=True,
@@ -72,18 +75,20 @@ def generate_pairwise_sim_hint(
         # Parsing (e.g., delimiter extraction) is handled by the inference preset.
         hint = str(hint).strip()
 
-    logger.info("Generated pairwise similarity hint")
-    return {"pairwise_sim_hint": hint}
+    logger.info("Generated summary hint")
+    return {"summary_hint": hint}
 
 
 def generate_summary_guidance(
     documents: list[str],
     criterion: str,
     criterion_description: str,
+    document_type: str | None = None,
     n_samples: int = 10,
     summary_hint: str | None = None,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    guidance_preset: str = "summary_guidance_generation_gemini",
 ) -> dict:
     """Generate summary guidance from sample documents.
 
@@ -91,10 +96,13 @@ def generate_summary_guidance(
         documents: List of document strings to sample from
         criterion: Criterion name
         criterion_description: Description of what the criterion means
+        document_type: Type of documents (e.g., "haiku", "math problem")
         n_samples: Number of documents to sample
         summary_hint: Optional combined hint (may include desired format)
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        guidance_preset: Inference preset to use for guidance generation
+            (default: "summary_guidance_generation_gemini")
 
     Returns:
         Summary guidance dict with structure:
@@ -112,11 +120,12 @@ def generate_summary_guidance(
 
     # Format summary_hint with heading if provided
     summary_hint_formatted = (
-        f"\nSUMMARY HINT (optional):\n{summary_hint}\n" if summary_hint else ""
+        f"\nSUMMARY HINT:\n{summary_hint}\n" if summary_hint else ""
     )
 
     # Prepare inputs with template variables
     inputs = {
+        "document_type": [document_type or "document"],
         "criterion": [criterion],
         "criterion_description": [criterion_description],
         "summary_hint": [summary_hint_formatted],
@@ -127,7 +136,7 @@ def generate_summary_guidance(
     for attempt in range(2):
         results = run_inference(
             inputs=inputs,
-            config="summary_guidance_generation_gemini",
+            config=guidance_preset,
             cache_alias=cache_alias,
             run_name=run_name,
             force_refresh=(attempt > 0),  # Skip cache on retry
@@ -151,6 +160,7 @@ def generate_summaries_batch(
     summary_guidance: dict,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    generate_preset: str = "summary_generate_gemini",
 ) -> list[dict]:
     """Generate structured summaries for multiple documents.
 
@@ -161,6 +171,8 @@ def generate_summaries_batch(
         summary_guidance: Summary guidance dict
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        generate_preset: Inference preset to use for summary generation
+            (default: "summary_generate_gemini")
 
     Returns:
         List of annotation dicts:
@@ -194,7 +206,7 @@ def generate_summaries_batch(
     # Run inference
     results = run_inference(
         inputs=inputs,
-        config="summary_generate_gemini",
+        config=generate_preset,
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=False,

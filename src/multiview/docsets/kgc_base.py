@@ -62,6 +62,10 @@ class KGCBaseDocSet(BaseDocSet):
         # Initialize precomputed annotations as instance variable
         self.PRECOMPUTED_ANNOTATIONS = {}
 
+        # Store operational metadata for triplet generation
+        # Maps document_text -> metadata dict
+        self._triplet_metadata: dict[str, dict] = {}
+
     @abstractmethod
     def load_triples(self) -> list[dict[str, Any]]:
         """Load raw KG triples from dataset.
@@ -104,21 +108,11 @@ class KGCBaseDocSet(BaseDocSet):
     def load_documents(self) -> list[Any]:
         """Load KG triples and convert to documents.
 
-        Each document represents a (head, relation) -> tail query.
-
-        Documents have the structure:
-        {
-            "text": "head_text [RELATION: relation_text] tail_text",
-            "head": head_id,
-            "relation": relation,
-            "tail": tail_id,
-            "head_text": head_text,
-            "relation_text": relation_text,
-            "tail_text": tail_text,
-        }
+        Documents are simple strings (entity texts).
+        Metadata for triplet generation is stored in self._triplet_metadata.
 
         Returns:
-            List of document dicts
+            List of document strings (entity texts)
         """
         # Load raw triples
         triples = self.load_triples()
@@ -153,7 +147,7 @@ class KGCBaseDocSet(BaseDocSet):
         # For KGC, each triple creates TWO documents: one for head, one for tail
         # This allows us to compare: given head entity + relation, which tail is correct?
         documents = []
-        triple_index = {}  # Map (head, relation, tail) -> (head_doc_idx, tail_doc_idx)
+        metadata_list = []  # Temporary list to store metadata during loading
 
         for triple in triples:
             relation = triple["relation"]
@@ -172,37 +166,31 @@ class KGCBaseDocSet(BaseDocSet):
             relation_text = self.get_relation_text(relation)
             tail_text = self.get_entity_text(tail_id)
 
-            # Create HEAD document (query entity)
-            head_doc = {
-                "text": head_text,  # Just the entity name
-                "entity_type": "head",
-                "entity_id": str(head_id),
-                "relation": relation,
-                "relation_text": relation_text,
-                "criterion_value": relation_text,  # For framework compatibility
-                "correct_tail_id": str(
-                    tail_id
-                ),  # The correct tail for this (head, relation)
-            }
-            head_doc_idx = len(documents)
-            documents.append(head_doc)
+            # Add HEAD document (query entity) - just the text
+            documents.append(head_text)
+            metadata_list.append(
+                {
+                    "text": head_text,
+                    "entity_type": "head",
+                    "entity_id": str(head_id),
+                    "relation": relation,
+                    "relation_text": relation_text,
+                    "correct_tail_id": str(tail_id),
+                }
+            )
 
-            # Create TAIL document (candidate answer)
-            tail_doc = {
-                "text": tail_text,  # Just the entity name
-                "entity_type": "tail",
-                "entity_id": str(tail_id),
-                "relation": relation,
-                "relation_text": relation_text,
-                "criterion_value": relation_text,  # For framework compatibility
-                "source_head_id": str(head_id),  # The head this tail came from
-            }
-            tail_doc_idx = len(documents)
-            documents.append(tail_doc)
-
-            # Store mapping for triplet creation
-            triple_key = (str(head_id), relation, str(tail_id))
-            triple_index[triple_key] = (head_doc_idx, tail_doc_idx)
+            # Add TAIL document (candidate answer) - just the text
+            documents.append(tail_text)
+            metadata_list.append(
+                {
+                    "text": tail_text,
+                    "entity_type": "tail",
+                    "entity_id": str(tail_id),
+                    "relation": relation,
+                    "relation_text": relation_text,
+                    "source_head_id": str(head_id),
+                }
+            )
 
             # Check max_docs limit
             if max_docs and len(documents) >= max_docs:
@@ -211,8 +199,8 @@ class KGCBaseDocSet(BaseDocSet):
 
         logger.info(f"Created {len(documents)} documents from KG triples")
 
-        # Build precomputed annotations for relation criterion
-        self._build_precomputed_annotations(documents)
+        # Build metadata lookups
+        self._build_metadata_lookups(metadata_list)
 
         return documents
 
@@ -220,13 +208,11 @@ class KGCBaseDocSet(BaseDocSet):
         """Extract text from a document.
 
         Args:
-            document: A document (dict or string)
+            document: A document (string)
 
         Returns:
             Text content
         """
-        if isinstance(document, dict):
-            return document.get("text", "")
         return str(document) if document else ""
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -234,42 +220,52 @@ class KGCBaseDocSet(BaseDocSet):
 
         Supports:
         - word_count: from base class
-        - relation: the relation type for this triple
+        - relation: the relation type (from PRECOMPUTED_ANNOTATIONS)
+
+        Note: Documents are strings, so criterion values come from PRECOMPUTED_ANNOTATIONS.
+        Use get_precomputed_annotation() to access these.
 
         Args:
-            document: A document
+            document: A document (string)
             criterion: The criterion name
 
         Returns:
             Criterion value or None
         """
         if criterion == "relation":
-            if isinstance(document, dict):
-                return document.get("relation")
+            # Criterion values are stored in PRECOMPUTED_ANNOTATIONS
+            # The caller should use get_precomputed_annotation() instead
             return None
 
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
 
-    def _build_precomputed_annotations(self, documents: list[dict]) -> None:
-        """Build precomputed annotations from loaded documents.
+    def _build_metadata_lookups(self, metadata_list: list[dict]) -> None:
+        """Build metadata lookups from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": relation}}
+        Creates:
+        1. PRECOMPUTED_ANNOTATIONS["relation"]: {document_text: {"prelabel": relation}}
+        2. self._triplet_metadata: {document_text: metadata_dict}
 
         Args:
-            documents: List of document dicts with 'text' and 'relation' fields
+            metadata_list: List of metadata dicts with 'text' and other fields
         """
         annotations = {}
         relation_counts = defaultdict(int)
 
-        for doc in documents:
-            if isinstance(doc, dict):
-                text = doc.get("text")
-                relation = doc.get("relation")
+        for meta in metadata_list:
+            text = meta.get("text")
+            if not text:
+                continue
 
-                if text and relation:
-                    annotations[text] = {"criterion_value": relation}
-                    relation_counts[relation] += 1
+            # Build precomputed annotations for relation criterion
+            relation = meta.get("relation")
+            if relation:
+                annotations[text] = {"prelabel": relation}
+                relation_counts[relation] += 1
+
+            # Store full metadata for triplet generation
+            self._triplet_metadata[text] = meta
 
         self.PRECOMPUTED_ANNOTATIONS["relation"] = annotations
 
@@ -277,54 +273,60 @@ class KGCBaseDocSet(BaseDocSet):
             f"Built precomputed annotations for relation: "
             f"{len(annotations)} documents across {len(relation_counts)} relations"
         )
+        logger.info(
+            f"Built triplet metadata for {len(self._triplet_metadata)} documents"
+        )
         logger.debug(
             f"Top 10 relations: {sorted(relation_counts.items(), key=lambda x: x[1], reverse=True)[:10]}"
         )
 
-    def get_query_text(self, document: dict) -> str:
+    def get_query_text(self, document: str) -> str:
         """Get the query text for asymmetric evaluation.
 
         For KGC, the query is (head, relation), not just head alone.
 
         Args:
-            document: Document dict
+            document: Document text (string)
 
         Returns:
             Query text combining head and relation
         """
-        if not isinstance(document, dict):
-            return str(document)
+        # Look up metadata for this document
+        doc_text = self.get_document_text(document)
+        metadata = self._triplet_metadata.get(doc_text, {})
 
-        head_text = document.get("head_text", "")
-        relation_text = document.get("relation_text", "")
+        # For head entities, combine with relation
+        if metadata.get("entity_type") == "head":
+            relation_text = metadata.get("relation_text", "")
+            return f"{doc_text} [RELATION: {relation_text}]"
 
-        return f"{head_text} [RELATION: {relation_text}]"
+        # For tail entities, just return the text
+        return doc_text
 
-    def get_target_text(self, document: dict) -> str:
+    def get_target_text(self, document: str) -> str:
         """Get the target text for asymmetric evaluation.
 
         For KGC, the target is the tail entity.
 
         Args:
-            document: Document dict
+            document: Document text (string)
 
         Returns:
             Target (tail) text
         """
-        if not isinstance(document, dict):
-            return str(document)
-
-        return document.get("tail_text", "")
+        # Documents are already just entity texts
+        return self.get_document_text(document)
 
 
 def create_kgc_triplets(
-    documents: list[dict],
+    documents: list[str],
+    metadata_lookup: dict[str, dict],
     max_triplets: int | None = None,
     seed: int = 42,
 ) -> list[tuple[int, int, int]]:
     """Create triplets for Knowledge Graph Completion evaluation.
 
-    Documents are individual entities (heads and tails), not full triples.
+    Documents are individual entity texts (heads and tails).
     Task: given a head entity + relation, distinguish correct tail from incorrect tail.
 
     Triplet structure:
@@ -334,7 +336,8 @@ def create_kgc_triplets(
     - Criterion: The relation (e.g., "occupation")
 
     Args:
-        documents: List of entity dicts with entity_type, entity_id, relation fields
+        documents: List of entity texts (strings)
+        metadata_lookup: Dict mapping document_text -> metadata dict
         max_triplets: Maximum number of triplets to create
         seed: Random seed for deterministic sampling
 
@@ -350,11 +353,17 @@ def create_kgc_triplets(
     head_indices = []
     tail_by_relation = defaultdict(list)  # {relation: [(tail_idx, tail_id)]}
 
-    for idx, doc in enumerate(documents):
-        if doc.get("entity_type") == "head":
+    for idx, doc_text in enumerate(documents):
+        metadata = metadata_lookup.get(doc_text, {})
+        entity_type = metadata.get("entity_type")
+
+        if entity_type == "head":
             head_indices.append(idx)
-        elif doc.get("entity_type") == "tail":
-            tail_by_relation[doc["relation"]].append((idx, doc["entity_id"]))
+        elif entity_type == "tail":
+            relation = metadata.get("relation")
+            entity_id = metadata.get("entity_id")
+            if relation and entity_id:
+                tail_by_relation[relation].append((idx, entity_id))
 
     if not head_indices:
         return []
@@ -367,12 +376,15 @@ def create_kgc_triplets(
         if anchor_idx in used_docs:
             continue
 
-        anchor = documents[anchor_idx]
-        correct_tail_id = anchor.get("correct_tail_id")
-        if not correct_tail_id:
+        anchor_text = documents[anchor_idx]
+        anchor_metadata = metadata_lookup.get(anchor_text, {})
+        correct_tail_id = anchor_metadata.get("correct_tail_id")
+        anchor_relation = anchor_metadata.get("relation")
+
+        if not correct_tail_id or not anchor_relation:
             continue
 
-        tail_candidates = tail_by_relation.get(anchor["relation"], [])
+        tail_candidates = tail_by_relation.get(anchor_relation, [])
         if len(tail_candidates) < 2:
             continue
 

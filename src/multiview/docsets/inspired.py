@@ -206,7 +206,7 @@ class InspiredDocSet(BaseDocSet):
         for doc in documents:
             text = doc["text"]
             rec = doc["movie_recommendation"]
-            annotations[text] = {"criterion_value": str(rec)}
+            annotations[text] = {"prelabel": str(rec)}
 
         self.PRECOMPUTED_ANNOTATIONS["movie_recommendation"] = annotations
         logger.debug(f"Built precomputed annotations for {len(annotations)} documents")

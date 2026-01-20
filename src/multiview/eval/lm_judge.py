@@ -33,6 +33,7 @@ def evaluate_with_lm_judge_triplet(
     triplets: list[dict],
     criterion: str,
     criterion_description: str | None = None,
+    document_type: str | None = None,
     lm_judge_preset: str = "lmjudge_triplet_plaintext_binaryhard_gemini",
     cache_alias: str | None = None,
     run_name: str | None = None,
@@ -77,7 +78,9 @@ def evaluate_with_lm_judge_triplet(
         logger.info(f"Using preset: {lm_judge_preset}")
 
         inputs = {
-            "similarity_criteria": [criterion_description or criterion] * n,
+            "criterion": [criterion] * n,
+            "criterion_description": [criterion_description] * n,
+            "document_type": [document_type or "document"] * n,
             "document_a": [t["anchor"] for t in triplets],
             "document_b": [t["positive"] for t in triplets],
             "document_c": [t["negative"] for t in triplets],
@@ -117,7 +120,9 @@ def evaluate_with_lm_judge_triplet(
 
         # Direction 1 (forward): b=positive, c=negative
         inputs_forward = {
-            "similarity_criteria": [criterion_description or criterion] * n,
+            "criterion": [criterion] * n,
+            "criterion_description": [criterion_description] * n,
+            "document_type": [document_type or "document"] * n,
             "document_a": [t["anchor"] for t in triplets],
             "document_b": [t["positive"] for t in triplets],
             "document_c": [t["negative"] for t in triplets],
@@ -125,7 +130,9 @@ def evaluate_with_lm_judge_triplet(
 
         # Direction 2 (reversed): b=negative, c=positive (SWAPPED)
         inputs_reversed = {
-            "similarity_criteria": [criterion_description or criterion] * n,
+            "criterion": [criterion] * n,
+            "criterion_description": [criterion_description] * n,
+            "document_type": [document_type or "document"] * n,
             "document_a": [t["anchor"] for t in triplets],
             "document_b": [t["negative"] for t in triplets],  # SWAPPED
             "document_c": [t["positive"] for t in triplets],  # SWAPPED
@@ -217,7 +224,7 @@ def evaluate_with_lm_judge_triplet(
         triplets_to_log = triplets_expanded
 
     triplet_logs: list[dict[str, Any]] = []
-    crit_desc = criterion_description or criterion
+    crit_desc = criterion_description
 
     for i, t in enumerate(triplets_to_log):
         outcome = results[i] if i < len(results) else None
@@ -229,6 +236,8 @@ def evaluate_with_lm_judge_triplet(
             "criterion": criterion,
             "criterion_description": crit_desc,
             "outcome": outcome,
+            "correct": outcome == 1 if outcome is not None else None,
+            "is_tie": outcome == 0 if outcome is not None else None,
             "anchor": t.get("anchor"),
             "positive": t.get("positive"),
             "negative": t.get("negative"),

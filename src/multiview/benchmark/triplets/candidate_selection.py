@@ -97,6 +97,9 @@ def select_candidates_embedding(
     Returns:
         List of (index, score) tuples, sorted by score descending
     """
+    logger.warning(
+        "Introducing bias into the triplet selection process by using embeddings for candidate selection, but also planning to evaluate on embeddings later."
+    )
     texts = _texts_for_similarity(
         documents=documents, annotations=annotations, use_summary=use_summary
     )
@@ -172,6 +175,8 @@ def select_candidates_jaccard(
     # Get top k indices
     similarities = np.array(similarities)
     top_k_indices = np.argsort(similarities)[::-1][:k]
+    # Filter out anchor in case corpus size < k (anchor has -np.inf score)
+    top_k_indices = [idx for idx in top_k_indices if idx != anchor_idx]
 
     # Return (index, score) tuples
     candidates = [(int(idx), float(similarities[idx])) for idx in top_k_indices]

@@ -235,3 +235,28 @@ class TestJSONParserEdgeCases:
         assert "`calculate()`" in result["reasoning"]
         # The summary should contain the code block markers
         assert "```" in result["summary"]
+
+    def test_json_markdown_without_closing_backticks(self):
+        """Test parsing JSON in markdown code fence without closing backticks.
+
+        Regression test for issue where LLM responses with truncated or missing
+        closing ``` would fail to parse because the markdown extraction code
+        wouldn't extract the JSON content.
+        """
+        # Test case 1: Complete JSON but no closing backticks
+        completion = '```json\n["query 1", "query 2", "query 3"]'
+        result = json_parser(completion)
+        assert isinstance(result, list)
+        assert result == ["query 1", "query 2", "query 3"]
+
+        # Test case 2: Complete dict but no closing backticks
+        completion = '```json\n{"key": "value", "number": 42}'
+        result = json_parser(completion)
+        assert isinstance(result, dict)
+        assert result == {"key": "value", "number": 42}
+
+        # Test case 3: Generic code fence without json tag
+        completion = '```\n["a", "b", "c"]'
+        result = json_parser(completion)
+        assert isinstance(result, list)
+        assert result == ["a", "b", "c"]

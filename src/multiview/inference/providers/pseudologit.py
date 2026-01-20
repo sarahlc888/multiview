@@ -1,6 +1,59 @@
 """Pseudologit provider for taxonomy-based classification with distribution vectors.
 
-Samples a model N times to get a distribution over taxonomy classes instead of a single hard classification.
+Samples a language model N times (default: 100) with temperature > 0 to create soft,
+probabilistic embeddings over taxonomy classes instead of single hard classifications.
+
+## Concept
+
+Instead of: "This problem is type A" (single label)
+You get: A: 65%, B: 20%, C: 10%, D: 5%, others: 0%
+Embedding: `[65, 20, 10, 5, 0, 0, 0, 0]`
+
+**Benefits**: Captures uncertainty, richer signal than hard labels, interpretable dimensions,
+better for visualization.
+
+## Usage
+
+1. **Define taxonomy**: Create JSON with classes, descriptions, taxonomy_context, and instruction
+   (e.g., `prompts/custom/gsm8k_classes.json`)
+
+2. **Use preset**: `--embedding-preset pseudologit_gemini_n100`
+
+## Available Presets
+
+Naming: `pseudologit_<model>_n<samples>`
+
+- `pseudologit_gemini_n10/n50/n100/n200`: Gemini 2.5 Flash Lite with 10/50/100/200 samples
+- `pseudologit_openai_n100`: GPT-4o-mini with 100 samples
+
+Recommended: n100 for standard use, n50 for testing, n200 for high precision.
+
+## Custom Presets
+
+Add to `src/multiview/inference/presets/__init__.py`:
+
+```python
+"pseudologit_<model>_n<N>": InferenceConfig(
+    provider="pseudologit",
+    model_name="...",
+    parser="vector",
+    extra_kwargs={
+        "classes_file": "prompts/custom/taxonomy.json",
+        "n_samples": N,
+        "temperature": 0.8,
+        "provider": "openai",  # or "gemini"
+        "max_tokens": 16,
+        "max_workers": 10,
+    },
+)
+```
+
+## Tips
+
+- Start with n50 for prototyping, n100+ for final results
+- Higher temp (0.8-1.0) = more diversity; lower (0.5-0.7) = more consistency
+- Embedding dimension = number of taxonomy classes
+- Specify "output ONLY the letter" in taxonomy instruction for reliable parsing
 """
 
 from __future__ import annotations
@@ -9,6 +62,8 @@ import json
 import logging
 from collections import Counter
 from pathlib import Path
+
+import numpy as np
 
 from multiview.inference.parsers import get_parser
 from multiview.utils.prompt_utils import read_or_return
@@ -39,10 +94,24 @@ def _load_classes_file(classes_file: str) -> dict:
     with open(classes_path) as f:
         classes_data = json.load(f)
 
-    required_keys = ["classes", "descriptions", "taxonomy_context", "instruction"]
+    required_keys = ["classes", "descriptions", "instruction"]
     for key in required_keys:
         if key not in classes_data:
             raise ValueError(f"Classes file missing required key: {key}")
+
+    # Auto-generate taxonomy_context from classes and descriptions if not provided
+    if "taxonomy_context" not in classes_data:
+        logger.info("Auto-generating taxonomy_context from classes and descriptions")
+        classes_list = classes_data["classes"]
+        descriptions = classes_data["descriptions"]
+
+        # Build formatted taxonomy context
+        taxonomy_lines = ["Here is the taxonomy:"]
+        for cls in classes_list:
+            if cls in descriptions:
+                taxonomy_lines.append(f"\n{cls}. {descriptions[cls]}")
+
+        classes_data["taxonomy_context"] = "\n".join(taxonomy_lines)
 
     return classes_data
 
@@ -77,6 +146,7 @@ def pseudologit_completions(
     provider: str = "gemini",
     max_tokens: int = 16,
     max_workers: int = 5,
+    normalize: str | bool = "sum",
     **kwargs,
 ) -> dict:
     """Generate pseudologit embeddings by sampling a model N times over taxonomy classes.
@@ -101,11 +171,13 @@ def pseudologit_completions(
         provider: Which provider to use ("gemini", "openai", etc.)
         max_tokens: Max tokens for each sample (default: 16, just need the class label)
         max_workers: Concurrent workers for API calls
+        normalize: Normalization mode: "l2" (unit vector, default, recommended for cosine similarity),
+                   "sum" (probability vector, sum=1), or False/None (keep as raw counts)
         **kwargs: Additional provider-specific parameters
 
     Returns:
         Dict with "completions" key containing list of dicts with "vector" key
-        Each vector has length = num_classes, with counts of each class
+        Each vector has length = num_classes, with counts or normalized values
     """
     # Load taxonomy
     classes_data = _load_classes_file(classes_file)
@@ -164,9 +236,6 @@ def pseudologit_completions(
             max_workers=max_workers,
             **kwargs,
         )
-        # print(f"{sample_prompts[0]=}")
-        # print(f"{result['completions'][0]=}")
-        # print(f"{result['completions'][1]=}")
 
         # Extract class labels from each sample using regex parser
         completions = result["completions"]
@@ -176,8 +245,6 @@ def pseudologit_completions(
             label = regex_parser(completion, **parser_kwargs)
             if label:
                 extracted_labels.append(label)
-        print(f"{extracted_labels=}")
-        # breakpoint()
 
         # Count occurrences
         label_counts = Counter(extracted_labels)
@@ -197,8 +264,26 @@ def pseudologit_completions(
                 f"  Top class: {top_class} ({top_count}/{total_valid} = {top_count/total_valid*100:.1f}%)"
             )
 
-        # Normalize to frequencies (optional - can also keep as counts)
-        # For now, keep as counts for interpretability
+        # Normalize vector if requested
+        if normalize:
+            if normalize == "sum" or normalize is True:
+                # Sum normalization (probability vector, default)
+                total = sum(vector)
+                if total > 0:
+                    vector = [count / total for count in vector]
+                # If total is 0, keep zeros (no valid labels extracted)
+            elif normalize == "l2":
+                # L2 normalization (unit vector)
+                vec_array = np.array(vector, dtype=float)
+                norm = np.linalg.norm(vec_array)
+                if norm > 0:
+                    vector = (vec_array / norm).tolist()
+                # If norm is 0, keep zeros (no valid labels extracted)
+            else:
+                raise ValueError(
+                    f"Invalid normalize value: {normalize}. Must be 'sum', 'l2', or False"
+                )
+
         all_vectors.append({"vector": vector})
 
     return {"completions": all_vectors}

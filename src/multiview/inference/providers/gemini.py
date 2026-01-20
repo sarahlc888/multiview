@@ -27,9 +27,10 @@ def _gemini_single_completion(
     max_retries: int = 5,
     initial_retry_delay: float = 1.0,
     retry_backoff_factor: float = 2.0,
+    request_timeout: float = 120.0,
     **kwargs,
 ) -> dict:
-    """Process a single Gemini completion with retry logic.
+    """Process a single Gemini completion with retry logic and timeout.
 
     Args:
         client: Gemini client instance
@@ -42,6 +43,7 @@ def _gemini_single_completion(
         max_retries: Maximum number of retry attempts
         initial_retry_delay: Initial delay in seconds for exponential backoff
         retry_backoff_factor: Multiplier for backoff delay
+        request_timeout: Timeout in seconds for each API request (default 120s)
         **kwargs: Additional Gemini API parameters
 
     Returns:
@@ -119,14 +121,25 @@ def _gemini_single_completion(
 
             # Record usage
             if hasattr(response, "usage_metadata"):
+                input_tokens = getattr(response.usage_metadata, "prompt_token_count", 0)
+                output_tokens = getattr(
+                    response.usage_metadata, "candidates_token_count", 0
+                )
+
+                # Apply tiered pricing for Gemini 2.5 Pro based on context length
+                # Prompts >200K tokens are charged at higher rates
+                cost_model_name = model_name
+                if model_name == "gemini-2.5-pro" and input_tokens > 200_000:
+                    cost_model_name = "gemini-2.5-pro-long"
+                    logger.debug(
+                        f"Long context detected ({input_tokens:,} tokens > 200K), "
+                        f"using higher pricing tier"
+                    )
+
                 record_usage(
-                    model_name=model_name,
-                    input_tokens=getattr(
-                        response.usage_metadata, "prompt_token_count", 0
-                    ),
-                    output_tokens=getattr(
-                        response.usage_metadata, "candidates_token_count", 0
-                    ),
+                    model_name=cost_model_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
                 )
 
             return {"text": completion_text}
@@ -134,8 +147,21 @@ def _gemini_single_completion(
         except Exception as e:
             error_str = str(e).lower()
 
+            # Check if this is a timeout (retriable)
+            if "timeout" in error_str or "timed out" in error_str:
+                if attempt < max_retries:
+                    logger.warning(
+                        f"Request timeout (attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                        f"Retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+                    delay *= retry_backoff_factor
+                else:
+                    logger.error(f"Timeout after {max_retries + 1} attempts: {e}")
+                    return {"text": ""}
+
             # Check if this is a quota exhaustion (not retriable)
-            if "quota exceeded" in error_str or "free_tier" in error_str:
+            elif "quota exceeded" in error_str or "free_tier" in error_str:
                 logger.error(
                     f"Gemini quota exhausted: {e}\n\n"
                     "You appear to be using the FREE TIER Google AI Studio API.\n"
@@ -177,10 +203,11 @@ def gemini_completions(
     max_tokens: int = 4096,
     force_prefills: list[str] | None = None,
     images: list[str | None] | None = None,
-    max_workers: int = 5,
+    max_workers: int = 20,
     max_retries: int = 5,
     initial_retry_delay: float = 1.0,
     retry_backoff_factor: float = 2.0,
+    request_timeout: float = 120.0,
     **kwargs,
 ) -> dict:
     """Get Gemini completions with optional vision support.
@@ -194,10 +221,11 @@ def gemini_completions(
         images: Optional list of image sources (URLs or file paths) for vision tasks
                 Each image corresponds to the prompt at the same index
                 Use None for text-only prompts in a mixed batch
-        max_workers: Maximum concurrent API requests (default 5)
+        max_workers: Maximum concurrent API requests (default 20)
         max_retries: Maximum retry attempts per request (default 5)
         initial_retry_delay: Initial delay for exponential backoff (default 1.0s)
         retry_backoff_factor: Backoff multiplier (default 2.0)
+        request_timeout: Timeout in seconds for each API request (default 120s)
         **kwargs: Additional Gemini API parameters
 
     Returns:
@@ -206,19 +234,23 @@ def gemini_completions(
     """
     try:
         from google import genai
+        from google.genai.types import HttpOptions
     except ImportError:
         raise ImportError(
             "google-genai package required. Install with: pip install google-genai"
         ) from None
 
-    # Initialize client (shared across threads - Gemini client is thread-safe)
+    # Initialize client with timeout (shared across threads - Gemini client is thread-safe)
     api_key = GEMINI_API_KEY
     if not api_key:
         raise ValueError(
             "GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set"
         )
 
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(
+        api_key=api_key,
+        http_options=HttpOptions(timeout=request_timeout),
+    )
 
     # Validate and log image list if provided
     if images is not None:
@@ -252,16 +284,41 @@ def gemini_completions(
         max_retries=max_retries,
         initial_retry_delay=initial_retry_delay,
         retry_backoff_factor=retry_backoff_factor,
+        request_timeout=request_timeout,
         **kwargs,
     )
 
-    # Execute concurrently (max_workers=1 makes it sequential)
+    # Log concurrency info
+    logger.info(
+        f"Processing {len(prompts)} prompts with {max_workers} concurrent workers "
+        f"(timeout: {request_timeout}s per request)"
+    )
+
+    # Execute concurrently with progress logging
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        completions = list(
-            executor.map(
-                lambda t: completion_fn(prompt=t[0], prefill=t[1], image=t[2]),
-                prompt_prefill_image_tuples,
-            )
-        )
+        completions = []
+        completed = 0
+        total = len(prompt_prefill_image_tuples)
+
+        # Submit all tasks
+        futures = [
+            executor.submit(completion_fn, prompt=t[0], prefill=t[1], image=t[2])
+            for t in prompt_prefill_image_tuples
+        ]
+
+        # Collect results with progress logging
+        for future in futures:
+            try:
+                result = future.result()
+                completions.append(result)
+                completed += 1
+
+                # Log progress every 10 completions or at milestones
+                if completed % 10 == 0 or completed == total:
+                    logger.info(f"Progress: {completed}/{total} completions finished")
+            except Exception as e:
+                logger.error(f"Request failed with exception: {e}")
+                completions.append({"text": ""})
+                completed += 1
 
     return {"completions": completions}

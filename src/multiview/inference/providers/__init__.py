@@ -18,7 +18,8 @@ def get_completion_fn(provider: str) -> Callable:
     Args:
         provider: Provider name (e.g., "openai", "openai_embedding", "anthropic",
                   "hf_embedding", "gemini", "hf_local_reranker",
-                  "hf_local_hidden_state")
+                  "hf_local_contextual_reranker", "voyage_reranker",
+                  "voyage_embedding", "hf_local_hidden_state")
 
     Returns:
         Completion function that takes prompts and returns completions
@@ -75,6 +76,34 @@ def get_completion_fn(provider: str) -> Callable:
                 fromlist=["hf_local_reranker_completions"],
             ).hf_local_reranker_completions,
             "transformers and torch packages required. Install with: pip install transformers torch",
+        ),
+        "hf_local_contextual_reranker": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local",
+                fromlist=["hf_local_contextual_reranker_completions"],
+            ).hf_local_contextual_reranker_completions,
+            "transformers and torch packages required. Install with: pip install transformers torch",
+        ),
+        "hf_local_colbert": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_local_colbert",
+                fromlist=["hf_local_colbert_completions"],
+            ).hf_local_colbert_completions,
+            "pylate, transformers, and torch packages required. Install with: pip install pylate transformers torch",
+        ),
+        "voyage_reranker": (
+            lambda: __import__(
+                "multiview.inference.providers.voyage",
+                fromlist=["voyage_reranker_completions"],
+            ).voyage_reranker_completions,
+            "voyageai package not installed. Install with: pip install voyageai",
+        ),
+        "voyage_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.voyage",
+                fromlist=["voyage_embedding_completions"],
+            ).voyage_embedding_completions,
+            "voyageai package not installed. Install with: pip install voyageai",
         ),
         "pseudologit": (
             lambda: __import__(

@@ -3,6 +3,7 @@
 from multiview.docsets.abstractsim import AbstractSimDocSet
 from multiview.docsets.aidanbench import AidanBenchDocSet
 from multiview.docsets.analogies import AnalogiesDocSet
+from multiview.docsets.arxiv_abstract_sentences import ArxivAbstractSentencesDocSet
 from multiview.docsets.arxiv_cs import ArxivCSDocSet
 from multiview.docsets.base import BaseDocSet
 from multiview.docsets.bills import BillsDocSet
@@ -11,7 +12,6 @@ from multiview.docsets.d5 import D5DocSet
 from multiview.docsets.d5_applic import D5ApplicabilityDocSet
 from multiview.docsets.dickinson import DickinsonDocSet
 from multiview.docsets.example_images import ExampleImagesDocSet
-from multiview.docsets.fb15k237 import FB15k237DocSet
 from multiview.docsets.feedbacks import FeedbacksClusteringDocSet
 from multiview.docsets.fewevent import FewEventClusteringDocSet
 from multiview.docsets.fewnerd import FewNerdClusteringDocSet
@@ -25,27 +25,29 @@ from multiview.docsets.infinite_prompts import InfinitePromptsDocSet
 from multiview.docsets.inspired import InspiredDocSet
 from multiview.docsets.instructstsb import InstructSTSBDocSet
 from multiview.docsets.intent_emotion import IntentEmotionDocSet
+from multiview.docsets.met_museum import MetMuseumDocSet
+from multiview.docsets.mmlu import MMLUDocSet
 from multiview.docsets.moralfables import MoralFablesDocSet
 from multiview.docsets.nytclustering import NYTClusteringDocSet
-from multiview.docsets.onion_news import OnionNewsDocSet
+from multiview.docsets.onion_headlines import OnionNewsDocSet
 from multiview.docsets.ratemyprof import RateMyProfClusteringDocSet
 from multiview.docsets.rocstories import RocStoriesDocSet
 from multiview.docsets.trex import TRExDocSet
 from multiview.docsets.triz40 import TRIZ40DocSet
-from multiview.docsets.wn18rr import WN18RRDocSet
+from multiview.docsets.ut_zappos50k import UTZappos50kDocSet
 
 DOCSETS = {
     "abstractsim": AbstractSimDocSet,
     "aidanbench": AidanBenchDocSet,
     "analogies": AnalogiesDocSet,
     "arxiv_cs": ArxivCSDocSet,
+    "arxiv_abstract_sentences": ArxivAbstractSentencesDocSet,
     "bills": BillsDocSet,
     "d5": D5DocSet,  # Kept for backwards compatibility
     "d5_doc2doc": D5DocSet,
     "d5_applicability": D5ApplicabilityDocSet,
     "dickinson": DickinsonDocSet,
     "example_images": ExampleImagesDocSet,
-    "fb15k237": FB15k237DocSet,
     "goodreads_quotes": GoodreadsQuotesDocSet,
     "gsm8k": GSM8KDocSet,
     "haiku": HaikuDocSet,
@@ -55,19 +57,21 @@ DOCSETS = {
     "infinite_prompts": InfinitePromptsDocSet,
     "infinite_chats": InfiniteChatsDocSet,
     "inspired": InspiredDocSet,
-    "intent_emotion": IntentEmotionDocSet,
-    "instructstsb": InstructSTSBDocSet,
+    "inb_intent_emotion": IntentEmotionDocSet,
+    "inb_instructstsb": InstructSTSBDocSet,
+    "met_museum": MetMuseumDocSet,
+    "mmlu": MMLUDocSet,
     "moralfables": MoralFablesDocSet,
-    "nytclustering": NYTClusteringDocSet,
-    "onion_news": OnionNewsDocSet,
-    "ratemyprof": RateMyProfClusteringDocSet,
-    "feedbacks": FeedbacksClusteringDocSet,
-    "fewrel": FewRelClusteringDocSet,
-    "fewnerd": FewNerdClusteringDocSet,
-    "fewevent": FewEventClusteringDocSet,
+    "inb_nytclustering": NYTClusteringDocSet,
+    "onion_headlines": OnionNewsDocSet,
+    "inb_ratemyprof": RateMyProfClusteringDocSet,
+    "inb_feedbacks": FeedbacksClusteringDocSet,
+    "inb_fewrel": FewRelClusteringDocSet,
+    "inb_fewnerd": FewNerdClusteringDocSet,
+    "inb_fewevent": FewEventClusteringDocSet,
     "trex": TRExDocSet,
     "triz40": TRIZ40DocSet,
-    "wn18rr": WN18RRDocSet,
+    "ut_zappos50k": UTZappos50kDocSet,
 }
 
 __all__ = [
@@ -75,6 +79,7 @@ __all__ = [
     "AidanBenchDocSet",
     "AnalogiesDocSet",
     "ArxivCSDocSet",
+    "ArxivAbstractSentencesDocSet",
     "BaseDocSet",
     "BillsDocSet",
     "D5DocSet",
@@ -82,7 +87,6 @@ __all__ = [
     "DickinsonDocSet",
     "DOCSETS",
     "ExampleImagesDocSet",
-    "FB15k237DocSet",
     "GoodreadsQuotesDocSet",
     "GSM8KDocSet",
     "HaikuDocSet",
@@ -94,6 +98,8 @@ __all__ = [
     "InspiredDocSet",
     "IntentEmotionDocSet",
     "InstructSTSBDocSet",
+    "MetMuseumDocSet",
+    "MMLUDocSet",
     "MoralFablesDocSet",
     "NYTClusteringDocSet",
     "OnionNewsDocSet",
@@ -104,5 +110,5 @@ __all__ = [
     "FewEventClusteringDocSet",
     "TRExDocSet",
     "TRIZ40DocSet",
-    "WN18RRDocSet",
+    "UTZappos50kDocSet",
 ]

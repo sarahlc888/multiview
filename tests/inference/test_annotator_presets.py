@@ -100,7 +100,8 @@ class TestRewritePlaintextFreeformGemini:
                     "Machine learning is a subset of artificial intelligence. "
                     "It involves training algorithms on data to make predictions."
                 ],
-                "similarity_criteria": ["Main technical concepts"],
+                "criterion": ["concepts"],
+                "criterion_description": ["Main technical concepts"],
             },
             config="rewrite_plaintext_freeform_gemini",
         )
@@ -128,7 +129,8 @@ class TestLMJudgePairLikert:
         """Test Likert judge on similar texts (should be 4-5)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["The cat sat on the mat."],
                 "document_b": ["A feline was sitting on the rug."],
             },
@@ -150,7 +152,8 @@ class TestLMJudgePairLikert:
         """Test Likert judge on different texts (should be 1-3)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["The weather is nice today."],
                 "document_b": ["Quantum mechanics is complex."],
             },
@@ -175,7 +178,8 @@ class TestLMJudgeTripletBinary:
         """Test triplet judge picks the more similar text."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["Dogs are popular pets."],
                 "document_b": ["Cats are also popular pets."],  # Similar topic
                 "document_c": [
@@ -205,7 +209,8 @@ class TestLMJudgePairBinary:
         """Test binary judge on same/matching texts (should be 0)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Main idea"],
+                "criterion": ["main_idea"],
+                "criterion_description": ["Main idea"],
                 "document_a": ["The earth is round."],
                 "document_b": ["Earth has a spherical shape."],
             },
@@ -227,7 +232,8 @@ class TestLMJudgePairBinary:
         """Test binary judge on different texts (should be 1)."""
         results = run_inference(
             inputs={
-                "similarity_criteria": ["Topic"],
+                "criterion": ["topic"],
+                "criterion_description": ["Topic"],
                 "document_a": ["Python is a programming language."],
                 "document_b": ["Elephants are large mammals."],
             },

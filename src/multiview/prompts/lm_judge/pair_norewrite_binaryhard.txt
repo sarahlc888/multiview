@@ -4,7 +4,11 @@ Please make this judgement based on the similarity criteria given below.
 
 ### Similarity criteria
 
-{similarity_criteria}
+{criterion}
+
+### Similarity criteria description
+
+{criterion_description}
 
 ### Text (A)
 

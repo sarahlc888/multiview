@@ -8,7 +8,7 @@ CRITERIA DESCRIPTION:
 TAGS:
 {tag_schema}
 
-DOCUMENT (all fields):
+DOCUMENT:
 {document}
 
 For each tag, output 1 if it applies to this document, 0 if it does not.

@@ -162,6 +162,111 @@ def hf_local_reranker_completions(
     return {"completions": completions}
 
 
+def hf_local_contextual_reranker_completions(
+    prompts: list[str],
+    model_name: str,
+    device: str = "cuda",
+    batch_size: int = 32,
+    max_length: int = 8192,
+    **kwargs,
+) -> dict:
+    """Get reranker scores from local HuggingFace model (ContextualAI-style).
+
+    This function is designed for rerankers that output scores encoded as BF16
+    values in the first token logits (e.g., ContextualAI/ctxl-rerank-v2-instruct-multilingual-6b).
+
+    Args:
+        prompts: List of formatted prompts (query-document pairs already formatted)
+        model_name: Model name on HuggingFace Hub
+        device: Device to run model on ("cuda" or "cpu")
+        batch_size: Batch size for inference
+        max_length: Maximum sequence length
+        **kwargs: Additional parameters including:
+            - use_fp16: Whether to use FP16 precision (ignored, uses BF16)
+
+    Returns:
+        Dict with "completions" key containing list of completion dicts.
+        Each completion dict has "score" key with the relevance score.
+    """
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+    except ImportError as e:
+        raise ImportError(
+            "transformers and torch packages required. "
+            "Install with: pip install transformers torch"
+        ) from e
+
+    # ContextualAI models use BF16 for score encoding
+    dtype = torch.bfloat16 if device == "cuda" else torch.float32
+
+    logger.info("=" * 70)
+    logger.info(f"Loading ContextualAI reranker model: {model_name}")
+    logger.info(f"Cache directory: {HF_CACHE_DIR}")
+    logger.info("=" * 70)
+
+    # Load tokenizer with left padding (required for batch inference)
+    logger.info("Loading tokenizer...")
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_name,
+        cache_dir=str(HF_CACHE_DIR),
+        use_fast=True,
+    )
+    # Ensure pad token is set
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"  # so -1 is the real last token for all prompts
+    logger.info("✓ Tokenizer loaded")
+
+    # Load model with BF16
+    logger.info("Loading model...")
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        cache_dir=str(HF_CACHE_DIR),
+        torch_dtype=dtype,
+    ).to(device)
+    logger.info("✓ Model loaded")
+
+    model = model.eval()
+
+    # Process in batches
+    all_scores = []
+
+    with torch.no_grad():
+        for i in range(0, len(prompts), batch_size):
+            batch_prompts = prompts[i : i + batch_size]
+
+            # Tokenize with left padding
+            enc = tokenizer(
+                batch_prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max_length,
+            )
+            input_ids = enc["input_ids"].to(device)
+            attention_mask = enc["attention_mask"].to(device)
+
+            # Get model outputs
+            out = model(input_ids=input_ids, attention_mask=attention_mask)
+
+            # Extract logits for the last token
+            next_logits = out.logits[:, -1, :]  # [batch, vocab]
+
+            # Extract scores from first token logits (ContextualAI method)
+            scores_bf16 = next_logits[:, 0].to(torch.bfloat16)
+            scores = scores_bf16.float().cpu().tolist()
+
+            all_scores.extend(scores)
+
+    logger.info(f"Computed {len(all_scores)} reranker scores")
+
+    # Format as completions
+    completions = [{"score": float(score)} for score in all_scores]
+
+    return {"completions": completions}
+
+
 def hf_local_hidden_state_completions(
     prompts: list[str],
     model_name: str,

@@ -76,7 +76,7 @@ class InfiniteChatsDocSet(BaseDocSet):
         # Stream a sample of conversations
         logger.debug(f"Streaming {self.sample_size} conversations for grouping")
         dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-        dataset = dataset.shuffle(seed=42)
+        dataset = dataset.shuffle(seed=42, buffer_size=10000)
 
         # Group conversations by first user message (prompt)
         prompt_to_responses = defaultdict(list)

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
     ],
 )
 def test_rate_triplet_quality_with_different_presets(document_set, criterion):
-    """Test that different presets work correctly."""
+    """Test that rating works with and without annotations."""
     task_config = {
         "document_set": document_set,
         "criterion": criterion,
@@ -41,31 +41,21 @@ def test_rate_triplet_quality_with_different_presets(document_set, criterion):
     task.annotate_documents()
     task.create_triplets()
 
-    # Test rating WITHOUT annotations (explicit preset)
-    logger.info("Testing rating WITHOUT annotations...")
-    results_without = task.rate_triplet_quality(
-        lm_judge_preset="lmjudge_quality_rating_gemini",
+    # Test using comparison mode to get both with and without
+    logger.info("Testing rating with and without annotations...")
+    stats = task.rate_and_filter_quality(
         min_quality=None,
     )
 
-    assert "ratings" in results_without
-    assert "counts" in results_without
-    assert len(results_without["ratings"]) == len(task.triplets)
-
-    # Test rating WITH annotations (explicit preset)
-    logger.info("Testing rating WITH annotations...")
-    results_with = task.rate_triplet_quality(
-        lm_judge_preset="lmjudge_quality_rating_with_annotation_gemini",
-        min_quality=None,
-    )
-
-    assert "ratings" in results_with
-    assert "counts" in results_with
-    assert len(results_with["ratings"]) == len(task.triplets)
+    # Check that both rating sets exist
+    assert task.triplet_quality_ratings_with_annotations is not None
+    assert task.triplet_quality_ratings_without_annotations is not None
+    assert len(task.triplet_quality_ratings_with_annotations) == len(task.triplets)
+    assert len(task.triplet_quality_ratings_without_annotations) == len(task.triplets)
 
     # Ratings might be different
-    logger.info(f"Ratings without annotations: {results_without['ratings']}")
-    logger.info(f"Ratings with annotations: {results_with['ratings']}")
+    logger.info(f"Ratings without annotations: {task.triplet_quality_ratings_without_annotations}")
+    logger.info(f"Ratings with annotations: {task.triplet_quality_ratings_with_annotations}")
 
 
 @pytest.mark.parametrize(
@@ -89,16 +79,17 @@ def test_rate_triplet_quality_auto_selects_preset(document_set, criterion):
     task.annotate_documents()
     task.create_triplets()
 
-    # When preset is None, should auto-select WITH annotations
+    # When annotations exist, should compare with and without annotations
     logger.info("Testing auto-selection with annotations...")
-    results = task.rate_triplet_quality(lm_judge_preset=None, min_quality=None)
+    stats = task.rate_and_filter_quality(min_quality=None)
 
-    assert "ratings" in results
-    assert len(results["ratings"]) == len(task.triplets)
+    assert "ratings" in stats
+    assert task.triplet_quality_ratings is not None
+    assert len(task.triplet_quality_ratings) == len(task.triplets)
 
 
 def test_rate_triplet_quality_validates_annotations_requirement():
-    """Test that using annotation preset without annotations fails."""
+    """Test that auto-selection works without annotations."""
     task_config = {
         "document_set": "gsm8k",
         "criterion": "arithmetic",
@@ -111,11 +102,10 @@ def test_rate_triplet_quality_validates_annotations_requirement():
     task.load_documents()
     task.create_triplets()
 
-    # Should raise error when trying to use annotation preset without annotations
-    with pytest.raises(ValueError, match="requires annotations but task has none"):
-        task.rate_triplet_quality(
-            lm_judge_preset="lmjudge_quality_rating_with_annotation_gemini"
-        )
+    # Should work fine - auto-selects preset without annotations
+    stats = task.rate_and_filter_quality(min_quality=None)
+    assert "ratings" in stats
+    assert len(task.triplet_quality_ratings) == len(task.triplets)
 
 
 @pytest.mark.parametrize(
@@ -125,7 +115,7 @@ def test_rate_triplet_quality_validates_annotations_requirement():
     ],
 )
 def test_compare_quality_ratings(document_set, criterion):
-    """Test the comparison method."""
+    """Test the comparison feature."""
     task_config = {
         "document_set": document_set,
         "criterion": criterion,
@@ -139,44 +129,37 @@ def test_compare_quality_ratings(document_set, criterion):
     task.annotate_documents()
     task.create_triplets()
 
-    # Run comparison
+    # Run comparison via rate_and_filter_quality
     logger.info("Running comparison...")
-    comparison = task.compare_quality_ratings_with_without_annotations()
+    stats = task.rate_and_filter_quality(min_quality=None)
 
-    # Verify structure
-    assert "ratings_without_annotations" in comparison
-    assert "ratings_with_annotations" in comparison
-    assert "agreement" in comparison
-    assert "differences" in comparison
+    # Verify both rating sets exist
+    assert task.triplet_quality_ratings_without_annotations is not None
+    assert task.triplet_quality_ratings_with_annotations is not None
+    assert len(task.triplet_quality_ratings_without_annotations) == len(task.triplets)
+    assert len(task.triplet_quality_ratings_with_annotations) == len(task.triplets)
 
-    # Check agreement stats
-    agreement = comparison["agreement"]
-    assert "n_triplets" in agreement
-    assert "exact_matches" in agreement
-    assert "exact_match_rate" in agreement
-    assert "within_1_matches" in agreement
-    assert "within_1_rate" in agreement
+    # Log any differences
+    differences = [
+        (i, r_w, r_a)
+        for i, (r_w, r_a) in enumerate(zip(
+            task.triplet_quality_ratings_without_annotations,
+            task.triplet_quality_ratings_with_annotations,
+            strict=False
+        ))
+        if r_w != r_a
+    ]
 
-    # Check that n_triplets matches
-    assert agreement["n_triplets"] == len(task.triplets)
-
-    # Check that exact_match_rate is between 0 and 1
-    assert 0 <= agreement["exact_match_rate"] <= 1
-    assert 0 <= agreement["within_1_rate"] <= 1
-
-    # Check differences structure
-    for diff in comparison["differences"]:
-        assert "triplet_idx" in diff
-        assert "rating_without_annotation" in diff
-        assert "rating_with_annotation" in diff
-        assert "difference" in diff
-
-    logger.info(f"Agreement rate: {agreement['exact_match_rate']:.1%}")
-    logger.info(f"Within-1 rate: {agreement['within_1_rate']:.1%}")
+    if differences:
+        logger.info(f"Found {len(differences)} rating differences")
+        for idx, r_w, r_a in differences[:5]:  # Show first 5
+            logger.info(f"  Triplet {idx}: without={r_w}, with={r_a}")
+    else:
+        logger.info("All ratings identical")
 
 
 def test_compare_quality_ratings_requires_annotations():
-    """Test that comparison fails without annotations."""
+    """Test that comparison is skipped without annotations."""
     task_config = {
         "document_set": "gsm8k",
         "criterion": "arithmetic",
@@ -189,6 +172,12 @@ def test_compare_quality_ratings_requires_annotations():
     task.load_documents()
     task.create_triplets()
 
-    # Should raise error since there are no annotations
-    with pytest.raises(ValueError, match="must have annotations"):
-        task.compare_quality_ratings_with_without_annotations()
+    # Should work but skip comparison (no annotations available)
+    stats = task.rate_and_filter_quality(min_quality=None)
+
+    # Should only have single rating set (comparison skipped since no annotations)
+    assert task.triplet_quality_ratings is not None
+    assert len(task.triplet_quality_ratings) == len(task.triplets)
+    # Comparison attributes should remain None
+    assert task.triplet_quality_ratings_without_annotations is None
+    assert task.triplet_quality_ratings_with_annotations is None

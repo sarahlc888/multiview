@@ -12,12 +12,22 @@ from collections import defaultdict
 
 # Pricing data (per 1M tokens, in USD)
 # Updated January 2026
+# Note: Gemini 2.5 Pro has tiered pricing based on context length (>200K tokens)
 MODEL_PRICING = {
-    # Gemini models
-    "gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
-    "gemini-2.5-flash": {"input": 0.10, "output": 0.40},
-    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+    # Gemini models (Standard API pricing - not batch)
+    # Gemini 2.5 Flash: CORRECTED pricing (was severely underestimated)
+    "gemini-2.5-flash-lite": {
+        "input": 0.10,
+        "output": 0.40,
+    },  # Assuming same as 2.0 Flash
+    "gemini-2.5-flash": {"input": 0.30, "output": 2.50},  # CORRECTED from 0.10/0.40
+    "gemini-2.5-pro": {"input": 1.25, "output": 10.00},  # Short context (<200K tokens)
+    "gemini-2.5-pro-long": {
+        "input": 2.50,
+        "output": 15.00,
+    },  # Long context (>200K tokens)
     "gemini-2.0-flash-exp": {"input": 0.10, "output": 0.40},
+    "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
     "gemini-1.5-flash": {"input": 0.075, "output": 0.30},
     "gemini-1.5-pro": {"input": 1.25, "output": 5.00},
     # OpenAI models

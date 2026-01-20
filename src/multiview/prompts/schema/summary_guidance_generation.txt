@@ -1,5 +1,8 @@
 Create guidelines for annotating how documents relate to a criterion.
 
+DOCUMENT TYPE:
+{document_type}
+
 CRITERIA:
 {criterion}
 

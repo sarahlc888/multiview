@@ -24,8 +24,7 @@ class InferenceConfig:
     # Prompt templates
     # Can be inline strings or paths to template files
     prompt_template: str
-    embed_query_instr_template: str | None = None
-    embed_doc_instr_template: str | None = None
+    instruction: str | None = None
     force_prefill_template: str | None = None
 
     # Model parameters

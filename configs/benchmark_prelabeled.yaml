@@ -1,7 +1,7 @@
 # Benchmark configuration for prelabeled datasets
 run_name: "benchmark_prelabeled"
 logging:
-  level: INFO
+  level: DEBUG
   output_file: "outputs/logs/${run_name}.log"
 seed: 42
 use_cache: true
@@ -10,86 +10,150 @@ step_through: false
 # Task configuration
 tasks:
   defaults:
-    max_docs: 500
-    max_triplets: 100
+    max_docs: 50
+    max_triplets: 10
     triplet_style: "prelabeled"
     prelabeled_selection: "hard_negatives"
     candidate_strategy: "multi"
     use_spurious_hard_negs: true
     embedding_preset: "hf_qwen3_embedding_8b"
     max_num_candidates: 10
-    rate_triplet_quality: false
-    min_triplet_quality: null
+    # IMPORTANT: If rate_triplet_quality: false (or omitted) → rating and filtering will NOT happen
+    rate_triplet_quality: false  # Skip LM validation for high-quality prelabeled data
+    # rate_triplet_quality: true    # Changed from false
+    min_triplet_quality: null # 3        # Changed from null - filter invalid/ambiguous
 
   task_list:
     - document_set: abstractsim
+      criterion: abstraction_level
+
+    - document_set: abstractsim
       criterion: abstract_similarity
-      max_docs: 1000
-      max_triplets: 100
+
+    - document_set: arxiv_abstract_sentences
+      criterion: source_abstract
+    #   max_docs: 50
+    #   max_triplets: 5
+    # #   max_docs: 1000
+    # #   max_triplets: 100
 
     - document_set: analogies
       dataset_config: bats
       criterion: analogy_type
-      max_triplets: 10
+    #   max_docs: 100
+    #   max_triplets: 10
 
-    - document_set: d5
-      criterion: description_0
-      max_docs: 5000
-      max_triplets: 10
-
-    - document_set: intent_emotion
-      criterion: intent_similarity
-      max_docs: 500
-      max_triplets: 256
-      config:
-        subset: intent
-        split: test
-
-    - document_set: intent_emotion
-      criterion: emotion_similarity
-      max_docs: 500
-      max_triplets: 256
-      config:
-        subset: emotion
-        split: test
-
-    - document_set: nytclustering
-      criterion: topic
-      max_docs: 500
-      max_triplets: 256
-      config:
-        subset: topic
-        split: test
-
-    - document_set: nytclustering
-      criterion: location
-      max_docs: 500
-      max_triplets: 256
-      config:
-        subset: location
-        split: test
+    # - document_set: d5
+    #   criterion: description_0
+    #   max_docs: 5000
+    #   max_triplets: 10
 
     - document_set: trex
       criterion: relation
-      triplet_style: "kgc"
-      max_docs: 500
-      max_triplets: 50
+      triplet_style: "prelabeled"
+    #   max_docs: 500
+    #   max_triplets: 50
       min_relation_freq: 10
       config:
         max_docs: 500
         split: validation
         min_relation_freq: 10
 
+    - document_set: triz40
+      criterion: triz_principle
+
+    - document_set: bills
+      criterion: topic
+    - document_set: bills
+      criterion: subtopic
+
+
+
+
+    # IntentEmotion: Customer support sentences
+    - document_set: inb_intent_emotion
+      criterion: intent_similarity
+      config:
+        subset: intent
+        split: test
+    - document_set: inb_intent_emotion
+      criterion: emotion_similarity
+      config:
+        subset: emotion
+        split: test
+
+    # NYTClustering: New York Times articles
+    - document_set: inb_nytclustering
+      criterion: topic
+      config:
+        subset: topic
+        split: test
+    - document_set: inb_nytclustering
+      criterion: location
+      config:
+        subset: location
+        split: test
+
+    # RateMyProfClustering: Professor reviews
+    - document_set: inb_ratemyprof
+      criterion: cluster
+      config:
+        split: test
+
+    # FeedbacksClustering: Summary feedback
+    - document_set: inb_feedbacks
+      criterion: cluster
+      config:
+        split: test
+
+    # FewRelClustering: Relation type clusters
+    - document_set: inb_fewrel
+      criterion: cluster
+      config:
+        split: test
+
+    # FewNerdClustering: Named entity type clusters
+    - document_set: inb_fewnerd
+      criterion: cluster
+      config:
+        split: test
+
+    # FewEventClustering: Event type clusters
+    - document_set: inb_fewevent
+      criterion: cluster
+      config:
+        split: test
+
+    # InstructSTSB: Sentence similarity
+    - document_set: inb_instructstsb
+      criterion: instructed_similarity
+      config:
+        split: test
+
+
 # Evaluation methods configuration
 methods_to_evaluate:
   bm25:
     - name: bm25_lexical
+      preset: bm25_lexical
 
+  query_relevance_vectors:
+    - name: qrv_gemini_openai_k10_dev25
+      expansion_preset: query_relevance_scores_gemini
+      embedding_preset: openai_embedding_small
+      num_expansions: 10
+      dev_set_size: 5
+
+  reranker:
+    - name: voyage_rerank_lite
+      preset: voyage_rerank_2_5_lite
   lm_judge_triplet:
-    - name: gemini_flash_triplet_with_annotation
-      preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
+    # - name: gemini_flash_triplet_with_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
     - name: gemini_flash_triplet_no_annotation
       preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
+    - name: gemini_flash_lite_triplet_no_annotation
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash_lite
 
   embeddings:
     - name: qwen3_8b_with_instructions
@@ -100,3 +164,50 @@ methods_to_evaluate:
 
     - name: openai_text_embedding_3_small
       preset: openai_embedding_small
+
+  # # pseudologit:
+  # #   - name: pseudologit_n3
+  # #     preset: pseudologit_gemini_n3
+  # #     classes_file: prompts/custom/gsm8k_1_classes.json
+  # #   # - name: pseudologit_n10
+  # #   #   preset: pseudologit_gemini_n10
+  # #   #   classes_file: prompts/custom/gsm8k_classes.json
+
+  # # # in_one_word:
+  # # #   - name: inoneword_custom_categories
+  # # #     preset: inoneword_hf_qwen3_8b
+  # # #     categories: ["addition", "subtraction", "multiplication", "division", "other"]
+  # # #     category_context: "Classify the math problem type"
+
+
+  # Document rewriting: Generate summaries and compare them
+  document_rewrite:
+    # # BM25 over summaries
+    # - name: dr_gemini_lite_bm25
+    #   embedding_preset: bm25_lexical
+    #   summary_preset: document_summary_gemini
+
+    # Embeddings over summaries
+    - name: dr_gemini_lite_openai_small
+      embedding_preset: openai_embedding_small
+      summary_preset: document_summary_gemini
+
+  # Multisummary: Generate k summaries per document, embed them, use max-similarity
+  multisummary:
+    # Default configuration: k=5, Gemini summaries, OpenAI embeddings
+    - name: "multisummary_gemini_openai_k5"
+      summary_preset: "document_to_summaries_gemini"
+      embedding_preset: "openai_embedding_small"
+      num_summaries: 5
+
+  #   # # Test with more summaries (k=10)
+  #   # - name: "multisummary_gemini_openai_k10"
+  #   #   summary_preset: "document_to_summaries_gemini"
+  #   #   embedding_preset: "openai_embedding_small"
+  #   #   num_summaries: 10
+
+  #   # # Test with fewer summaries (k=3)
+  #   # - name: "multisummary_gemini_openai_k3"
+  #   #   summary_preset: "document_to_summaries_gemini"
+  #   #   embedding_preset: "openai_embedding_small"
+  #   #   num_summaries: 3

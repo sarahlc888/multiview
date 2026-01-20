@@ -16,6 +16,7 @@ from datasets import load_dataset
 
 from multiview.constants import INFINITE_CHATS_DATASET_ID
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import INFINITE_PROMPTS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class InfinitePromptsDocSet(BaseDocSet):
     DATASET_PATH = INFINITE_CHATS_DATASET_ID
     DESCRIPTION = "User prompts from infinite-chats dataset with category tags"
     KNOWN_CRITERIA = ["categories"]
+    CRITERION_METADATA = INFINITE_PROMPTS_CRITERIA
 
     def __init__(self, config: dict | None = None):
         """Initialize InfinitePromptsDocSet.
@@ -59,7 +61,7 @@ class InfinitePromptsDocSet(BaseDocSet):
         # Always use streaming mode to avoid downloading full dataset
         logger.debug("Using streaming mode for infinite-chats dataset")
         dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-        dataset = dataset.shuffle(seed=42)
+        dataset = dataset.shuffle(seed=42, buffer_size=10000)
 
         documents = []
         metadata_list = []  # Store metadata separately for annotation building
@@ -110,6 +112,9 @@ class InfinitePromptsDocSet(BaseDocSet):
             f"(category_filter={category_filter})"
         )
 
+        # Deduplicate before building precomputed annotations
+        documents = self._deduplicate(documents)
+
         # Build precomputed annotations for categories criterion
         self._build_precomputed_annotations(metadata_list)
 
@@ -149,7 +154,7 @@ class InfinitePromptsDocSet(BaseDocSet):
     def _build_precomputed_annotations(self, metadata_list: list[dict]) -> None:
         """Build precomputed annotations from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": categories_string}}
+        Creates a mapping: {document_text: {"prelabel": categories_string}}
 
         Args:
             metadata_list: List of metadata dicts with 'text' and 'categories' fields
@@ -163,7 +168,7 @@ class InfinitePromptsDocSet(BaseDocSet):
             if text:
                 # Convert categories list to comma-separated string
                 categories_str = ", ".join(categories) if categories else ""
-                annotations[text] = {"criterion_value": categories_str}
+                annotations[text] = {"prelabel": categories_str}
 
         self.PRECOMPUTED_ANNOTATIONS["categories"] = annotations
 

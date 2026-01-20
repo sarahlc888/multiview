@@ -117,6 +117,76 @@ class TestRerankerUnit:
         assert results["avg_positive_score"] == 0.0
         assert results["avg_negative_score"] == 0.0
 
+    def test_caching_includes_query(self):
+        """Test that cache keys include both query and document.
+
+        This is critical for rerankers to avoid cache collisions where
+        different (query, document) pairs with the same document would
+        incorrectly share cached scores.
+        """
+        from multiview.inference.prompts import format_prompts
+        from multiview.inference.presets import get_preset
+
+        # Get Voyage reranker preset
+        preset = get_preset("voyage_rerank_2_5_lite")
+
+        # Format prompts for same document with different queries
+        inputs1 = {
+            "query": ["happy : sad"],
+            "documents": ["speech : speechless"],
+            "instruction": ["Given a query, retrieve documents based on the criterion 'analogy_type'"],
+        }
+
+        inputs2 = {
+            "query": ["hot : cold"],
+            "documents": ["speech : speechless"],  # Same document!
+            "instruction": ["Given a query, retrieve documents based on the criterion 'analogy_type'"],
+        }
+
+        # Format prompts
+        collection1 = format_prompts(inputs1, preset)
+        collection2 = format_prompts(inputs2, preset)
+
+        # Cache keys (packed_prompts) should be different because queries differ
+        assert collection1.packed_prompts[0] != collection2.packed_prompts[0], (
+            "Cache keys must differ when queries differ (even with same document). "
+            "This prevents cache collisions in reranker scoring."
+        )
+
+        # Cache keys should include the query
+        assert "happy : sad" in collection1.packed_prompts[0], (
+            "Cache key should include query 'happy : sad'"
+        )
+        assert "hot : cold" in collection2.packed_prompts[0], (
+            "Cache key should include query 'hot : cold'"
+        )
+
+        # Both should include the document
+        assert "speech : speechless" in collection1.packed_prompts[0]
+        assert "speech : speechless" in collection2.packed_prompts[0]
+
+    def test_caching_same_query_doc_pair(self):
+        """Test that same (query, document) pair produces same cache key."""
+        from multiview.inference.prompts import format_prompts
+        from multiview.inference.presets import get_preset
+
+        preset = get_preset("voyage_rerank_2_5_lite")
+
+        inputs = {
+            "query": ["query1"],
+            "documents": ["document1"],
+            "instruction": ["instruction1"],
+        }
+
+        # Format same inputs twice
+        collection1 = format_prompts(inputs, preset)
+        collection2 = format_prompts(inputs, preset)
+
+        # Cache keys should be identical
+        assert collection1.packed_prompts[0] == collection2.packed_prompts[0], (
+            "Same (query, document) pair should produce same cache key"
+        )
+
     @patch("multiview.eval.reranker.run_inference")
     def test_evaluate_with_mocked_scores(self, mock_run_inference):
         """Test evaluate_with_reranker with mocked inference function."""
@@ -433,7 +503,7 @@ class TestRerankerErrorHandling:
         from multiview.inference.presets import get_preset
 
         preset = get_preset("qwen3_reranker_8b")
-        assert preset.provider == "hf_local"
+        assert preset.provider == "hf_local_reranker"
         assert preset.model_name == "Qwen/Qwen3-Reranker-8B"
         assert preset.parser == "score"
 

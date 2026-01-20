@@ -1,0 +1,32 @@
+You are analyzing a document based on a specific criteria, '{criterion}'. We want to generate diverse search queries to retrieve other documents that are similar based on the criteria.
+
+CRITERION DESCRIPTION:
+{criterion_description}
+
+DOCUMENT:
+{document}
+
+Please formulate {num_expansions} diverse search queries.
+
+Guidelines:
+- Each query should be concise (less than 200 words)
+- Be specific and concrete (include key terms, concepts, entities)
+- Each query should capture a different aspect of the document related to the criterion
+- Make queries diverse and complementary (cover different angles/facets)
+- Each query should help retrieve documents similar to this one on the criterion
+- Consider different levels of granularity (some broad, some narrow)
+- If the document has limited criterion-relevant information, still generate {num_expansions} diverse queries about related aspects
+
+Return a JSON object containing exactly {num_expansions} summary strings.
+
+Example output format:
+```json
+{
+    "summaries": [
+        "summary variation 1",
+        "summary variation 2",
+        "summary variation 3",
+        ...
+    ]
+}
+```

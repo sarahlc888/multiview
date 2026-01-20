@@ -1,10 +1,15 @@
 You are a helpful assistant that evaluates the similarity of texts based on specific criteria.
 
-Given three texts, (a), (b), and (c), please judge whether text (a) is more similar to text (b) or text (c) based the similarity criteria.
+Given three texts, (a), (b), and (c), please judge whether text (a) is more similar to text (b) or text (c) based on the similarity criteria.
 
-### Similarity criteria
+DOCUMENT TYPE:
+{document_type}
 
-{similarity_criteria}
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
 
 ### Text (a)
 

@@ -1,0 +1,34 @@
+You are helping with the task of "query rewriting" or "query expansion" for document retrieval.
+
+We are trying to retrieve documents that are similar to the below document, based on the given criteria.
+
+CRITERION: {criterion}
+
+CRITERION DESCRIPTION: {criterion_description}
+
+DOCUMENT:
+{document}
+
+Your task: Generate {num_expansions} queries that should retrieve documents that strongly match the document, based on our criteria.
+
+Guidelines:
+- Consider what aspects of the example document relate to the criterion
+- Make queries specific and concrete
+- Cover different levels of granularity (some broad, some narrow)
+- Ensure queries are diverse and complementary
+- Do not include irrelevant aspects of the current document, i.e. omit anything that we do not specifically want to search for
+- Generated queries could be general search queries, questions, descriptions for "hypothetical" document matches, or something else
+
+Return a JSON object containing exactly {num_expansions} query strings.
+
+Example output format:
+```json
+{
+    "queries": [
+        "query variation 1",
+        "query variation 2",
+        "query variation 3",
+        ...
+    ]
+}
+```

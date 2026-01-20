@@ -2,9 +2,14 @@ Given two texts -- (A) and (B) -- please judge how similar text (A) is to text (
 
 Please make this judgement based on the similarity criteria given below.
 
-### Similarity criteria
+DOCUMENT TYPE:
+{document_type}
 
-{similarity_criteria}
+CRITERIA:
+{criterion}
+
+CRITERIA DESCRIPTION:
+{criterion_description}
 
 ### Text (A)
 

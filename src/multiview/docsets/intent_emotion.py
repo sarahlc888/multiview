@@ -27,7 +27,8 @@ class IntentEmotionDocSet(BaseDocSet):
     - emotion: Emotion-based similarity
 
     Each row contains: anchor, positive, negative
-    Uses intent_emotion triplet style to directly use the pre-made triplets.
+    Uses prelabeled triplet style to directly use the pre-made triplets.
+    The task system automatically detects IntentEmotionDocSet and uses the appropriate logic.
 
     Config parameters:
         subset (str): "intent" or "emotion" (required)
@@ -38,7 +39,7 @@ class IntentEmotionDocSet(BaseDocSet):
         tasks:
           - document_set: intent_emotion
             criterion: intent_similarity
-            triplet_style: intent_emotion
+            triplet_style: prelabeled
             config:
               subset: intent
               max_docs: 300  # Will load ~100 triplets (3 docs each)
@@ -64,15 +65,18 @@ class IntentEmotionDocSet(BaseDocSet):
         # Will be populated during load_documents()
         self.PRECOMPUTED_ANNOTATIONS = {}
 
+        # Store operational metadata for triplet generation
+        # Maps document_text -> metadata dict
+        self._triplet_metadata: dict[str, dict] = {}
+
     def load_documents(self) -> list[Any]:
         """Load IntentEmotion triplets from HuggingFace.
 
-        The dataset contains pre-made triplets (anchor, positive, negative).
-        We load them as individual documents and store triplet metadata
-        so they can be reconstructed via create_intent_emotion_triplets().
+        Documents are simple strings (text utterances).
+        Metadata for triplet generation is stored in self._triplet_metadata.
 
         Returns:
-            List of document dicts: {"text": str, "triplet_id": int, "role": str}
+            List of document strings
         """
         # Get config params
         subset = self.config.get("subset")
@@ -98,7 +102,7 @@ class IntentEmotionDocSet(BaseDocSet):
             dataset = load_dataset(
                 self.DATASET_PATH, subset, split=split, streaming=True
             )
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             logger.debug(f"Loading full dataset split: {split}")
             dataset = load_dataset(self.DATASET_PATH, subset, split=split)
@@ -109,6 +113,7 @@ class IntentEmotionDocSet(BaseDocSet):
 
         # Extract documents from triplets
         documents = []
+        metadata_list = []  # Temporary list to store metadata during loading
         doc_count = 0
 
         for triplet_idx, example in enumerate(dataset):
@@ -131,8 +136,9 @@ class IntentEmotionDocSet(BaseDocSet):
                 label_positive = f"{triplet_id}_positive"
                 label_negative = f"{triplet_id}_negative"
 
-                # Add anchor (mark as anchor for triplet selection)
-                documents.append(
+                # Add anchor - just the text
+                documents.append(anchor)
+                metadata_list.append(
                     {
                         "text": anchor,
                         criterion: label_anchor,
@@ -142,8 +148,9 @@ class IntentEmotionDocSet(BaseDocSet):
                 )
                 doc_count += 1
 
-                # Add positive
-                documents.append(
+                # Add positive - just the text
+                documents.append(positive)
+                metadata_list.append(
                     {
                         "text": positive,
                         criterion: label_positive,
@@ -152,8 +159,9 @@ class IntentEmotionDocSet(BaseDocSet):
                 )
                 doc_count += 1
 
-                # Add negative
-                documents.append(
+                # Add negative - just the text
+                documents.append(negative)
+                metadata_list.append(
                     {
                         "text": negative,
                         criterion: label_negative,
@@ -178,8 +186,8 @@ class IntentEmotionDocSet(BaseDocSet):
             f"(subset={subset}, split={split})"
         )
 
-        # Build precomputed annotations
-        self._build_precomputed_annotations(documents, criterion)
+        # Build metadata lookups
+        self._build_metadata_lookups(metadata_list, criterion)
 
         return documents
 
@@ -187,13 +195,11 @@ class IntentEmotionDocSet(BaseDocSet):
         """Extract text from a document.
 
         Args:
-            document: A document (dict or string)
+            document: A document (string)
 
         Returns:
             Text content
         """
-        if isinstance(document, dict):
-            return document.get("text", "")
         return str(document) if document else ""
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -201,45 +207,54 @@ class IntentEmotionDocSet(BaseDocSet):
 
         Supports:
         - word_count: from base class
-        - intent_similarity: the triplet label (triplet_X_anchor/positive/negative)
-        - emotion_similarity: the triplet label (triplet_X_anchor/positive/negative)
+        - intent_similarity: the triplet label (from PRECOMPUTED_ANNOTATIONS)
+        - emotion_similarity: the triplet label (from PRECOMPUTED_ANNOTATIONS)
+
+        Note: Documents are strings, so criterion values come from PRECOMPUTED_ANNOTATIONS.
+        Use get_precomputed_annotation() to access these.
 
         Args:
-            document: A document
+            document: A document (string)
             criterion: The criterion name
 
         Returns:
             Criterion value or None
         """
         if criterion in ["intent_similarity", "emotion_similarity"]:
-            if isinstance(document, dict):
-                return document.get(criterion)
+            # Criterion values are stored in PRECOMPUTED_ANNOTATIONS
+            # The caller should use get_precomputed_annotation() instead
             return None
 
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
 
-    def _build_precomputed_annotations(
-        self, documents: list[dict], criterion: str
+    def _build_metadata_lookups(
+        self, metadata_list: list[dict], criterion: str
     ) -> None:
-        """Build precomputed annotations from loaded documents.
+        """Build metadata lookups from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": label}}
-        where label is "triplet_X_anchor/positive/negative"
+        Creates:
+        1. PRECOMPUTED_ANNOTATIONS[criterion]: {document_text: {"prelabel": label}}
+        2. self._triplet_metadata: {document_text: metadata_dict}
 
         Args:
-            documents: List of document dicts with 'text' and criterion fields
+            metadata_list: List of metadata dicts with 'text' and other fields
             criterion: The criterion name (intent_similarity or emotion_similarity)
         """
         annotations = {}
 
-        for doc in documents:
-            if isinstance(doc, dict):
-                text = doc.get("text")
-                label = doc.get(criterion)
+        for meta in metadata_list:
+            text = meta.get("text")
+            if not text:
+                continue
 
-                if text and label:
-                    annotations[text] = {"criterion_value": label}
+            # Build precomputed annotations for the criterion
+            label = meta.get(criterion)
+            if label:
+                annotations[text] = {"prelabel": label}
+
+            # Store full metadata for triplet generation
+            self._triplet_metadata[text] = meta
 
         self.PRECOMPUTED_ANNOTATIONS[criterion] = annotations
 
@@ -247,20 +262,25 @@ class IntentEmotionDocSet(BaseDocSet):
             f"Built precomputed annotations for {criterion}: "
             f"{len(annotations)} documents"
         )
+        logger.info(
+            f"Built triplet metadata for {len(self._triplet_metadata)} documents"
+        )
 
 
 def create_intent_emotion_triplets(
-    documents: list[dict],
+    documents: list[str],
+    metadata_lookup: dict[str, dict],
     max_triplets: int | None = None,
     seed: int = 42,
 ) -> list[tuple[int, int, int]]:
     """Create triplets for IntentEmotion evaluation using pre-made triplets.
 
     The IntentEmotion dataset contains pre-made triplets (anchor, positive, negative).
-    This function reconstructs them from the documents.
+    This function reconstructs them from the documents using metadata.
 
     Args:
-        documents: List of document dicts with triplet_id and role metadata
+        documents: List of document texts (strings)
+        metadata_lookup: Dict mapping document_text -> metadata dict
         max_triplets: Maximum number of triplets to return
         seed: Random seed for deterministic sampling
 
@@ -271,9 +291,13 @@ def create_intent_emotion_triplets(
 
     # Group documents by triplet_id
     triplet_map = {}
-    for idx, doc in enumerate(documents):
-        triplet_id = doc.get("triplet_id")
-        role = doc.get("is_anchor")  # True for anchor, False for positive/negative
+    for idx, doc_text in enumerate(documents):
+        metadata = metadata_lookup.get(doc_text, {})
+        triplet_id = metadata.get("triplet_id")
+        role = metadata.get("is_anchor")  # True for anchor, False for positive/negative
+
+        if not triplet_id:
+            continue
 
         if triplet_id not in triplet_map:
             triplet_map[triplet_id] = {

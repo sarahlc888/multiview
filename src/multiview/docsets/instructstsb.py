@@ -61,8 +61,10 @@ class InstructSTSBDocSet(BaseDocSet):
     DATASET_PATH = "BrandonZYW/InstructSTSB"
     DESCRIPTION = "Instruction-conditioned sentence pair similarity from InBedder"
 
-    # All criteria are known (pre-labeled) - dynamically determined from instructions
-    KNOWN_CRITERIA = []  # Will be populated during load_documents()
+    # All criteria are known (pre-labeled)
+    # 'instructed_similarity' is a catch-all criterion that uses all pairwise relationships
+    # Individual instruction-based criteria are dynamically added during load_documents()
+    KNOWN_CRITERIA = ["instructed_similarity"]
 
     # Metadata for LM-based criteria (descriptions, hints, etc.)
     CRITERION_METADATA = INSTRUCTSTSB_CRITERIA
@@ -78,15 +80,16 @@ class InstructSTSBDocSet(BaseDocSet):
         # Will be populated during load_documents()
         self.PRECOMPUTED_ANNOTATIONS = {}
         self._instruction_to_criterion = {}  # Map instruction text to criterion ID
+        self._document_relationships = {}  # Map sentence text -> {instruction -> {similar: set, dissimilar: set}}
 
     def load_documents(self) -> list[Any]:
         """Load InstructSTSB sentences from HuggingFace.
 
-        Extracts individual sentences as documents. For each sentence, we track which
-        other sentences it's similar/dissimilar to under various instructions.
+        Extracts individual sentences as documents (plain strings). Pairwise similarity
+        relationships are stored separately in self._document_relationships for triplet generation.
 
         Returns:
-            List of document dicts: {"text": str, "_similar_to": {...}, "_dissimilar_to": {...}}
+            List of document strings (sentence texts)
         """
         max_docs = self.config.get("max_docs")
         split = self.config.get("split", "test")
@@ -154,14 +157,13 @@ class InstructSTSBDocSet(BaseDocSet):
                     sentence1
                 )
 
-        # Convert to document list
+        # Store relationships separately and create document list (plain strings)
         documents = []
         for sentence, relationships in sentence_to_relationships.items():
-            doc = {
-                "text": sentence,
-                "_relationships": relationships,  # instruction -> {similar: set, dissimilar: set}
-            }
-            documents.append(doc)
+            documents.append(sentence)  # Store as plain string
+            self._document_relationships[sentence] = (
+                relationships  # Store relationships separately
+            )
 
         logger.info(
             f"Extracted {len(documents)} unique sentences "
@@ -171,7 +173,11 @@ class InstructSTSBDocSet(BaseDocSet):
         # Apply max_docs limit if specified
         if max_docs and len(documents) > max_docs:
             logger.debug(f"Limiting to {max_docs} documents")
+            # Limit both documents and relationships
             documents = documents[:max_docs]
+            self._document_relationships = {
+                k: v for k, v in self._document_relationships.items() if k in documents
+            }
 
         # Build KNOWN_CRITERIA from valid instructions
         self._build_criteria_mapping(valid_instructions)
@@ -185,14 +191,12 @@ class InstructSTSBDocSet(BaseDocSet):
         """Extract text from a document.
 
         Args:
-            document: A document (dict or string)
+            document: A document (string)
 
         Returns:
             Text content
         """
-        if isinstance(document, dict):
-            return document.get("text", "")
-        return str(document) if document else ""
+        return document if isinstance(document, str) else str(document)
 
     def _build_criteria_mapping(self, valid_instructions: set[str]) -> None:
         """Build mapping from instruction text to criterion IDs.
@@ -209,7 +213,7 @@ class InstructSTSBDocSet(BaseDocSet):
         # Create mapping: instruction text -> criterion ID
         # Use simplified IDs based on index for now
         self._instruction_to_criterion = {}
-        self.KNOWN_CRITERIA = []
+        self.KNOWN_CRITERIA = ["instructed_similarity"]  # Keep the catch-all criterion
 
         for idx, instruction in enumerate(sorted_instructions):
             # Create a readable criterion ID from instruction
@@ -225,7 +229,9 @@ class InstructSTSBDocSet(BaseDocSet):
             v: k for k, v in self._instruction_to_criterion.items()
         }
 
-        logger.info(f"Created {len(self.KNOWN_CRITERIA)} criteria from instructions")
+        logger.info(
+            f"Created {len(self.KNOWN_CRITERIA)} criteria from instructions (including 'instructed_similarity')"
+        )
         logger.debug(f"Sample criteria: {self.KNOWN_CRITERIA[:5]}")
 
     def get_known_criterion_value(self, document: Any, criterion: str):
@@ -251,29 +257,31 @@ class InstructSTSBDocSet(BaseDocSet):
         """Get documents that are similar to the given document under the criterion.
 
         Args:
-            document: The anchor document
-            criterion: The criterion ID
+            document: The anchor document (string)
+            criterion: The criterion ID (or 'instructed_similarity' for all relationships)
             all_documents: List of all documents to search from
 
         Returns:
             List of similar documents
         """
-        if not isinstance(document, dict):
+        # Look up relationships for this document
+        relationships = self._document_relationships.get(document, {})
+        if not relationships:
             return []
 
-        instruction = self._criterion_to_instruction.get(criterion)
-        if not instruction:
-            return []
-
-        relationships = document.get("_relationships", {})
-        similar_texts = relationships.get(instruction, {}).get("similar", set())
+        # For 'instructed_similarity' criterion, aggregate across all instructions
+        if criterion == "instructed_similarity":
+            similar_texts = set()
+            for rel_data in relationships.values():
+                similar_texts.update(rel_data.get("similar", set()))
+        else:
+            instruction = self._criterion_to_instruction.get(criterion)
+            if not instruction:
+                return []
+            similar_texts = relationships.get(instruction, {}).get("similar", set())
 
         # Find documents with matching texts
-        similar_docs = [
-            doc
-            for doc in all_documents
-            if isinstance(doc, dict) and doc.get("text") in similar_texts
-        ]
+        similar_docs = [doc for doc in all_documents if doc in similar_texts]
         return similar_docs
 
     def get_dissimilar_documents(
@@ -287,24 +295,28 @@ class InstructSTSBDocSet(BaseDocSet):
         sufficient data. We exclude sentences marked as similar under the current criterion.
 
         Args:
-            document: The anchor document
-            criterion: The criterion ID
+            document: The anchor document (string)
+            criterion: The criterion ID (or 'instructed_similarity' for all relationships)
             all_documents: List of all documents to search from
 
         Returns:
             List of dissimilar documents (explicitly marked as dissimilar somewhere)
         """
-        if not isinstance(document, dict):
+        # Look up relationships for this document
+        relationships = self._document_relationships.get(document, {})
+        if not relationships:
             return []
 
-        instruction = self._criterion_to_instruction.get(criterion)
-        if not instruction:
-            return []
-
-        relationships = document.get("_relationships", {})
-
-        # Get sentences marked as similar under THIS criterion
-        similar_texts = relationships.get(instruction, {}).get("similar", set())
+        # For 'instructed_similarity' criterion, get similar texts from all instructions
+        if criterion == "instructed_similarity":
+            similar_texts = set()
+            for rel_data in relationships.values():
+                similar_texts.update(rel_data.get("similar", set()))
+        else:
+            instruction = self._criterion_to_instruction.get(criterion)
+            if not instruction:
+                return []
+            similar_texts = relationships.get(instruction, {}).get("similar", set())
 
         # Get all sentences explicitly marked as DISSIMILAR under ANY instruction
         all_dissimilar_texts = set()
@@ -316,31 +328,29 @@ class InstructSTSBDocSet(BaseDocSet):
 
         # Find documents with matching texts
         dissimilar_docs = [
-            doc
-            for doc in all_documents
-            if isinstance(doc, dict) and doc.get("text") in valid_dissimilar_texts
+            doc for doc in all_documents if doc in valid_dissimilar_texts
         ]
         return dissimilar_docs
 
-    def _build_precomputed_annotations(self, documents: list[dict]) -> None:
+    def _build_precomputed_annotations(self, documents: list[str]) -> None:
         """Build precomputed annotations from loaded documents.
 
         For InstructSTSB, we track pairwise similarity relationships. Negatives
         are explicitly annotated (score=0) in the dataset.
 
         Args:
-            documents: List of document dicts with 'text' and '_relationships' fields
+            documents: List of document strings
         """
         # Log statistics about relationships
         criterion_stats = defaultdict(
             lambda: {"docs_with_similar": 0, "total_similar_pairs": 0}
         )
 
-        for doc in documents:
-            if not isinstance(doc, dict):
+        for doc_text in documents:
+            # Get relationships for this document
+            relationships = self._document_relationships.get(doc_text, {})
+            if not relationships:
                 continue
-
-            relationships = doc.get("_relationships", {})
 
             for instruction, rel_data in relationships.items():
                 criterion_id = self._instruction_to_criterion.get(instruction)
@@ -360,8 +370,13 @@ class InstructSTSBDocSet(BaseDocSet):
             f"{len(documents)} documents (using explicitly annotated negatives)"
         )
 
-        # Log per-criterion stats
-        for criterion_id in self.KNOWN_CRITERIA[:5]:  # Show first 5
+        # Log per-criterion stats (skip 'instructed_similarity' as it's not instruction-based)
+        instruction_criteria = [
+            c for c in self.KNOWN_CRITERIA if c != "instructed_similarity"
+        ]
+        for criterion_id in instruction_criteria[
+            :5
+        ]:  # Show first 5 instruction-based criteria
             stats = criterion_stats[criterion_id]
             instruction = self._criterion_to_instruction[criterion_id]
             logger.debug(

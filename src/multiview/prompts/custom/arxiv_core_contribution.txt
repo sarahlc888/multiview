@@ -1,0 +1,19 @@
+What is the paper's concrete technical contribution? What new capability, method, result, resource, or understanding does it provide?
+
+Types of contributions:
+- Novel method: New algorithm, architecture, or technique (e.g., transformer, diffusion model, new optimization method)
+- State-of-the-art results: Achieves best performance on established benchmarks
+- Efficiency breakthrough: Dramatically faster, cheaper, or more scalable than prior work
+- Theoretical result: Proves theorems, convergence guarantees, complexity bounds, formal characterizations
+- Empirical insight: Reveals surprising patterns, characterizes failure modes, systematic analysis of existing methods
+- System or tool: Working implementation, library, framework, or infrastructure for real-world use
+- Dataset or benchmark: New evaluation resource that advances the field's ability to measure progress
+- Conceptual framework: New way to think about, formulate, or organize problems
+- Training innovation: New objective, training procedure, or learning algorithm
+- Robustness advance: Better adversarial robustness, distribution shift handling, or reliability
+- Generalization advance: Better out-of-distribution or cross-domain performance
+- Interpretability tool: New technique for understanding model behavior or learned representations
+- Application: Demonstrates technique working on real-world problem or new domain
+- Negative result: Shows what doesn't work, identifies limitations, challenges assumptions
+
+Consider what concrete artifact, result, or understanding the paper adds to the field.

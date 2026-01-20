@@ -16,6 +16,7 @@ class OnionNewsDocSet(BaseDocSet):
 
     DATASET_PATH = "Biddls/Onion_News"
     DESCRIPTION = "Satirical headlines from The Onion"
+    DOCUMENT_TYPE = "satirical news headline"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     KNOWN_CRITERIA = []
@@ -34,14 +35,14 @@ class OnionNewsDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42).take(max_docs)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, split=split)
             if max_docs is not None:
                 dataset = dataset.shuffle(seed=42)
 
         documents = []
-        for i, example in enumerate(dataset):
+        for _i, example in enumerate(dataset):
             # Extract headline from text field, taking content before #~#
             text = example.get("text", "")
             if text:
@@ -57,7 +58,7 @@ class OnionNewsDocSet(BaseDocSet):
                 break
 
         logger.debug(f"Loaded {len(documents)} documents from Onion News")
-        return documents
+        return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
         """Extract text from a document."""

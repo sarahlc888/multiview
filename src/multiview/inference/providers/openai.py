@@ -319,8 +319,7 @@ def openai_embedding_completions(
         prompts: List of texts to embed (without instructions)
         model_name: Model name (e.g., "text-embedding-3-large")
         **kwargs: Additional parameters including:
-            - embed_query_instrs: Optional list of query instructions to prepend
-            - embed_doc_instrs: Optional list of document instructions to prepend
+            - instructions: Optional list of instructions to prepend
 
     Returns:
         Dict with "completions" key containing list of completion dicts
@@ -337,8 +336,7 @@ def openai_embedding_completions(
     client = _get_openai_client()
 
     # Handle embedding instructions by prepending them to prompts
-    embed_query_instrs = kwargs.pop("embed_query_instrs", None)
-    embed_doc_instrs = kwargs.pop("embed_doc_instrs", None)
+    instructions = kwargs.pop("instructions", None)
 
     # Strip internal/provider-level arguments that must not be forwarded to the OpenAI SDK.
     kwargs.pop("max_retries", None)
@@ -349,10 +347,8 @@ def openai_embedding_completions(
     final_prompts = []
     for i, prompt in enumerate(prompts):
         final_prompt = prompt
-        if embed_query_instrs and i < len(embed_query_instrs):
-            final_prompt = embed_query_instrs[i] + final_prompt
-        if embed_doc_instrs and i < len(embed_doc_instrs):
-            final_prompt = embed_doc_instrs[i] + final_prompt
+        if instructions and i < len(instructions):
+            final_prompt = instructions[i] + final_prompt
         final_prompts.append(final_prompt)
 
     # Filter out parameters not supported by embeddings API

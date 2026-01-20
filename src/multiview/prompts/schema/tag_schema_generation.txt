@@ -1,5 +1,8 @@
 Design a tagging schema to annotate how documents relate to a criterion.
 
+DOCUMENT TYPE:
+{document_type}
+
 CRITERIA:
 {criterion}
 
@@ -15,7 +18,8 @@ GUIDELINES:
 - Be comprehensive — capture the full range of variation you see
 - If there's a finite set of values, enumerate them (e.g., color → red, blue, green...)
 - If the criterion has independent dimensions, factorize them (e.g., weather → temperature_cold, temperature_hot, precipitation_rain, precipitation_snow...)
-- Use as many tags as seems reasonable
+- Use as many tags as seems reasonable, ideally 30+
+- Choose tags that seem to be generally useful. Do not "overfit" to the current set of sample documents.
 
 Think through your options, then output valid JSON:
 {

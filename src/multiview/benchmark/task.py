@@ -28,14 +28,21 @@ import logging
 from multiview.benchmark.annotations import (
     annotate_with_known_criterion,
     annotate_with_lm_all,
+    annotate_with_lm_category,
+    annotate_with_lm_summary_dict,
+    annotate_with_lm_summary_sentence,
+    annotate_with_lm_tags,
     annotate_with_precomputed,
 )
-from multiview.benchmark.triplets.quality_assurance import (
-    filter_triplets_by_quality,
-    rate_triplet_quality,
+from multiview.benchmark.triplets.pairwise_similarity import (
+    create_pairwise_similarity_triplets,
 )
 from multiview.benchmark.triplets.triplet_utils import (
     create_lm_triplets,
+    create_lm_triplets_category,
+    create_lm_triplets_summary_dict,
+    create_lm_triplets_summary_sentence,
+    create_lm_triplets_tags,
     create_prelabeled_triplets,
     create_random_triplets,
 )
@@ -43,20 +50,76 @@ from multiview.benchmark.triplets.utils import build_triplet_dicts
 from multiview.docsets import DOCSETS
 from multiview.docsets.d5_applic import D5ApplicabilityDocSet
 from multiview.docsets.d5_triplets import create_d5_applicability_triplets
-from multiview.docsets.intent_emotion import create_intent_emotion_triplets
-from multiview.docsets.kgc_base import create_kgc_triplets
+from multiview.docsets.instructstsb import InstructSTSBDocSet
+from multiview.docsets.intent_emotion import (
+    IntentEmotionDocSet,
+    create_intent_emotion_triplets,
+)
+from multiview.docsets.kgc_base import KGCBaseDocSet, create_kgc_triplets
 
 logger = logging.getLogger(__name__)
 
 TRIPLET_STYLE_RANDOM = "random"
 TRIPLET_STYLE_PRELABELED = "prelabeled"
-TRIPLET_STYLE_KGC = "kgc"
-TRIPLET_STYLE_INTENT_EMOTION = "intent_emotion"
 TRIPLET_STYLE_LM = "lm"
 TRIPLET_STYLE_LM_ALL = "lm_all"
+TRIPLET_STYLE_LM_CATEGORY = "lm_category"
+TRIPLET_STYLE_LM_TAGS = "lm_tags"
+TRIPLET_STYLE_LM_SUMMARY_DICT = "lm_summary_dict"
+TRIPLET_STYLE_LM_SUMMARY_SENTENCE = "lm_summary_sentence"
 
-LM_TRIPLET_STYLES = {TRIPLET_STYLE_LM, TRIPLET_STYLE_LM_ALL}
-RICH_ANNOTATION_STYLES = {TRIPLET_STYLE_LM_ALL}
+LM_TRIPLET_STYLES = {
+    TRIPLET_STYLE_LM,
+    TRIPLET_STYLE_LM_ALL,
+    TRIPLET_STYLE_LM_CATEGORY,
+    TRIPLET_STYLE_LM_TAGS,
+    TRIPLET_STYLE_LM_SUMMARY_DICT,
+    TRIPLET_STYLE_LM_SUMMARY_SENTENCE,
+}
+RICH_ANNOTATION_STYLES = {
+    TRIPLET_STYLE_LM_ALL,
+    TRIPLET_STYLE_LM_CATEGORY,
+    TRIPLET_STYLE_LM_TAGS,
+    TRIPLET_STYLE_LM_SUMMARY_DICT,
+    TRIPLET_STYLE_LM_SUMMARY_SENTENCE,
+}
+
+# Triplet style abbreviations for config suffix
+TRIPLET_STYLE_ABBREV = {
+    "random": "rnd",
+    "prelabeled": "pre",
+    "lm": "hn",  # "lm" is treated as hard_negative style
+    "lm_all": "hn",
+    "lm_category": "cat",
+    "lm_tags": "tag",
+    "lm_summary_dict": "sdict",
+    "lm_summary_sentence": "ssent",
+}
+
+
+def _make_config_suffix(config: dict) -> str:
+    """Create compact config suffix for task directory name.
+
+    Includes triplet_style and max_triplets for easy identification.
+
+    Args:
+        config: Task config dict
+
+    Returns:
+        Suffix like "hn__300" or "rnd__500"
+    """
+    parts = []
+
+    # Add triplet style abbreviation
+    triplet_style = config.get("triplet_style", "lm")
+    style_abbrev = TRIPLET_STYLE_ABBREV.get(triplet_style, triplet_style[:4])
+    parts.append(style_abbrev)
+
+    # Add max triplets
+    max_triplets = config.get("max_triplets", 0)
+    parts.append(str(max_triplets))
+
+    return "__".join(parts)
 
 
 class Task:
@@ -78,6 +141,20 @@ class Task:
         - max_docs, max_triplets, criterion_description
         - candidate_strategy, use_spurious_hard_negs, embedding_preset, lm_judge_preset
         - lm_all annotation hints: n_schema_samples, *_schema_hint, summary_*_hint
+
+        Quality rating overrides:
+        - quality_rating_preset: Custom preset for rating without annotations
+                                  (default: "lmjudge_quality_rating_gemini")
+        - quality_rating_preset_with_annotations: Custom preset for rating with annotations
+                                                   (default: "lmjudge_quality_rating_with_annotation_gemini")
+
+        Caching configuration:
+        - reuse_cached_triplets: Whether to reuse cached triplets (default: True)
+                                 Set to False to always regenerate triplets
+        - triplet_cache_dir: Directory to check for/save cached triplets
+                            (default: outputs/{run_name} if run_name is set)
+        - use_cache: Whether to use completion-level caching (default: True)
+                    This is for individual LM calls, not triplet reuse
         """
         self.config = config
 
@@ -90,9 +167,17 @@ class Task:
         self.max_docs = config.get("max_docs")
         self.max_triplets = config.get("max_triplets")
         self.triplet_style = config.get("triplet_style", TRIPLET_STYLE_LM)
-        self.add_synthetic_docs = config.get("add_synthetic_docs", False)
         # Synthetic doc synthesis configuration:
         self.num_synthetic_docs = config.get("num_synthetic_docs", 0)
+        # Schema generation pool size - if not set, use all documents for schema generation
+        # Setting this ensures schema generation is stable even when max_docs changes
+        self.schema_pool_size = config.get("schema_pool_size")
+
+        # Quality rating preset overrides (optional)
+        self.quality_rating_preset = self.config.get("quality_rating_preset")
+        self.quality_rating_preset_with_annotations = self.config.get(
+            "quality_rating_preset_with_annotations"
+        )
 
         # Get the document_set class from registry
         if self.document_set_name not in DOCSETS:
@@ -111,14 +196,33 @@ class Task:
             dataset_config.update(config["config"])
         self.document_set = document_set_cls(config=dataset_config)
 
-        self.documents = None
+        # Validate IntentEmotionDocSet criterion matches subset
+        if isinstance(self.document_set, IntentEmotionDocSet):
+            subset = dataset_config.get("subset")
+            expected_criterion = (
+                "intent_similarity" if subset == "intent" else "emotion_similarity"
+            )
+            if self.criterion_name != expected_criterion:
+                raise ValueError(
+                    f"IntentEmotionDocSet: criterion '{self.criterion_name}' doesn't match subset '{subset}'. "
+                    f"Expected criterion '{expected_criterion}' for subset '{subset}'"
+                )
+
+        self.documents = (
+            None  # Raw documents as returned by docset (may be dicts or strings)
+        )
         self.document_annotations = None  # List of dicts with criterion values
         self.triplets = None  # List of (anchor_id, positive_id, negative_id) tuples
         self.triplet_quality_ratings = (
-            None  # List of quality ratings (1-4) for each triplet
+            None  # List of quality ratings (1-5) for each triplet
         )
         self.triplet_quality_ratings_with_annotations = None
         self.triplet_quality_ratings_without_annotations = None
+        self.triplet_quality_reasoning = (
+            None  # List of reasoning traces for quality ratings
+        )
+        self.triplet_quality_reasoning_with_annotations = None
+        self.triplet_quality_reasoning_without_annotations = None
         self.synthesis_anchor_indices = (
             None  # Indices of docs used as synthesis anchors (backward compat)
         )
@@ -131,53 +235,71 @@ class Task:
                 f"for triplet_style='random'"
             )
 
-    def _require_documents(self, *, caller: str) -> None:
-        if self.documents is None:
-            raise RuntimeError(f"Must call load_documents() before {caller}()")
+        # Resolve criterion metadata and hints (with config overrides)
+        meta = self.document_set.get_criterion_metadata(self.criterion_name) or {}
 
-    def _require_triplets(self, *, caller: str) -> None:
-        if self.triplets is None:
-            raise RuntimeError(f"Must call create_triplets() before {caller}()")
+        # Criterion description is REQUIRED - fail fast if missing
+        self.criterion_description = self.config.get(
+            "criterion_description"
+        ) or meta.get("description")
+        if not self.criterion_description:
+            raise ValueError(
+                f"Missing criterion description for '{self.criterion_name}' in document set '{self.document_set_name}'. "
+                f"Please add a 'description' field for this criterion in configs/available_criteria.yaml "
+                f"under the '{self.document_set_name}' section, or provide 'criterion_description' in the task config."
+            )
 
-    def _criterion_metadata(self) -> dict:
-        return self.document_set.get_criterion_metadata(self.criterion_name) or {}
-
-    def _resolved_criterion_description(self) -> str | None:
-        """Resolve criterion description from config or metadata.
-
-        Returns the criterion description, preferring config over metadata.
-        """
-        meta = self._criterion_metadata()
-        return self.config.get("criterion_description") or meta.get("description")
-
-    def _resolved_criterion_hints(self) -> dict:
-        meta = self._criterion_metadata()
-        return {
-            "criterion_description": self.config.get("criterion_description")
-            or meta.get("description"),
-            "pairwise_sim_hint": self.config.get("pairwise_sim_hint")
-            or meta.get("pairwise_sim_hint"),
-            "category_schema_hint": self.config.get("category_schema_hint")
-            or meta.get("category_schema_hint"),
-            "tag_schema_hint": self.config.get("tag_schema_hint")
-            or meta.get("tag_schema_hint"),
-            "summary_hint": self.config.get("summary_hint") or meta.get("summary_hint"),
-            "triplet_example_hint": self.config.get("triplet_example_hint")
-            or meta.get("triplet_example_hint"),
-        }
+        # Optional hints (can be None)
+        # Resolution order: config override > specific hint > default_hint > None
+        default_hint = meta.get("default_hint")
+        self.category_schema_hint = (
+            self.config.get("category_schema_hint")
+            or meta.get("category_schema_hint")
+            or default_hint
+        )
+        self.tag_schema_hint = (
+            self.config.get("tag_schema_hint")
+            or meta.get("tag_schema_hint")
+            or default_hint
+        )
+        self.summary_hint = (
+            self.config.get("summary_hint") or meta.get("summary_hint") or default_hint
+        )
+        self.triplet_example_hint = self.config.get("triplet_example_hint") or meta.get(
+            "triplet_example_hint"
+        )
 
     def load_documents(self):
         """Load documents from the document_set."""
         logger.info(f"Loading documents for {self.document_set_name}...")
-        # Document sets now handle max_docs internally
+        # Document sets now handle max_docs and deduplication internally
+        # Store raw documents (may be dicts or strings depending on docset)
         self.documents = self.document_set.load_documents()
         logger.debug(f"Loaded {len(self.documents)} documents")
 
+    def get_schema_pool(self) -> list:
+        """Get the document pool to use for schema generation.
+
+        Returns a subset of documents for schema generation. If schema_pool_size
+        is set, returns the first N documents. Otherwise returns all documents.
+
+        This ensures schema generation is stable across different max_docs values.
+        """
+        if self.documents is None:
+            raise RuntimeError("Must call load_documents() before get_schema_pool()")
+
+        if self.schema_pool_size is None:
+            return self.documents
+
+        pool_size = min(self.schema_pool_size, len(self.documents))
+        logger.debug(
+            f"Using schema pool of {pool_size} documents "
+            f"(schema_pool_size={self.schema_pool_size}, total docs={len(self.documents)})"
+        )
+        return self.documents[:pool_size]
+
     def augment_with_synthetic_documents(self):
         """Generate synthetic documents using LM-based synthesis."""
-        if not self.add_synthetic_docs:
-            return
-
         if self.documents is None:
             raise RuntimeError(
                 "Must call load_documents() before augment_with_synthetic_documents()"
@@ -220,7 +342,12 @@ class Task:
 
         Wrapper function for methods defined in annotation_utils.
         """
-        self._require_documents(caller="annotate_documents")
+        # Skip annotation for datasets with pairwise relationships (like InstructSTSB)
+        if isinstance(self.document_set, InstructSTSBDocSet):
+            logger.info(
+                f"Skipping annotation for {self.document_set_name} (uses pairwise relationships)"
+            )
+            return
 
         logger.info(f"Annotating documents for criterion: {self.criterion_name}...")
 
@@ -235,20 +362,96 @@ class Task:
                 self.documents, self.document_set, self.criterion_name
             )
         elif self.triplet_style in RICH_ANNOTATION_STYLES:
-            hints = self._resolved_criterion_hints()
-            self.document_annotations = annotate_with_lm_all(
-                documents=self.documents,
-                criterion=self.criterion_name,
-                criterion_description=hints["criterion_description"],
-                n_schema_samples=self.config.get("n_schema_samples", 10),
-                pairwise_sim_hint=hints["pairwise_sim_hint"],
-                category_schema_hint=hints["category_schema_hint"],
-                tag_schema_hint=hints["tag_schema_hint"],
-                summary_hint=hints["summary_hint"],
-                include_debug=self.config.get("include_annotation_debug", False),
-                cache_alias_prefix=f"{self.get_task_name()}_annotation",
-                run_name=self.run_name,
-            )
+            # Get schema pool for schema generation (if schema_pool_size is set)
+            schema_pool = self.get_schema_pool()
+
+            if self.triplet_style == TRIPLET_STYLE_LM_ALL:
+                self.document_annotations = annotate_with_lm_all(
+                    documents=self.documents,
+                    criterion=self.criterion_name,
+                    document_type=self.document_set.DOCUMENT_TYPE,
+                    criterion_description=self.criterion_description,
+                    n_schema_samples=self.config.get("n_schema_samples", 10),
+                    category_schema_hint=self.category_schema_hint,
+                    tag_schema_hint=self.tag_schema_hint,
+                    summary_hint=self.summary_hint,
+                    include_debug=self.config.get("include_annotation_debug", False),
+                    cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                    run_name=self.run_name,
+                    schema_documents=schema_pool,
+                    category_schema_preset=self.config.get("category_schema_preset"),
+                    category_classify_preset=self.config.get(
+                        "category_classify_preset"
+                    ),
+                    tag_schema_preset=self.config.get("tag_schema_preset"),
+                    spurious_tag_schema_preset=self.config.get(
+                        "spurious_tag_schema_preset"
+                    ),
+                    tag_apply_preset=self.config.get("tag_apply_preset"),
+                    summary_guidance_preset=self.config.get("summary_guidance_preset"),
+                    summary_generate_preset=self.config.get("summary_generate_preset"),
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_CATEGORY:
+                self.document_annotations = annotate_with_lm_category(
+                    documents=self.documents,
+                    criterion=self.criterion_name,
+                    criterion_description=self.criterion_description,
+                    document_type=self.document_set.DOCUMENT_TYPE,
+                    n_schema_samples=self.config.get("n_schema_samples", 10),
+                    category_schema_hint=self.category_schema_hint,
+                    cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                    run_name=self.run_name,
+                    schema_documents=schema_pool,
+                    category_schema_preset=self.config.get("category_schema_preset"),
+                    category_classify_preset=self.config.get(
+                        "category_classify_preset"
+                    ),
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_TAGS:
+                self.document_annotations = annotate_with_lm_tags(
+                    documents=self.documents,
+                    criterion=self.criterion_name,
+                    criterion_description=self.criterion_description,
+                    document_type=self.document_set.DOCUMENT_TYPE,
+                    n_schema_samples=self.config.get("n_schema_samples", 10),
+                    tag_schema_hint=self.tag_schema_hint,
+                    cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                    run_name=self.run_name,
+                    schema_documents=schema_pool,
+                    tag_schema_preset=self.config.get("tag_schema_preset"),
+                    spurious_tag_schema_preset=self.config.get(
+                        "spurious_tag_schema_preset"
+                    ),
+                    tag_apply_preset=self.config.get("tag_apply_preset"),
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_SUMMARY_SENTENCE:
+                self.document_annotations = annotate_with_lm_summary_sentence(
+                    documents=self.documents,
+                    criterion=self.criterion_name,
+                    criterion_description=self.criterion_description,
+                    document_type=self.document_set.DOCUMENT_TYPE,
+                    n_schema_samples=self.config.get("n_schema_samples", 10),
+                    summary_hint=self.summary_hint,
+                    cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                    run_name=self.run_name,
+                    schema_documents=schema_pool,
+                    summary_guidance_preset=self.config.get("summary_guidance_preset"),
+                    summary_generate_preset=self.config.get("summary_generate_preset"),
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_SUMMARY_DICT:
+                self.document_annotations = annotate_with_lm_summary_dict(
+                    documents=self.documents,
+                    criterion=self.criterion_name,
+                    criterion_description=self.criterion_description,
+                    document_type=self.document_set.DOCUMENT_TYPE,
+                    n_schema_samples=self.config.get("n_schema_samples", 10),
+                    summary_hint=self.summary_hint,
+                    cache_alias_prefix=f"{self.get_task_name()}_annotation",
+                    run_name=self.run_name,
+                    schema_documents=schema_pool,
+                    summary_guidance_preset=self.config.get("summary_guidance_preset"),
+                    summary_generate_preset=self.config.get("summary_generate_preset"),
+                )
         else:
             raise ValueError(
                 f"Unknown criterion '{self.criterion_name}' for document_set "
@@ -257,62 +460,225 @@ class Task:
                 "known criterion."
             )
 
+    def can_use_cached_triplets(self) -> bool:
+        """Check if cached triplets are available without loading them.
+
+        This is a lightweight check that validates cache exists and config matches.
+        Use this after load_documents() to decide if annotation is needed.
+
+        Returns:
+            True if cached triplets can be used, False otherwise
+        """
+        from multiview.benchmark.artifacts import can_use_cached_triplets
+
+        cache_dir = self._get_triplet_cache_dir()
+        if not cache_dir:
+            logger.debug("No cache directory configured - cannot use cached triplets")
+            return False
+
+        task_name = self.get_task_name()
+        logger.debug(f"Checking for cached triplets in: {cache_dir}/{task_name}")
+
+        result = can_use_cached_triplets(
+            output_dir=cache_dir,
+            task_name=task_name,
+            current_config=self.config,
+        )
+
+        if result:
+            logger.debug(f"Cached triplets found and config matches for {task_name}")
+        else:
+            logger.debug(f"Cached triplets not available for {task_name}")
+
+        return result
+
+    def try_load_cached_triplets(self, output_dir: str) -> bool:
+        """Try to load cached triplets if they match the current config.
+
+        Thin wrapper around artifacts.try_load_cached_triplets().
+
+        Args:
+            output_dir: Directory where cached triplets might be saved
+
+        Returns:
+            True if cached triplets were loaded successfully, False otherwise
+        """
+        from multiview.benchmark.artifacts import try_load_cached_triplets
+
+        result = try_load_cached_triplets(
+            output_dir=output_dir,
+            task_name=self.get_task_name(),
+            current_config=self.config,
+        )
+
+        if result is not None:
+            self.triplets, self.triplet_quality_ratings = result
+            return True
+        return False
+
+    def _needs_annotations_for_triplet_generation(self) -> bool:
+        """Check if current triplet_style requires annotations.
+
+        Returns:
+            True if annotations are needed for triplet generation, False otherwise
+        """
+        # Random doesn't need annotations
+        if self.triplet_style == TRIPLET_STYLE_RANDOM:
+            return False
+
+        # Prelabeled style: check document set type
+        if self.triplet_style == TRIPLET_STYLE_PRELABELED:
+            # KGC, IntentEmotion, InstructSTSB, and D5 Applicability have their own data/labels
+            if isinstance(
+                self.document_set,
+                KGCBaseDocSet
+                | IntentEmotionDocSet
+                | InstructSTSBDocSet
+                | D5ApplicabilityDocSet,
+            ):
+                return False
+            # Other prelabeled styles need annotations
+            return True
+
+        # LM styles need annotations
+        return True
+
+    def _get_triplet_cache_dir(self) -> str | None:
+        """Resolve the triplet cache directory from config.
+
+        Returns:
+            Cache directory path, or None if triplet cache reuse is disabled
+        """
+        # Check if triplet cache reuse is enabled (default: True)
+        if not self.config.get("reuse_cached_triplets", True):
+            return None
+
+        cache_dir = self.config.get("triplet_cache_dir")
+        if cache_dir is None and self.run_name:
+            cache_dir = f"outputs/{self.run_name}"
+
+        return cache_dir
+
     def create_triplets(self):
         """Create triplets based on the triplet_style.
 
-        Wrapper function for methods defined in triplet_utils."""
-        self._require_documents(caller="create_triplets")
+        If reuse_cached_triplets is enabled (default), tries to load cached triplets first
+        BEFORE requiring annotations. Only requires annotations if cache is unavailable
+        and triplet generation needs them.
 
-        logger.info(f"Creating triplets for {self.document_set_name}...")
+        Wrapper function that orchestrates caching and delegates to triplet_utils.
+        """
+        # Try loading from cache FIRST (before expensive annotation)
+        cache_dir = self._get_triplet_cache_dir()
+        if cache_dir:
+            if self.try_load_cached_triplets(cache_dir):
+                logger.info("=" * 60)
+                logger.info("✓ REUSING CACHED TRIPLETS")
+                logger.info("=" * 60)
+                return
+            logger.info("Cache not usable - generating new triplets")
+        elif not self.config.get("reuse_cached_triplets", True):
+            logger.info("Triplet cache reuse disabled (reuse_cached_triplets=False)")
+        else:
+            logger.info(
+                "No cache directory configured (set run_name or triplet_cache_dir)"
+            )
+
+        # Cache failed - check if we need annotations for generation
+        if self._needs_annotations_for_triplet_generation():
+            if self.document_annotations is None:
+                raise RuntimeError(
+                    f"Annotations required for triplet_style='{self.triplet_style}'. "
+                    f"Call annotate_documents() before create_triplets()"
+                )
+
+        logger.info("=" * 60)
+        logger.info(f"GENERATING NEW TRIPLETS: {self.document_set_name}")
         logger.info(f"Triplet style: {self.triplet_style}")
+        logger.info("=" * 60)
+
+        # Calculate overshooting factor for quality filtering
+        # If quality filtering is enabled, generate more triplets upfront to account for filtering
+        rate_quality = self.config.get("rate_triplet_quality", False)
+        min_quality = self.config.get("min_triplet_quality", None)
+
+        if rate_quality and min_quality is not None:
+            # Overshoot by 3x to ensure we have enough high-quality triplets
+            # After filtering, we'll select the top max_triplets by rating
+            overshooting_factor = 3.0
+            effective_max_triplets = int(self.max_triplets * overshooting_factor)
+            logger.info(
+                f"Quality filtering enabled (min_quality={min_quality}): "
+                f"Generating {effective_max_triplets} triplets (3x overshoot) "
+                f"to target {self.max_triplets} after filtering"
+            )
+        else:
+            effective_max_triplets = self.max_triplets
 
         if self.triplet_style == TRIPLET_STYLE_RANDOM:
             self.triplets = create_random_triplets(
                 self.documents,
-                max_triplets=self.max_triplets,
+                max_triplets=effective_max_triplets,
             )
         elif self.triplet_style == TRIPLET_STYLE_PRELABELED:
-            # Check if this is D5 Applicability - use custom property-text matching
-            if isinstance(self.document_set, D5ApplicabilityDocSet):
+            # Check document set type to determine triplet generation strategy
+            if isinstance(self.document_set, KGCBaseDocSet):
+                # KGC triplets: all three share same relation type
+                self.triplets = create_kgc_triplets(
+                    documents=self.documents,
+                    metadata_lookup=self.document_set._triplet_metadata,
+                    max_triplets=effective_max_triplets,
+                    seed=self.config.get("seed", 42),
+                )
+            elif isinstance(self.document_set, IntentEmotionDocSet):
+                # IntentEmotion: use pre-made triplets from dataset
+                self.triplets = create_intent_emotion_triplets(
+                    documents=self.documents,
+                    metadata_lookup=self.document_set._triplet_metadata,
+                    max_triplets=effective_max_triplets,
+                    seed=self.config.get("seed", 42),
+                )
+            elif isinstance(self.document_set, InstructSTSBDocSet):
+                # InstructSTSB - use pairwise similarity relationships
+                logger.info(
+                    "Using pairwise similarity triplet creation for InstructSTSB"
+                )
+                self.triplets = create_pairwise_similarity_triplets(
+                    documents=self.documents,
+                    docset=self.document_set,
+                    criterion=self.criterion_name,
+                    max_triplets=effective_max_triplets,
+                    seed=self.config.get("seed", 42),
+                )
+            elif isinstance(self.document_set, D5ApplicabilityDocSet):
+                # D5 Applicability - use custom property-text matching
                 logger.info(
                     "Using D5 applicability property-text matching triplet creation"
                 )
                 self.triplets = create_d5_applicability_triplets(
                     documents=self.documents,
                     docset=self.document_set,
-                    max_triplets=self.max_triplets,
+                    max_triplets=effective_max_triplets,
                     selection_strategy=self.config.get(
                         "prelabeled_selection", "hard_negatives"
                     ),
                     seed=self.config.get("seed", 42),
                 )
             else:
+                # Standard prelabeled triplets using annotations
+                # Pass metadata_lookup if available (for is_anchor markers)
+                metadata_lookup = getattr(self.document_set, "_triplet_metadata", None)
                 self.triplets = create_prelabeled_triplets(
                     documents=self.documents,
                     annotations=self.document_annotations,
-                    max_triplets=self.max_triplets,
+                    max_triplets=effective_max_triplets,
                     selection_strategy=self.config.get(
                         "prelabeled_selection", "hard_negatives"
                     ),
                     seed=self.config.get("seed", 42),
+                    metadata_lookup=metadata_lookup,
                 )
-        elif self.triplet_style == TRIPLET_STYLE_KGC:
-            # KGC triplets: all three share same relation type
-            self.triplets = create_kgc_triplets(
-                documents=self.documents,
-                max_triplets=self.max_triplets,
-                seed=self.config.get("seed", 42),
-            )
-        elif self.triplet_style == TRIPLET_STYLE_INTENT_EMOTION:
-            # IntentEmotion: use pre-made triplets from dataset
-            self.triplets = create_intent_emotion_triplets(
-                documents=self.documents,
-                max_triplets=self.max_triplets,
-                seed=self.config.get("seed", 42),
-            )
         elif self.triplet_style in LM_TRIPLET_STYLES:
-            hints = self._resolved_criterion_hints()
-
             # Get embedding preset overrides from criterion metadata (e.g., embed_instr)
             embedding_preset_name = self.config.get(
                 "embedding_preset", "hf_qwen3_embedding_8b"
@@ -323,258 +689,174 @@ class Task:
             )
             embedding_preset_overrides = None
             if "embed_instr" in criterion_metadata:
-                # For symmetric retrieval (summary-to-summary), use embed_doc_instr_template
-                # Clear embed_query_instr_template to prevent double-prepending
+                # For symmetric retrieval (summary-to-summary), use instruction template
                 embedding_preset_overrides = {
-                    "embed_doc_instr_template": criterion_metadata["embed_instr"],
-                    "embed_query_instr_template": None,
+                    "instruction": criterion_metadata["embed_instr"],
                 }
 
-            self.triplets = create_lm_triplets(
-                documents=self.documents,
-                annotations=self.document_annotations,
-                max_triplets=self.max_triplets,
-                candidate_strategy=self.config.get("candidate_strategy", "multi"),
-                use_spurious_hard_negs=self.config.get("use_spurious_hard_negs", True),
-                embedding_preset=embedding_preset_name,
-                embedding_preset_overrides=embedding_preset_overrides,
-                lm_judge_preset=self.config.get(
+            # Common parameters for all LM triplet styles
+            common_params = {
+                "documents": self.documents,
+                "annotations": self.document_annotations,
+                "max_triplets": effective_max_triplets,
+                "lm_judge_preset": self.config.get(
                     "lm_judge_preset", "triplet_select_positive_gemini"
                 ),
-                criterion=self.criterion_name,
-                criterion_description=hints["criterion_description"],
-                cache_alias_prefix=f"{self.get_task_name()}_triplets",
-                triplet_example_hint=hints["triplet_example_hint"],
-                anchor_indices=self.synthesis_anchor_indices,
-                max_num_candidates=self.config.get("max_num_candidates", 10),
-                run_name=self.run_name,
-            )
+                "lm_judge_preset_negative": self.config.get(
+                    "lm_judge_preset_negative", "triplet_select_negative_gemini"
+                ),
+                "criterion": self.criterion_name,
+                "criterion_description": self.criterion_description,
+                "cache_alias_prefix": f"{self.get_task_name()}_triplets",
+                "triplet_example_hint": self.triplet_example_hint,
+                "anchor_indices": self.synthesis_anchor_indices,
+                "max_num_candidates": self.config.get("max_num_candidates", 10),
+                "run_name": self.run_name,
+            }
+
+            if (
+                self.triplet_style == TRIPLET_STYLE_LM_ALL
+                or self.triplet_style == TRIPLET_STYLE_LM
+            ):
+                self.triplets = create_lm_triplets(
+                    candidate_strategy=self.config.get("candidate_strategy", "multi"),
+                    use_spurious_hard_negs=self.config.get(
+                        "use_spurious_hard_negs", True
+                    ),
+                    embedding_preset=embedding_preset_name,
+                    embedding_preset_overrides=embedding_preset_overrides,
+                    **common_params,
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_CATEGORY:
+                self.triplets = create_lm_triplets_category(
+                    use_bm25_heuristic=self.config.get(
+                        "use_bm25_heuristic", True
+                    ),  # Changed default to True
+                    **common_params,
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_TAGS:
+                self.triplets = create_lm_triplets_tags(**common_params)
+            elif self.triplet_style == TRIPLET_STYLE_LM_SUMMARY_SENTENCE:
+                self.triplets = create_lm_triplets_summary_sentence(
+                    embedding_preset=embedding_preset_name,
+                    embedding_preset_overrides=embedding_preset_overrides,
+                    **common_params,
+                )
+            elif self.triplet_style == TRIPLET_STYLE_LM_SUMMARY_DICT:
+                self.triplets = create_lm_triplets_summary_dict(
+                    embedding_preset=embedding_preset_name,
+                    embedding_preset_overrides=embedding_preset_overrides,
+                    **common_params,
+                )
         else:
             raise ValueError(f"Unknown triplet_style: {self.triplet_style}")
 
         logger.info(f"Created {len(self.triplets)} triplets")
 
-    def rate_triplet_quality(
+    def rate_and_filter_quality(
         self,
-        lm_judge_preset: str | None = None,
         min_quality: int | None = None,
+        output_dir: str | None = None,
     ) -> dict:
-        """Rate the quality of triplets using an LM judge and optionally filter.
-
-        This method rates each triplet on a 1-4 scale:
-        1 = invalid, 2 = ambiguous, 3 = trivial, 4 = ideal
-
-        Args:
-            lm_judge_preset: Preset for quality rating LM judge. If None, automatically
-                selects based on whether annotations exist:
-                - With annotations: "lmjudge_quality_rating_with_annotation_gemini"
-                - Without annotations: "lmjudge_quality_rating_gemini"
-                To force a specific mode, pass the preset explicitly:
-                - "lmjudge_quality_rating_gemini" (no annotations)
-                - "lmjudge_quality_rating_with_annotation_gemini" (with annotations)
-            min_quality: If provided, filter triplets to keep only those with
-                quality >= min_quality (1-4). If None, no filtering is applied.
-
-        Returns:
-            Dict with quality rating statistics
-
-        Example:
-            >>> task.create_triplets()
-            >>> # Auto-detect (uses annotations if available)
-            >>> stats = task.rate_triplet_quality(min_quality=3)
-            >>> # Force without annotations
-            >>> stats = task.rate_triplet_quality(
-            ...     lm_judge_preset="lmjudge_quality_rating_gemini",
-            ...     min_quality=3
-            ... )
-        """
-        self._require_documents(caller="rate_triplet_quality")
-        self._require_triplets(caller="rate_triplet_quality")
-
-        logger.info("Rating triplet quality...")
-
-        triplet_dicts = build_triplet_dicts(self.documents, self.triplets)
-        criterion_description = self._resolved_criterion_hints()[
-            "criterion_description"
-        ]
-
-        # Determine whether to use annotations based on preset
-        has_annotations = self.document_annotations is not None
-
-        # Auto-select preset if not provided
-        if lm_judge_preset is None:
-            if has_annotations:
-                lm_judge_preset = "lmjudge_quality_rating_with_annotation_gemini"
-            else:
-                lm_judge_preset = "lmjudge_quality_rating_gemini"
-            logger.info(f"Auto-selected preset: {lm_judge_preset}")
-
-        # Determine whether preset uses annotations
-        use_annotations = "with_annotation" in lm_judge_preset
-
-        # Validate that annotations exist if preset requires them
-        if use_annotations and not has_annotations:
-            raise ValueError(
-                f"Preset '{lm_judge_preset}' requires annotations but task has none"
-            )
-
-        cache_suffix = "_with_annotation" if use_annotations else "_no_annotation"
-        cache_alias = f"{self.get_task_name()}_quality_rating{cache_suffix}"
-
-        results = rate_triplet_quality(
-            triplets=triplet_dicts,
-            criterion=self.criterion_name,
-            criterion_description=criterion_description,
-            lm_judge_preset=lm_judge_preset,
-            cache_alias=cache_alias,
-            annotations=self.document_annotations if use_annotations else None,
-            run_name=self.run_name,
+        """Rate triplet quality, optionally compare with/without annotations, filter, and save drops."""
+        from multiview.benchmark.triplets.quality_assurance import (
+            rate_and_filter_quality_workflow,
         )
 
-        self.triplet_quality_ratings = results["ratings"]
+        # Run quality workflow (handles rating, comparison, filtering, consistency, and top-N selection)
+        # Extract text from documents (handle both dict and string formats)
+        document_texts = [
+            self.document_set.get_document_text(doc) for doc in self.documents
+        ]
+        result = rate_and_filter_quality_workflow(
+            triplets=build_triplet_dicts(document_texts, self.triplets),
+            criterion=self.criterion_name,
+            criterion_description=self.criterion_description,
+            annotations=self.document_annotations,
+            min_quality=min_quality,
+            max_triplets=self.max_triplets if min_quality is not None else None,
+            cache_alias=f"{self.get_task_name()}_quality_rating",
+            run_name=self.run_name,
+            quality_rating_preset=self.quality_rating_preset,
+            quality_rating_preset_with_annotations=self.quality_rating_preset_with_annotations,
+            validate_consistency=self.config.get("validate_consistency", True),
+            consistency_min_quality=self.config.get("consistency_min_quality", 3),
+            consistency_max_invalid=self.config.get("consistency_max_invalid", 1),
+        )
+
+        # Update task state
+        self.triplets = [
+            (t["anchor_id"], t["positive_id"], t["negative_id"])
+            for t in result["kept_triplets"]
+        ]
+        self.triplet_quality_ratings = result["ratings"]
+        self.triplet_quality_reasoning = result["reasoning"]
+
+        # Store comparison results if available
+        if "ratings_without_annotations" in result:
+            self.triplet_quality_ratings_without_annotations = result[
+                "ratings_without_annotations"
+            ]
+            self.triplet_quality_reasoning_without_annotations = result[
+                "reasoning_without_annotations"
+            ]
+            self.triplet_quality_ratings_with_annotations = result[
+                "ratings_with_annotations"
+            ]
+            self.triplet_quality_reasoning_with_annotations = result[
+                "reasoning_with_annotations"
+            ]
+
+        # Save dropped triplets
+        if result["dropped_triplets"] and (output_dir or self._get_triplet_cache_dir()):
+            from multiview.benchmark.artifacts import (
+                save_dropped_triplets_from_quality_result,
+            )
+
+            save_dir = output_dir or self._get_triplet_cache_dir()
+            file_path = save_dropped_triplets_from_quality_result(
+                documents=self.documents,
+                quality_result=result,
+                output_dir=save_dir,
+                task_name=self.get_task_name(),
+                min_quality=min_quality,
+                document_annotations=self.document_annotations,
+            )
+            logger.info(
+                f"✓ Saved {len(result['dropped_triplets'])} dropped triplets to {file_path}"
+            )
 
         if min_quality is not None:
-            logger.info(f"Filtering triplets with quality >= {min_quality}")
-            triplets_with_ratings = results["triplets_with_ratings"]
-            filtered_triplets, filter_stats = filter_triplets_by_quality(
-                triplets_with_ratings, min_quality=min_quality
-            )
-
-            self.triplets = [
-                (t["anchor_id"], t["positive_id"], t["negative_id"])
-                for t in filtered_triplets
-            ]
-            self.triplet_quality_ratings = [
-                t["quality_rating"] for t in filtered_triplets
-            ]
-
             logger.info(
-                f"Filtered triplets: {len(self.triplets)} remaining "
-                f"(removed {filter_stats['n_filtered']})"
+                f"Filtered: {len(self.triplets)} remaining (removed {result['stats'].get('n_filtered', 0)})"
             )
 
-            return {**results, **filter_stats}
-
-        return results
-
-    def compare_quality_ratings_with_without_annotations(self) -> dict:
-        """Compare quality ratings with and without annotations.
-
-        Rates triplets twice (without/with annotations) to assess annotation utility.
-        Runs automatically in run_eval.py when annotations exist.
-
-        Returns:
-            Dict with ratings_without_annotations, ratings_with_annotations,
-            agreement stats, and differences list.
-        """
-        self._require_documents(
-            caller="compare_quality_ratings_with_without_annotations"
-        )
-        self._require_triplets(
-            caller="compare_quality_ratings_with_without_annotations"
-        )
-        if self.document_annotations is None:
-            raise ValueError("Task must have annotations to run comparison")
-
-        # Rate both ways
-        logger.info("=" * 60)
-        logger.info("COMPARING QUALITY RATINGS WITH/WITHOUT ANNOTATIONS")
-        logger.info("=" * 60)
-        results_without = self.rate_triplet_quality(
-            lm_judge_preset="lmjudge_quality_rating_gemini", min_quality=None
-        )
-        results_with = self.rate_triplet_quality(
-            lm_judge_preset="lmjudge_quality_rating_with_annotation_gemini",
-            min_quality=None,
-        )
-        self.triplet_quality_ratings_without_annotations = results_without["ratings"]
-        self.triplet_quality_ratings_with_annotations = results_with["ratings"]
-        self.triplet_quality_ratings = self.triplet_quality_ratings_with_annotations
-
-        # Calculate agreement
-        ratings_without, ratings_with = (
-            results_without["ratings"],
-            results_with["ratings"],
-        )
-        n = len(ratings_without)
-
-        # Filter out pairs with None values for comparison
-        valid_pairs = [
-            (r1, r2)
-            for r1, r2 in zip(ratings_without, ratings_with, strict=False)
-            if r1 is not None and r2 is not None
-        ]
-        n_valid = len(valid_pairs)
-        n_invalid = n - n_valid
-
-        exact_matches = sum(r1 == r2 for r1, r2 in valid_pairs)
-        within_1 = sum(abs(r1 - r2) <= 1 for r1, r2 in valid_pairs)
-
-        # Find differences
-        differences = [
-            {
-                "triplet_idx": i,
-                "anchor_id": self.triplets[i][0],
-                "positive_id": self.triplets[i][1],
-                "negative_id": self.triplets[i][2],
-                "rating_without_annotation": r_w,
-                "rating_with_annotation": r_a,
-                "difference": (r_a - r_w)
-                if (r_w is not None and r_a is not None)
-                else None,
-            }
-            for i, (r_w, r_a) in enumerate(
-                zip(ratings_without, ratings_with, strict=False)
-            )
-            if r_w != r_a
-        ]
-
-        # Log summary
-        logger.info("=" * 60)
-        logger.info("COMPARISON RESULTS")
-        logger.info("=" * 60)
-        if n_invalid > 0:
-            logger.warning(f"Skipped {n_invalid}/{n} pairs with None ratings")
-        logger.info(f"Valid pairs: {n_valid}/{n}")
-        logger.info(
-            f"Exact matches: {exact_matches}/{n_valid} ({exact_matches/n_valid:.1%})"
-            if n_valid > 0
-            else "Exact matches: 0/0"
-        )
-        logger.info(
-            f"Within 1 level: {within_1}/{n_valid} ({within_1/n_valid:.1%})"
-            if n_valid > 0
-            else "Within 1 level: 0/0"
-        )
-        if differences:
-            logger.info(f"\nDifferences: {len(differences)}")
-            for diff_val in [-3, -2, -1, 1, 2, 3]:
-                count = sum(1 for d in differences if d.get("difference") == diff_val)
-                if count > 0:
-                    logger.info(
-                        f"  {abs(diff_val)} level(s) {'higher' if diff_val > 0 else 'lower'}: {count}"
-                    )
-        logger.info("=" * 60)
-
-        return {
-            "ratings_without_annotations": results_without,
-            "ratings_with_annotations": results_with,
-            "agreement": {
-                "n_triplets": n,
-                "n_valid_pairs": n_valid,
-                "n_invalid_pairs": n_invalid,
-                "exact_matches": exact_matches,
-                "exact_match_rate": exact_matches / n_valid if n_valid > 0 else 0.0,
-                "within_1_matches": within_1,
-                "within_1_rate": within_1 / n_valid if n_valid > 0 else 0.0,
-            },
-            "differences": differences,
-        }
+        return result["stats"]
 
     def get_task_name(self) -> str:
-        """Get the name of this task.
+        """Generate task name with config suffix: {document_set}__{criterion}__{style}__{count}.
+
+        Includes triplet_style and max_triplets for easy identification and to prevent
+        different configs from overwriting each other's artifacts.
+
+        Examples:
+            - gsm8k__arithmetic__hn__300 (hard_negative, 300 triplets)
+            - gsm8k__arithmetic__rnd__500 (random, 500 triplets)
+            - dickinson__theme__pre__200 (prelabeled, 200 triplets)
 
         Returns:
-            Task name in format: {document_set}__{criterion}
+            Task name with config suffix, or base name if use_config_suffix=False
         """
-        return f"{self.document_set_name}__{self.criterion_name}"
+        base_name = f"{self.document_set_name}__{self.criterion_name}"
+
+        # Check if config suffix is enabled (default: True)
+        use_config_suffix = self.config.get("use_config_suffix", True)
+
+        if not use_config_suffix:
+            # Legacy mode: no suffix
+            return base_name
+
+        # Add config suffix
+        config_suffix = _make_config_suffix(self.config)
+
+        return f"{base_name}__{config_suffix}"

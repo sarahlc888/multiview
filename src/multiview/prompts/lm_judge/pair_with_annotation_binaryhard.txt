@@ -6,7 +6,11 @@ Each text is accompanied by a summary that highlights relevant aspects based on 
 
 ### Similarity criteria
 
-{similarity_criteria}
+{criterion}
+
+### Similarity criteria description
+
+{criterion_description}
 
 ### Text (A)
 

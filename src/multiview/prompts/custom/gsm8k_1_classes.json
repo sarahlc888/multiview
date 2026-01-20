@@ -1,0 +1,11 @@
+{
+  "classes": ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+  "descriptions": {
+    "A": "add, sub",
+    "B": "add, add, sub",
+    "C": "add, add, sub, mul",
+    "D": "add, add, sub, div",
+    "E": "mul, div"
+  },
+  "instruction": "Instruction: think out loud and explain your reasoning, then choose the SINGLE best letter for the overall structure. For the final judgement, use this format exactly: 'The final answer is $\\boxed{<letter>}$'"
+}

@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 
+from multiview.eval.similarity import compute_similarity
 from multiview.inference.inference import run_inference
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ def evaluate_with_embeddings(
     run_name: str | None = None,
     preset_overrides: dict | None = None,
     criterion: str | None = None,
+    criterion_description: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate triplets using embedding-based cosine similarity.
 
@@ -48,6 +50,7 @@ def evaluate_with_embeddings(
         run_name: Optional experiment/run name for cache organization
         preset_overrides: Optional preset configuration overrides
         criterion: Criterion name (required for instruction-tuned embeddings like instr_hf_qwen3_embedding_8b)
+        criterion_description: Criterion description (used in embedding instructions for better context)
     """
     if not triplet_ids:
         logger.warning("No triplets provided for evaluation")
@@ -67,10 +70,14 @@ def evaluate_with_embeddings(
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
 
-    # Build inputs - include criterion if provided (needed for instruction-tuned embeddings)
+    # Build inputs - include criterion and description if provided (needed for instruction-tuned embeddings)
     inputs = {"document": documents}
     if criterion is not None:
         inputs["criterion"] = criterion
+    # Always add criterion_description if criterion is present (even if empty)
+    # This ensures instruction templates can always reference {criterion_description}
+    if criterion is not None:
+        inputs["criterion_description"] = criterion_description or ""
 
     embeddings = run_inference(
         inputs=inputs,
@@ -89,8 +96,8 @@ def evaluate_with_embeddings(
         positive_emb = embeddings[positive_id]
         negative_emb = embeddings[negative_id]
 
-        pos_score = cosine_similarity(anchor_emb, positive_emb)
-        neg_score = cosine_similarity(anchor_emb, negative_emb)
+        pos_score = compute_similarity(anchor_emb, positive_emb)
+        neg_score = compute_similarity(anchor_emb, negative_emb)
 
         positive_scores.append(pos_score)
         negative_scores.append(neg_score)
@@ -117,6 +124,8 @@ def evaluate_with_embeddings(
                 "positive_score": pos_score,
                 "negative_score": neg_score,
                 "outcome": outcome,
+                "correct": outcome == 1,
+                "is_tie": outcome == 0,
             }
         )
 

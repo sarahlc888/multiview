@@ -24,6 +24,7 @@ from multiview.constants import (
     AIDANBENCH_RESULTS_PATH,
 )
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import DATASET_CRITERIA
 from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,9 @@ class AidanBenchDocSet(BaseDocSet):
 
     DATASET_PATH = str(AIDANBENCH_RESULTS_PATH)
     DESCRIPTION = "AidanBench open-ended question answers (per-question)"
+    DOCUMENT_TYPE = "LLM response to an open-ended question"
     KNOWN_CRITERIA = []  # Documents are strings; no metadata extracted
+    CRITERION_METADATA = DATASET_CRITERIA.get("aidanbench", {})
 
     def __init__(self, config: dict | None = None):
         """Initialize AidanBench dataset.
@@ -60,6 +63,7 @@ class AidanBenchDocSet(BaseDocSet):
         self._ensure_repo_cloned()
         self.question_id = config.get("question_id") if config else None
         self.question_text = config.get("question_text") if config else None
+        self.selected_question = None  # Will be set during load_documents()
 
     def _ensure_repo_cloned(self) -> None:
         """Ensure AidanBench repo is cloned and up to date."""
@@ -110,7 +114,7 @@ class AidanBenchDocSet(BaseDocSet):
         try:
             with open(AIDANBENCH_RESULTS_PATH, encoding="utf-8") as f:
                 raw_data = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
+        except (OSError, json.JSONDecodeError) as e:
             raise RuntimeError(f"Failed to load AidanBench results.json: {e}") from e
 
         # Extract unique answers per question
@@ -152,9 +156,7 @@ class AidanBenchDocSet(BaseDocSet):
             # Use question by text match
             matches = [q for q in questions if self.question_text.lower() in q.lower()]
             if not matches:
-                raise ValueError(
-                    f"No question found matching '{self.question_text}'"
-                )
+                raise ValueError(f"No question found matching '{self.question_text}'")
             selected_question = matches[0]
             if len(matches) > 1:
                 logger.warning(
@@ -166,6 +168,9 @@ class AidanBenchDocSet(BaseDocSet):
             logger.info("No question specified, using first question")
 
         logger.info(f"Selected question: {selected_question[:100]}...")
+
+        # Store the selected question for use in criterion metadata
+        self.selected_question = selected_question
 
         # Get answers for this question only
         documents = question_to_answers[selected_question]
@@ -208,6 +213,32 @@ class AidanBenchDocSet(BaseDocSet):
         # Fall back to base class for word_count
         return super().get_known_criterion_value(document, criterion)
 
+    def get_criterion_metadata(self, criterion: str) -> dict[str, Any]:
+        """Get metadata for a criterion, filling in the question template.
+
+        For AidanBench, the {question} template variable in the criterion
+        description is automatically filled in with the selected question.
+
+        Args:
+            criterion: The criterion name
+
+        Returns:
+            Criterion metadata with question filled into the description
+        """
+        # Get base metadata from YAML
+        metadata = super().get_criterion_metadata(criterion)
+
+        # If we have a selected question and a description with {question}, fill it in
+        if self.selected_question and metadata.get("description"):
+            description = metadata.get("description")
+            if "{question}" in description:
+                metadata = metadata.copy()  # Don't modify the original
+                metadata["description"] = description.format(
+                    question=self.selected_question
+                )
+
+        return metadata
+
     @staticmethod
     def list_questions() -> list[str]:
         """List all available questions in AidanBench.
@@ -218,7 +249,7 @@ class AidanBenchDocSet(BaseDocSet):
             List of question strings
         """
         # Ensure repo is downloaded
-        temp_docset = AidanBenchDocSet(config={})  # Trigger download
+        AidanBenchDocSet(config={})  # Trigger download
 
         # Load and extract questions
         with open(AIDANBENCH_RESULTS_PATH, encoding="utf-8") as f:

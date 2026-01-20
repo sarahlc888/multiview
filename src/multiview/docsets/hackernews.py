@@ -63,7 +63,7 @@ class HackerNewsDocSet(BaseDocSet):
         if use_streaming:
             logger.debug(f"Using streaming mode (max_docs={max_docs} < 100)")
             dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             dataset = load_dataset(self.DATASET_PATH, split=split)
             if max_docs is not None:
@@ -89,7 +89,7 @@ class HackerNewsDocSet(BaseDocSet):
             f"Loaded {len(documents)} documents from HackerNews "
             f"(filtered by score > {min_score})"
         )
-        return documents
+        return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
         """Extract text from a document.

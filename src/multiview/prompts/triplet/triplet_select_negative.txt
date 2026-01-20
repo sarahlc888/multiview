@@ -7,10 +7,10 @@ CRITERIA DESCRIPTION:
 {criterion_description}
 
 INSTRUCTIONS:
-- An ideal candidate is DIFFERENT from the anchor, based on the criterion, but LOOKS SIMILAR on the surface. Prefer candidates with high Lexical similarity (bm25) and/or high spurious tag similarity but low criterion similarity. This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters.
+- An ideal candidate is DIFFERENT from the anchor, based on the criterion, but LOOKS SIMILAR on the surface. Prefer candidates with high Lexical similarity (bm25). This creates a "hard negative" - a document that would fool a naive similarity model but is actually different on what matters.
 - Don't pick documents with "subtle" differences on the criterion -- we want clear criterion differences with superficial similarities
-- NOTE: Each candidate is annotated with  "Criterion" (similarity on what matters), "Spurious" (similarity on surface features), and "Lexical" (BM25 word overlap)
-- IMPORTANT: Annotations are noisy. Always verify against actual document content.
+{similarity_note}- IMPORTANT: Annotations are noisy. Always verify against actual document content.
+- If there is NO clear hard negative among the candidates (i.e., no candidate that is clearly different on the criterion while having surface similarity), you may ABSTAIN by returning 0. Only abstain if none of the candidates make a good hard negative.
 {triplet_example_section}
 ANCHOR DOCUMENT:
 {anchor_doc}
@@ -23,8 +23,8 @@ CANDIDATES:
 
 Think out loud, then respond with valid JSON in this exact format:
 {
-  "reasoning": <thinking>,
-  "chosen_negative": [number]
+  "reasoning": <thinking about which document is a strong negative match with respect to the criteria>,
+  "chosen_negative": [number from 1 to N, or 0 to abstain if no clear hard negative]
 }
 
 IMPORTANT: make sure to response in JSON format.

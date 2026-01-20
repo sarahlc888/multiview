@@ -107,7 +107,7 @@ class InBedderClusteringDocSet(BaseDocSet):
                 )
             else:
                 dataset = load_dataset(self.DATASET_PATH, split=split, streaming=True)
-            dataset = dataset.shuffle(seed=42)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000)
         else:
             logger.debug(f"Loading full dataset split: {split}")
             if subset:
@@ -221,7 +221,7 @@ class InBedderClusteringDocSet(BaseDocSet):
     ) -> None:
         """Build precomputed annotations from loaded documents.
 
-        Creates a mapping: {document_text: {"criterion_value": cluster_label}}
+        Creates a mapping: {document_text: {"prelabel": cluster_label}}
 
         Args:
             documents: List of document dicts with 'text' and criterion fields
@@ -236,7 +236,7 @@ class InBedderClusteringDocSet(BaseDocSet):
                 label = doc.get(criterion)
 
                 if text and label:
-                    annotations[text] = {"criterion_value": label}
+                    annotations[text] = {"prelabel": label}
 
                     # Track cluster distribution
                     cluster_counts[label] = cluster_counts.get(label, 0) + 1

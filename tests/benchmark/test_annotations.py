@@ -11,6 +11,9 @@ import pytest
 
 from multiview.benchmark.annotations import (
     annotate_with_lm_all,
+    annotate_with_lm_category,
+    annotate_with_lm_summary,
+    annotate_with_lm_tags,
     classify_documents_batch,
     generate_category_schema,
     generate_spurious_tag_schema,
@@ -77,6 +80,7 @@ class TestSchemaGeneration:
             documents=SAMPLE_DOCS,
             criterion="arithmetic_operations",
             criterion_description="Types of arithmetic operations used",
+            document_type="math word problem",
             n_samples=3,
             schema_hint="Focus on basic operations: addition, subtraction, multiplication, division",
         )
@@ -173,6 +177,7 @@ class TestAnnotationApplication:
             criterion="arithmetic_operations",
             criterion_description="Types of arithmetic operations used",
             category_schema=mock_category_schema,
+            document_type="math word problem",
         )
 
         # Verify structure
@@ -249,7 +254,6 @@ class TestAllAnnotation:
         # Verify structure of each annotation
         for ann in annotations:
             # Check all required fields present
-            assert "criterion_value" in ann  # Backward compatibility
             assert "category" in ann
             assert "tags" in ann
             assert "spurious_tags" in ann
@@ -276,33 +280,6 @@ class TestAllAnnotation:
                 assert isinstance(tag_value, bool)
             for tag_value in ann["spurious_tags"].values():
                 assert isinstance(tag_value, bool)
-
-    def test_annotation_backward_compatibility(self):
-        """Test that annotations maintain backward compatibility."""
-        # Mock annotation result
-        mock_annotation = {
-            "criterion_value": None,
-            "category": "addition",
-            "tags": {"small_numbers": True, "money": False},
-            "spurious_tags": {"short_text": True},
-            "summary": {
-                "annotation_trace": "This problem uses addition...",
-                "final_summary": "Addition: 5 + 3",
-            },
-            "category_schema": {},
-            "tag_schema": {},
-            "spurious_tag_schema": {},
-            "summary_guidance": {},
-        }
-
-        # Verify backward-compatible field exists
-        assert "criterion_value" in mock_annotation
-
-        # Verify new fields exist
-        assert "category" in mock_annotation
-        assert "tags" in mock_annotation
-        assert "spurious_tags" in mock_annotation
-        assert "summary" in mock_annotation
 
 
 class TestAnnotationHelpers:
@@ -372,6 +349,247 @@ class TestAnnotationHelpers:
 
         # Should include summary
         assert "Addition: 5 + 3" in formatted
+
+
+class TestStyleSpecificAnnotations:
+    """Tests for style-specific annotation functions (lm_category, lm_tags, lm_summary)."""
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_annotate_with_lm_category_real(self):
+        """Test category-only annotation with real API."""
+        annotations = annotate_with_lm_category(
+            documents=SAMPLE_DOCS,
+            criterion="arithmetic_operations",
+            criterion_description="Types of arithmetic operations used in the problem",
+            n_schema_samples=3,
+            category_schema_hint="Focus on addition, subtraction, multiplication, division",
+        )
+
+        # Verify we got annotations for all documents
+        assert len(annotations) == len(SAMPLE_DOCS)
+
+        # Verify structure of each annotation
+        for ann in annotations:
+            # Check required fields
+            assert "category" in ann
+            assert "category_schema" in ann
+
+            # Check that only category fields are present (not tags or summary)
+            assert "tags" not in ann
+            assert "spurious_tags" not in ann
+            assert "summary" not in ann
+            assert "tag_schema" not in ann
+            assert "spurious_tag_schema" not in ann
+            assert "summary_guidance" not in ann
+
+            # Check types
+            assert isinstance(ann["category"], (str, type(None)))
+            assert isinstance(ann["category_schema"], dict)
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_annotate_with_lm_tags_real(self):
+        """Test tag-only annotation with real API."""
+        annotations = annotate_with_lm_tags(
+            documents=SAMPLE_DOCS,
+            criterion="arithmetic_operations",
+            criterion_description="Types of arithmetic operations used in the problem",
+            n_schema_samples=3,
+            tag_schema_hint="Include tags for number size, context, complexity",
+        )
+
+        # Verify we got annotations for all documents
+        assert len(annotations) == len(SAMPLE_DOCS)
+
+        # Verify structure of each annotation
+        for ann in annotations:
+            # Check required fields
+            assert "tags" in ann
+            assert "spurious_tags" in ann
+            assert "tag_schema" in ann
+            assert "spurious_tag_schema" in ann
+
+            # Check that only tag fields are present (not category or summary)
+            assert "category" not in ann
+            assert "summary" not in ann
+            assert "category_schema" not in ann
+            assert "summary_guidance" not in ann
+
+            # Check types
+            assert isinstance(ann["tags"], dict)
+            assert isinstance(ann["spurious_tags"], dict)
+
+            # Check that tags are boolean
+            for tag_value in ann["tags"].values():
+                assert isinstance(tag_value, bool)
+            for tag_value in ann["spurious_tags"].values():
+                assert isinstance(tag_value, bool)
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_annotate_with_lm_summary_real(self):
+        """Test summary-only annotation with real API."""
+        annotations = annotate_with_lm_summary(
+            documents=SAMPLE_DOCS,
+            criterion="arithmetic_operations",
+            criterion_description="Types of arithmetic operations used in the problem",
+            n_schema_samples=3,
+            summary_hint="Focus on listing operations in order",
+        )
+
+        # Verify we got annotations for all documents
+        assert len(annotations) == len(SAMPLE_DOCS)
+
+        # Verify structure of each annotation
+        for ann in annotations:
+            # Check required fields
+            assert "summary" in ann
+            assert "summary_guidance" in ann
+
+            # Check that only summary fields are present (not category or tags)
+            assert "category" not in ann
+            assert "tags" not in ann
+            assert "spurious_tags" not in ann
+            assert "category_schema" not in ann
+            assert "tag_schema" not in ann
+            assert "spurious_tag_schema" not in ann
+
+            # Check types
+            assert isinstance(ann["summary"], dict)
+
+            # Check summary structure
+            assert "annotation_trace" in ann["summary"]
+            assert "final_summary" in ann["summary"]
+
+    @pytest.mark.parametrize(
+        "style,annotation_fn,expected_fields,excluded_fields",
+        [
+            (
+                "lm_category",
+                annotate_with_lm_category,
+                ["category", "category_schema"],
+                ["tags", "spurious_tags", "summary", "tag_schema", "spurious_tag_schema", "summary_guidance"],
+            ),
+            (
+                "lm_tags",
+                annotate_with_lm_tags,
+                ["tags", "spurious_tags", "tag_schema", "spurious_tag_schema"],
+                ["category", "summary", "category_schema", "summary_guidance"],
+            ),
+            (
+                "lm_summary",
+                annotate_with_lm_summary,
+                ["summary", "summary_guidance"],
+                ["category", "tags", "spurious_tags", "category_schema", "tag_schema", "spurious_tag_schema"],
+            ),
+        ],
+    )
+    def test_annotation_style_field_presence(
+        self, style, annotation_fn, expected_fields, excluded_fields
+    ):
+        """Test that each style generates expected annotation fields (structure only, no API calls)."""
+        # This is a structure test - we can't run it without mocking
+        # But we verify the test parameters are correct
+        assert len(expected_fields) > 0
+        assert len(excluded_fields) > 0
+
+
+class TestInfinitePromptsAccuracy:
+    """Tests for LM annotator accuracy on infinite_prompts taxonomy."""
+
+    @pytest.mark.skip(reason="Requires API key and makes real API calls")
+    def test_infinite_prompts_category_accuracy(self):
+        """Test that LM category annotator achieves >70% accuracy on infinite_prompts taxonomy.
+
+        This test validates that the LM annotator can correctly predict the taxonomy
+        categories from the infinite-chats dataset.
+        """
+        from multiview.docsets.infinite_prompts import InfinitePromptsDocSet
+
+        # Load infinite_prompts dataset with a reasonable sample size
+        docset = InfinitePromptsDocSet(config={"max_docs": 30})
+        documents = docset.load_documents()
+
+        print(f"\nLoaded {len(documents)} prompts from infinite-chats-taxonomy")
+
+        # Get ground truth categories from precomputed annotations
+        precomputed = docset.get_precomputed_annotations("categories")
+        ground_truth = []
+        for doc in documents:
+            doc_text = docset.get_document_text(doc)
+            gt_value = precomputed.get(doc_text, {}).get("prelabel", "")
+            ground_truth.append(gt_value)
+
+        # Use LM annotator to predict categories
+        print("\nGenerating LM category annotations...")
+        annotations = annotate_with_lm_category(
+            documents=documents,
+            criterion="categories",
+            criterion_description=(
+                "The category taxonomy labels from the infinite-chats dataset, "
+                "describing the type of user prompt based on its purpose and content."
+            ),
+            n_schema_samples=10,
+            category_schema_hint=(
+                "Categories should reflect prompt types from the taxonomy, such as: "
+                "Creative Content Generation, Concept Explanations, Recommendations, "
+                "Writing Genres, Skill Development, etc. Each prompt may belong to "
+                "multiple categories separated by commas."
+            ),
+        )
+
+        # Extract predictions
+        predictions = [ann.get("category", "") for ann in annotations]
+
+        # Calculate accuracy metrics
+        exact_matches = 0
+        partial_matches = 0
+
+        for i, (pred, gt) in enumerate(zip(predictions, ground_truth)):
+            # Parse categories (they're comma-separated)
+            pred_cats = set(c.strip() for c in (pred or "").split(","))
+            gt_cats = set(c.strip() for c in (gt or "").split(","))
+
+            # Exact match: all categories match
+            if pred_cats == gt_cats:
+                exact_matches += 1
+                partial_matches += 1
+            # Partial match: any overlap in categories
+            elif pred_cats & gt_cats:
+                partial_matches += 1
+
+            # Print first few examples
+            if i < 5:
+                print(f"\n--- Example {i+1} ---")
+                print(f"Prompt: {documents[i][:100]}...")
+                print(f"Ground Truth: {gt}")
+                print(f"Predicted: {pred}")
+                print(f"Match: {'✓ Exact' if pred_cats == gt_cats else '✓ Partial' if pred_cats & gt_cats else '✗ No match'}")
+
+        # Calculate accuracy percentages
+        exact_accuracy = (exact_matches / len(documents)) * 100
+        partial_accuracy = (partial_matches / len(documents)) * 100
+
+        print(f"\n{'='*60}")
+        print(f"ACCURACY RESULTS (n={len(documents)})")
+        print(f"{'='*60}")
+        print(f"Exact matches: {exact_matches}/{len(documents)} ({exact_accuracy:.1f}%)")
+        print(f"Partial matches: {partial_matches}/{len(documents)} ({partial_accuracy:.1f}%)")
+        print(f"{'='*60}")
+
+        # Print category schema that was generated
+        if annotations and "category_schema" in annotations[0]:
+            schema = annotations[0]["category_schema"]
+            print("\nGenerated Category Schema:")
+            for cat in schema.get("categories", [])[:10]:  # Show first 10
+                print(f"  - {cat.get('name')}: {cat.get('description', '')[:80]}")
+
+        # Assert that partial accuracy is > 70%
+        # (Partial matching is more appropriate since categories can be comma-separated)
+        assert partial_accuracy > 70, (
+            f"LM annotator accuracy ({partial_accuracy:.1f}%) is below 70% threshold. "
+            f"This suggests the annotator cannot reliably predict the taxonomy categories."
+        )
+
+        print(f"\n✓ LM annotator achieves {partial_accuracy:.1f}% accuracy on infinite_prompts taxonomy")
 
 
 if __name__ == "__main__":

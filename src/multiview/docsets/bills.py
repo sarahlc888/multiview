@@ -163,8 +163,8 @@ class BillsDocSet(BaseDocSet):
 
         for doc in documents:
             text = doc["text"]
-            topic_annotations[text] = {"criterion_value": doc["topic"]}
-            subtopic_annotations[text] = {"criterion_value": doc["subtopic"]}
+            topic_annotations[text] = {"prelabel": doc["topic"]}
+            subtopic_annotations[text] = {"prelabel": doc["subtopic"]}
 
         self.PRECOMPUTED_ANNOTATIONS["topic"] = topic_annotations
         self.PRECOMPUTED_ANNOTATIONS["subtopic"] = subtopic_annotations

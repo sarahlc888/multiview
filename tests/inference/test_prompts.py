@@ -35,7 +35,7 @@ class TestPromptCollection:
         pc = PromptCollection(
             packed_prompts=["packed1", "packed2"],
             prompts=["prompt1", "prompt2"],
-            embed_query_instr=["instr1", "instr2"],
+            instructions=["instr1", "instr2"],
         )
 
         result = pc.to_dict()
@@ -45,7 +45,7 @@ class TestPromptCollection:
         assert "non_packed_prompts" in result  # This is the dict key
         assert result["packed_prompts"] == ["packed1", "packed2"]
         assert result["non_packed_prompts"] == ["prompt1", "prompt2"]
-        assert result["embed_query_instrs"] == ["instr1", "instr2"]
+        assert result["instructions"] == ["instr1", "instr2"]
 
     def test_deduplication(self):
         """Test prompt deduplication."""
@@ -205,18 +205,45 @@ class TestFormatPrompts:
             provider="openai_embedding",
             model_name="text-embedding-3-large",
             prompt_template="{query}",
-            embed_query_instr_template="Represent this query: ",
+            instruction="Represent this query: ",
             parser="vector",
         )
 
         pc = format_prompts(inputs, config)
 
-        assert pc.embed_query_instr is not None
-        assert len(pc.embed_query_instr) == 1
-        assert pc.embed_query_instr[0] == "Represent this query: "
+        assert pc.instructions is not None
+        assert len(pc.instructions) == 1
+        assert pc.instructions[0] == "Represent this query: "
 
         # Packed prompt should include instruction
         assert "Represent this query:" in pc.packed_prompts[0]
+
+    def test_embed_instructions_with_criterion(self):
+        """Test embedding instructions with criterion name and description."""
+        inputs = {
+            "document": ["Machine learning is a subset of AI."],
+            "criterion": ["topic"],
+            "criterion_description": ["The subject matter or main topic of the document"],
+        }
+        config = InferenceConfig(
+            provider="hf_embedding",
+            model_name="Qwen/Qwen3-Embedding-8B",
+            prompt_template="{document}",
+            instruction="Given a query, retrieve documents based on the criterion '{criterion}': {criterion_description}",
+            parser="vector",
+        )
+
+        pc = format_prompts(inputs, config)
+
+        assert pc.instructions is not None
+        assert len(pc.instructions) == 1
+        # Should include both criterion name and description
+        assert "criterion 'topic'" in pc.instructions[0]
+        assert "subject matter or main topic" in pc.instructions[0]
+
+        # Packed prompt should include full instruction
+        assert "criterion 'topic'" in pc.packed_prompts[0]
+        assert "subject matter or main topic" in pc.packed_prompts[0]
 
 
 class TestPromptDeduplicationIntegration:

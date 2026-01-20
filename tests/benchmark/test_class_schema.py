@@ -44,6 +44,7 @@ class TestSchemaUnwrapping:
             documents=["doc1", "doc2"],
             criterion="test_criterion",
             criterion_description="test description",
+            document_type="test document",
             n_samples=2,
         )
 
@@ -71,6 +72,7 @@ class TestSchemaUnwrapping:
                 documents=["doc1", "doc2"],
                 criterion="test_criterion",
                 criterion_description="test description",
+                document_type="test document",
                 n_samples=2,
             )
 
@@ -90,6 +92,7 @@ class TestSchemaUnwrapping:
                 documents=["doc1"],
                 criterion="test",
                 criterion_description="test",
+                document_type="test document",
             )
 
 
@@ -123,6 +126,7 @@ class TestCategoryClassification:
             criterion="test",
             criterion_description="test desc",
             category_schema=schema,
+            document_type="test document",
         )
 
         assert len(results) == 2
@@ -157,6 +161,7 @@ class TestCategoryClassification:
             criterion="test",
             criterion_description="test desc",
             category_schema=schema,
+            document_type="test document",
         )
 
         # Should match despite case difference
@@ -187,6 +192,7 @@ class TestCategoryClassification:
             criterion="test",
             criterion_description="test desc",
             category_schema=schema,
+            document_type="test document",
         )
 
         # Should fall back to first category
@@ -214,6 +220,7 @@ class TestCategoryClassification:
             criterion="test",
             criterion_description="test desc",
             category_schema=schema,
+            document_type="test document",
         )
 
         assert results[0]["category"] is None

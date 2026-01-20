@@ -18,6 +18,7 @@ class GSM8KDocSet(BaseDocSet):
     # Metadata
     DATASET_PATH = "openai/gsm8k"
     DESCRIPTION = "GSM8K math word problems"
+    DOCUMENT_TYPE = "Math word problem with solution"
 
     # Criteria that can be extracted deterministically (no LLM needed)
     # word_count is automatically included by base class
@@ -51,7 +52,7 @@ class GSM8KDocSet(BaseDocSet):
             dataset = load_dataset(
                 self.DATASET_PATH, "main", split=split, streaming=True
             )
-            dataset = dataset.shuffle(seed=42).take(max_docs)
+            dataset = dataset.shuffle(seed=42, buffer_size=10000).take(max_docs)
         else:
             dataset = load_dataset(self.DATASET_PATH, "main", split=split)
             if max_docs is not None:
@@ -75,7 +76,7 @@ class GSM8KDocSet(BaseDocSet):
             if not use_streaming and max_docs is not None and i + 1 >= max_docs:
                 break
 
-        return documents
+        return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
         """Extract text from a document.
