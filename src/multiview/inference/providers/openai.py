@@ -12,6 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
 
+from tqdm import tqdm
+
 from multiview.constants import OPENAI_API_KEYS
 from multiview.inference.cost_tracker import record_usage
 
@@ -299,9 +301,14 @@ def openai_completions(
     # Execute concurrently (max_workers=1 makes it sequential)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         completions = list(
-            executor.map(
-                lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
-                prompt_prefill_pairs,
+            tqdm(
+                executor.map(
+                    lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
+                    prompt_prefill_pairs,
+                ),
+                desc="OpenAI completions",
+                total=len(prompt_prefill_pairs),
+                unit="req",
             )
         )
 

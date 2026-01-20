@@ -10,6 +10,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+from tqdm import tqdm
+
 from multiview.constants import ANTHROPIC_API_KEY
 from multiview.inference.cost_tracker import record_usage
 
@@ -173,9 +175,14 @@ def anthropic_completions(
     # Execute concurrently (max_workers=1 makes it sequential)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         completions = list(
-            executor.map(
-                lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
-                prompt_prefill_pairs,
+            tqdm(
+                executor.map(
+                    lambda pair: completion_fn(prompt=pair[0], prefill=pair[1]),
+                    prompt_prefill_pairs,
+                ),
+                desc="Anthropic completions",
+                total=len(prompt_prefill_pairs),
+                unit="req",
             )
         )
 

@@ -8,6 +8,8 @@ Supports:
 
 import logging
 
+from tqdm import tqdm
+
 from multiview.constants import HF_CACHE_DIR
 
 logger = logging.getLogger(__name__)
@@ -129,7 +131,11 @@ def hf_local_reranker_completions(
     all_scores = []
 
     with torch.no_grad():
-        for i in range(0, len(prompts), batch_size):
+        for i in tqdm(
+            range(0, len(prompts), batch_size),
+            desc="HF local reranker",
+            unit="batch",
+        ):
             batch_prompts = prompts[i : i + batch_size]
 
             # Tokenize with proper prefix/suffix
@@ -233,7 +239,11 @@ def hf_local_contextual_reranker_completions(
     all_scores = []
 
     with torch.no_grad():
-        for i in range(0, len(prompts), batch_size):
+        for i in tqdm(
+            range(0, len(prompts), batch_size),
+            desc="HF contextual reranker",
+            unit="batch",
+        ):
             batch_prompts = prompts[i : i + batch_size]
 
             # Tokenize with left padding
@@ -388,7 +398,11 @@ def hf_local_hidden_state_completions(
     all_vectors = []
 
     with torch.no_grad():
-        for i in range(0, len(processed_prompts), batch_size):
+        for i in tqdm(
+            range(0, len(processed_prompts), batch_size),
+            desc="HF hidden states",
+            unit="batch",
+        ):
             batch_prompts = processed_prompts[i : i + batch_size]
 
             # Tokenize with left padding

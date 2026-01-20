@@ -64,6 +64,7 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 from multiview.inference.parsers import get_parser
 from multiview.utils.prompt_utils import read_or_return
@@ -212,7 +213,9 @@ def pseudologit_completions(
     # For each document, format prompts with taxonomy and sample N times
     all_vectors = []
 
-    for doc_idx, document in enumerate(prompts):
+    for doc_idx, document in tqdm(
+        enumerate(prompts), desc="Pseudologit sampling", total=len(prompts), unit="doc"
+    ):
         # Format the classification prompt using template
         full_prompt = template_text.format(
             document=document,
@@ -223,7 +226,7 @@ def pseudologit_completions(
         # Create N copies of this prompt (one per sample)
         sample_prompts = [full_prompt] * n_samples
 
-        logger.info(
+        logger.debug(
             f"Sampling document {doc_idx + 1}/{len(prompts)} ({n_samples} samples)..."
         )
         logger.debug(f"Sample prompt: {sample_prompts[0]}")

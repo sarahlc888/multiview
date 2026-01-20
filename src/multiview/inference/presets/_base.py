@@ -32,7 +32,7 @@ class InferenceConfig:
     max_tokens: int | None = None
 
     # Concurrency settings
-    max_workers: int = 5  # Max concurrent API requests
+    max_workers: int = 25  # Max concurrent API requests
     max_retries: int = 5  # Max retries per request
     initial_retry_delay: float = 1.0  # Initial backoff delay (seconds)
     retry_backoff_factor: float = 2.0  # Backoff multiplier

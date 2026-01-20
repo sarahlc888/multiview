@@ -10,6 +10,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
+from tqdm import tqdm
+
 from multiview.constants import GEMINI_API_KEY
 from multiview.inference.cost_tracker import record_usage
 
@@ -249,7 +251,7 @@ def gemini_completions(
 
     client = genai.Client(
         api_key=api_key,
-        http_options=HttpOptions(timeout=request_timeout),
+        http_options=HttpOptions(timeout=int(request_timeout * 1000)),
     )
 
     # Validate and log image list if provided
@@ -294,11 +296,9 @@ def gemini_completions(
         f"(timeout: {request_timeout}s per request)"
     )
 
-    # Execute concurrently with progress logging
+    # Execute concurrently with progress bar
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         completions = []
-        completed = 0
-        total = len(prompt_prefill_image_tuples)
 
         # Submit all tasks
         futures = [
@@ -306,19 +306,13 @@ def gemini_completions(
             for t in prompt_prefill_image_tuples
         ]
 
-        # Collect results with progress logging
-        for future in futures:
+        # Collect results with progress bar
+        for future in tqdm(futures, desc="Gemini completions", unit="req"):
             try:
                 result = future.result()
                 completions.append(result)
-                completed += 1
-
-                # Log progress every 10 completions or at milestones
-                if completed % 10 == 0 or completed == total:
-                    logger.info(f"Progress: {completed}/{total} completions finished")
             except Exception as e:
                 logger.error(f"Request failed with exception: {e}")
                 completions.append({"text": ""})
-                completed += 1
 
     return {"completions": completions}

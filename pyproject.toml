@@ -21,6 +21,7 @@ dependencies = [
     "pylate>=1.0.0",
     "numpy>=1.24.0",
     "accelerate>=0.20.0",
+    "tqdm>=4.0.0",
 ]
 
 [project.optional-dependencies]

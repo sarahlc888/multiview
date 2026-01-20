@@ -8,6 +8,8 @@ import gc
 import logging
 from collections.abc import Sequence
 
+from tqdm import tqdm
+
 from multiview.constants import HF_CACHE_DIR
 
 logger = logging.getLogger(__name__)
@@ -203,7 +205,12 @@ def hf_local_colbert_completions(
 
     with torch.inference_mode():
         for batch_idx, (batch_prompts, batch_instructions) in enumerate(
-            zip(batched_prompts, batched_instructions, strict=False)
+            tqdm(
+                zip(batched_prompts, batched_instructions, strict=False),
+                desc="ColBERT embeddings",
+                total=len(batched_prompts),
+                unit="batch",
+            )
         ):
             # All instructions in a batch should be the same (due to batching strategy)
             unique_instructions = set(batch_instructions)

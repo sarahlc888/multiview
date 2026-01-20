@@ -36,7 +36,6 @@ SPECIALIZED_PRESETS = {
             "temperature": 0.7,
             "provider": "gemini",
             "max_tokens": 8192,
-            "max_workers": 5,
         },
     ),
     "pseudologit_gemini_n10": InferenceConfig(
@@ -51,7 +50,6 @@ SPECIALIZED_PRESETS = {
             "temperature": 0.7,
             "provider": "gemini",
             "max_tokens": 8192,
-            "max_workers": 5,
         },
     ),
     "pseudologit_gemini_n50": InferenceConfig(
@@ -66,7 +64,6 @@ SPECIALIZED_PRESETS = {
             "temperature": 0.7,
             "provider": "gemini",
             "max_tokens": 8192,
-            "max_workers": 5,
         },
     ),
 }

@@ -283,8 +283,8 @@ def _log_filter_stats(
 
 
 def _check_consistency(
-    original_rating: int,
-    swapped_rating: int,
+    original_rating: int | None,
+    swapped_rating: int | None,
     min_threshold: int = 3,
     max_threshold: int = 1,
 ) -> tuple[bool, str | None]:
@@ -294,14 +294,18 @@ def _check_consistency(
     Swapped must be ≤ max_threshold (strictly Invalid - anchor NOT closer to negative than positive)
 
     Args:
-        original_rating: Quality rating for (anchor, positive, negative)
-        swapped_rating: Quality rating for (anchor, negative, positive) - swapped
+        original_rating: Quality rating for (anchor, positive, negative), or None if parsing failed
+        swapped_rating: Quality rating for (anchor, negative, positive) - swapped, or None if parsing failed
         min_threshold: Minimum rating for original to pass (default: 3)
         max_threshold: Maximum rating for swapped to pass (default: 1)
 
     Returns:
         Tuple of (passed, failure_reason) where failure_reason is None if passed
     """
+    if original_rating is None:
+        return False, "original_parse_failed"
+    if swapped_rating is None:
+        return False, "swapped_parse_failed"
     if original_rating < min_threshold:
         return False, f"original_too_low_{original_rating}"
     if swapped_rating > max_threshold:

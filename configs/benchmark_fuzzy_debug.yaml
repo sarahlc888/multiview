@@ -33,36 +33,36 @@ tasks:
       criterion: topic
       triplet_style: lm_tags
 
-    # - document_set: crossword_clues
-    #   criterion: type_of_challenge
-    #   triplet_style: lm_tags
+    - document_set: crossword_clues
+      criterion: type_of_challenge
+      triplet_style: lm_tags
 
-    # - document_set: crossword_clues
-    #   criterion: clue_type
-    #   triplet_style: lm_tags
+    - document_set: crossword_clues
+      criterion: clue_type
+      triplet_style: lm_tags
 
-    # - document_set: gsm8k
-    #   criterion: problem_type
-    #   triplet_style: lm_tags
+    - document_set: gsm8k
+      criterion: problem_type
+      triplet_style: lm_tags
 
-    # - document_set: gsm8k
-    #   criterion: arithmetic
-    #   triplet_style: lm_tags
+    - document_set: gsm8k
+      criterion: arithmetic
+      triplet_style: lm_tags
 
-    # - document_set: haiku
-    #   criterion: imagery
-    #   triplet_style: lm_tags
-    #   # triplet_style: lm_summary_sentence
+    - document_set: haiku
+      criterion: imagery
+      triplet_style: lm_tags
+      # triplet_style: lm_summary_sentence
 
-    # - document_set: haiku
-    #   criterion: meaning_evoked
-    #   triplet_style: lm_tags
-    #   # triplet_style: lm_summary_sentence
+    - document_set: haiku
+      criterion: meaning_evoked
+      triplet_style: lm_tags
+      # triplet_style: lm_summary_sentence
 
-    # - document_set: haiku
-    #   criterion: poem_composition
-    #   triplet_style: lm_tags
-    #   # triplet_style: lm_summary_sentence
+    - document_set: haiku
+      criterion: poem_composition
+      triplet_style: lm_tags
+      # triplet_style: lm_summary_sentence
 
 
 
