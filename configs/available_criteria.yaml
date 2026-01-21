@@ -17,6 +17,11 @@
 # Values can be either:
 # - Inline text: "The description goes here"
 # - File reference: "src/multiview/prompts/criteria/filename.txt" (relative to project root)
+#
+# GLOBAL CRITERIA: Common criteria available to all datasets as fallback
+_global:
+  word_count:
+    description: "The number of words in the text"
 
 # GSM8K: Math word problems
 # GSM8K word problems have clear orthogonal criteria (algebraic structure vs. narrative context)
@@ -24,10 +29,6 @@ gsm8k:
   final_expression:
     description: "The expression that needs to be evaluated to produce the final answer. Independent of specific numerical values, what is the structure of this expression?"
     summary_hint: "Use this format for the summary: 'answer = 150 / 5 + 30 / 5'"
-
-  word_count:
-    description: "The number of words in the text"
-
 
   arithmetic:
     embed_instr: "Given a document, retrieve documents that have a similar sequence of arithmetic operations"
@@ -63,10 +64,6 @@ crossword:
     category_schema_hint: "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, and more."
     tag_schema_hint: "Create tags for a bunch of different types of clues: e.g. direct_definition (provides a standard definition or synonym for the word that is the answer), oblique_definition (provides a definition of the word that is the answer, but in a way that is very cryptic), direct_reference (refers directly to a notable person/event/object/place via their claim to fame), niche_reference (refers to a trivia factoid that would make the answer obvious, if known), anagram (uses an anagram of the answer), cross_reference (references to other parts of the puzzle), needs_letter (extremely hard and probably not able to be solved without knowing some of the letters), answer_is_word, answer_is_proper_noun, answer_is_abbrev, answer_is_phrase, answer_is_fragment, etc."
 
-  word_count:
-    description: "The number of words in the text"
-
-
   type_of_challenge:
     description: "What makes the clue difficult to solve? What is the source of ambiguity? Does it reference obscure facts? Is the hint obfuscated by word play?"
     default_hint: "Consider distinctions like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?). Also consider tags like is_a_thinker (you might be able to get it by thinking harder about it), know_it_or_dont (more time would not help solve); clear_clue (it's obvious what the clue says, you just don't know the answer), ambiguous_clue (it's not clear what the clue itself is even saying), misleading_clue (the clue is actively misleading in some way)."
@@ -90,10 +87,6 @@ rocstories:
     description: "Relationship to Christopher Booker's Seven Basic Plots: Overcoming the Monster, Rags to Riches, The Quest, Voyage and Return, Comedy, Tragedy, Rebirth. Also consider: Multiple Plots (combines elements of multiple plots), None/Other (doesn't fit the framework)"
     default_hint: "Consider: (1) Overcoming the Monster - protagonist defeats an antagonistic force that threatens them or their homeland; (2) Rags to Riches - poor protagonist acquires power/wealth/mate, loses it, then regains it while growing as a person; (3) The Quest - protagonist and companions set out to acquire an object or reach a location, facing obstacles; (4) Voyage and Return - protagonist goes to a strange land, overcomes threats or learns lessons, and returns with experience; (5) Comedy - conflict becomes increasingly confusing but is clarified in a single event, resulting in a happy ending; (6) Tragedy - hero with a major flaw or mistake that causes their undoing and fall; (7) Rebirth - an event forces the protagonist to change their ways and become a better person."
     # tag_schema_hint: "Create tags for plot elements: has_antagonist, has_threat, involves_defeat_of_evil, has_rise_and_fall, has_personal_growth, has_journey, has_quest_object, has_obstacles, has_strange_location, has_return_home, has_confusion_then_clarity, has_happy_ending, has_tragic_flaw, has_downfall, has_transformation, has_redemption, etc. Also consider similarity tags to prominent examples: similar_to_star_wars, similar_to_harry_potter, similar_to_beowulf (Overcoming the Monster); similar_to_cinderella, similar_to_aladdin, similar_to_great_expectations (Rags to Riches); similar_to_lotr, similar_to_raiders, similar_to_odyssey (The Quest); similar_to_alice_in_wonderland, similar_to_hobbit, similar_to_lion_king (Voyage and Return); similar_to_midsummer_nights_dream, similar_to_much_ado (Comedy); similar_to_romeo_and_juliet, similar_to_hamlet, similar_to_macbeth (Tragedy); similar_to_christmas_carol, similar_to_beauty_and_beast, similar_to_groundhog_day (Rebirth)."
-
-  word_count:
-    description: "The number of words in the text"
-
 
   abstract_narrative:
     description: "The high-level narrative shape or story arc, independent of specific details/characters/events (problem-solution, cause-effect, hero's journey, conflict-resolution, character growth, unexpected twist, meet-cute, 'no plot' plot, etc.)."
@@ -125,10 +118,6 @@ abstractsim:
     source: adapted
     description: "The level of abstraction of the text. Does the text refer to a specific idea or a general concept?"
 
-  word_count:
-    description: "The number of words in the text"
-
-
 # Analogies: Word analogy pairs
 # Source: relbert/analogy_questions (BATS, SAT, Google)
 # Each document is a word pair (e.g., "dog : puppy")
@@ -139,20 +128,12 @@ analogies:
     category_schema_hint: "Consider categories based on relation types: lexical-semantics (antonyms, synonyms, hypernyms, gradable-opposites), encyclopedic-knowledge (country-capital, city-state, country-language, animal-sound, animal-young, animal-shelter), derivational-morphology (verb-to-noun, adjective-to-noun, verb-to-adjective, noun-to-verb), inflectional-morphology (present-to-past, singular-to-plural, base-to-comparative), semantic-relations (part-to-whole, agent-to-action, object-to-function, cause-to-effect), etc."
     tag_schema_hint: "Create tags for different relation types: is_antonym, is_synonym, is_hypernym, is_gradable_opposite, is_country_capital, is_city_state, is_animal_sound, is_animal_young, is_verb_noun_derivation, is_adj_noun_derivation, is_tense_inflection, is_plural_inflection, is_part_whole, is_agent_action, is_lexical_relation, is_encyclopedic_knowledge, is_morphological, is_derivational, is_inflectional, is_semantic_relation, etc."
 
-  word_count:
-    description: "The number of words in the text"
-
-
 # HackerNews: Tech news posts
 hackernews:
   angle_of_interest:
     description: "What might motivate someone to click and read this link? What is the wow factor that sparks curiosity, seems impressive/worthwhile, etc."
     category_schema_hint: "Consider categories like technical deep-dive (for engineers wanting implementation details), business/startup news (for founders/VCs tracking industry), thought leadership (big ideas and tech philosophy), practical tutorials, personal projects, academic research, career/hiring, product launches, controversy/hot takes, general news, historical retrospective on tech developments, etc."
     tag_schema_hint: "Create tags for interest angles: appeals_to_engineers, appeals_to_founders, appeals_to_researchers, appeals_to_job_seekers, appeals_to_early_adopters, technical_depth, business_implications, philosophical_angle, practical_utility, academic_rigor, controversial_take, historical_perspective, futurist_speculation, inside_baseball; cutting_edge_physical_science (new developments in biology, physics, etc), cutting_edge_math (new developments in math research, typically from quanta), youth_wow_factor (a cool project created by someone very young), fun_toy_project (not interesting because of technical complexity but interesting because it is a fun idea executed well, e.g. wikipedia in tik tok format), browser_game (a playable game, e.g. snake on a sphere), whimsical_gimmick (a fun website that is whimsical, e.g. website that pulls up an image of a person pointing wherever your cursor is at that moment), web_design (a link that is impressive due to its aesthetic value), personal_project_white_whale (a long running personal project), elegant_technical_deep_dive (a deep dive into re-implementing a very complex system from scratch, typically highlighting that it has very low lines of code relative to the full systems that it mocks, may also have educational value, e.g. nanochat), tech_think_piece (general interest pieces in outlets like the New Yorker, discussing some tech related topics), startup_news (news about companies raising money, IPOs, acquisitions, etc), tech_philosophy (philosophy or nuggets of wisdom from individual programmers on tech blogs)."
-
-  word_count:
-    description: "The number of words in the text"
-
 
   article_topic:
     description: "The topic or subject matter of the article (technology, business, science, culture, politics, etc.). Does the article reference specific technologies, companies, products, people, events?"
@@ -161,10 +142,6 @@ hackernews:
 onion_headlines:
   topic:
     description: "The literal subject matter of the headline. What is the joke about? What people/places/things are referenced?"
-
-  word_count:
-    description: "The number of words in the text"
-
 
   joke_type:
     description: "What makes the joke funny? Beyond the subject matter/content, what strategies does the headline use? e.g. Irony - Intended meaning is opposite of literal meaning; Character - Comedic character acting on personality traits; Reference - Common experiences that audiences can relate to; Shock - Surprising jokes typically involving sex, drugs, gross-out humor, swearing; Parody - Mimic a familiar character, trope or cliche in an unfamiliar way; Hyperbole - Exaggeration to absurd extremes; Wordplay - Puns, rhymes, double entendres; Analogy - Comparing two disparate things; Madcap - Crazy, wacky, silly, nonsensical; Meta-humor - Jokes about jokes, or about the idea of comedy; Misplaced Focus - Attention is focused on the wrong thing."
@@ -177,10 +154,6 @@ arxiv_cs:
   topic:
     description: "Topic of the paper. What subfield is it in and what technical insights does it contribute?"
     default_hint: src/multiview/prompts/custom/arxiv_topic.txt
-
-  word_count:
-    description: "The number of words in the text"
-
 
   research_sensibility:
     description: "The type of paper and research sensibility—what kind of intellectual work it represents and its contribution style."
@@ -242,10 +215,6 @@ dickinson:
   #   # pairwise_sim_hint: "Similar if they use imagery with similar symbolic resonance or archetypal weight, even if the specific images differ. Focus on what the imagery signifies (transcendence, containment, transformation, the divine) rather than literal objects."
   #   category_schema_hint: "Categories: avian-imagery (birds/wings/flight), floral-imagery (flowers/gardens/blooming), insect-imagery (bees/butterflies/flies), celestial-imagery (sun/moon/stars/sky), domestic-imagery (house/room/door/window), natural-phenomena (storm/wind/snow/light), death-imagery (grave/tomb/coffin/funeral), water-imagery (sea/ocean/dew/rain), precious-objects (jewels/crown/pearl), color-symbolism (white/purple/gold), geometric-concepts (circumference/angle/arc), temporal-markers (noon/dusk/dawn/seasons), religious-imagery (heaven/soul/sacrament/cross)."
   #   tag_schema_hint: "Create tags: uses_bird_imagery, uses_flower_imagery, uses_bee_imagery, uses_garden_imagery, uses_sun_imagery, uses_death_imagery, uses_grave_imagery, uses_house_imagery, uses_sea_imagery, uses_jewel_imagery, uses_white_symbolism, uses_circumference_concept, features_storm, features_light, features_darkness, features_doors, features_windows, features_flight, features_stillness, natural_world_dominant, domestic_world_dominant, celestial_focus, earthly_focus, etc."
-
-  word_count:
-    description: "The number of words in the text"
-
 
   # philosophical_stance:
   #   description: "The poem's philosophical posture or epistemological stance. How does it approach knowing, being, and meaning? Stances include: radical doubt/skepticism, fierce assertion/certainty, paradox/contradiction, questioning/interrogation, oblique knowing (truth told slant), experiential immediacy (sensory knowing), mystical insight, playful speculation, defiant affirmation, resigned acceptance, wonder/awe, ironic distance, ecstatic revelation."
@@ -309,10 +278,6 @@ goodreads_quotes:
     description: "Are these two quotes interesting when placed in conversation with each other? Do they speak to the same themes? Could you write an interesting essay about them, without it feeling forced, artificial, or corny? Would it be interesting to study these quotes in conjunction?"
     # pairwise_sim_hint: "Quotes are positively related if they create interesting dialogue when paired—complementing, contrasting productively, or illuminating shared concepts. They should feel naturally connected without redundancy, offering more insight together than alone. Avoid forced, artificial, or superficially connected pairs (e.g., only sharing a keyword)."
 
-  word_count:
-    description: "The number of words in the text"
-
-
 infinite_prompts:
   categories:
     description: >
@@ -329,17 +294,9 @@ infinite_prompts:
       # They are different if they have completely disjoint category sets (e.g., one is
       # purely "Philosophical Questions" while the other is purely "Skill Development").
 
-  word_count:
-    description: "The number of words in the text"
-
-
 arxiv_abstract_sentences:
   source_abstract:
     description: "Represent these sentences so that sentences from the same abstract are close together."
-
-  word_count:
-    description: "The number of words in the text"
-
 
   sentence_purpose:
     # source: https://www.lesswrong.com/posts/eJGptPbbFPZGLpjsp/highly-opinionated-advice-on-how-to-write-ml-papers
@@ -447,16 +404,10 @@ bills:
     description: "The specific subtopic or category within the broader policy domain. This provides a more granular classification of the bill's focus area, such as 'Elementary & Secondary' within Education or 'Natural Gas & Oil' within Energy."
 
 # Moral Fables
-moralfables:
-  word_count:
-    description: "The number of words in the text"
+moralfables: {}
 
 # Infinite Chats
-infinite_chats:
-  word_count:
-    description: "The number of words in the text"
+infinite_chats: {}
 
 # UT Zappos 50K
-ut_zappos50k:
-  word_count:
-    description: "The number of words in the text"
+ut_zappos50k: {}

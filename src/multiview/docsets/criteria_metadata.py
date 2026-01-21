@@ -15,6 +15,11 @@ Hint resolution order:
 3. Auto-generation or None
 
 The YAML values can be either inline text or file references (e.g., "prompts/criteria/file.txt").
+
+Global Criteria:
+The YAML file supports a special _global section that defines common criteria available to all datasets.
+Datasets automatically inherit global criteria unless they override them with their own definitions.
+This eliminates the need to repeatedly define common criteria like word_count across datasets.
 """
 
 from pathlib import Path
@@ -27,6 +32,9 @@ from multiview.utils.prompt_utils import read_or_return
 def load_criteria_metadata():
     """
     Load criteria metadata from YAML config file.
+
+    Supports a _global section for common criteria that all datasets can inherit.
+    Dataset-specific criteria override global criteria when both are defined.
 
     Returns:
         Dictionary mapping dataset names to their criteria metadata
@@ -46,10 +54,33 @@ def load_criteria_metadata():
     with open(config_path) as f:
         data = yaml.safe_load(f)
 
-    # Process each dataset's criteria
+    # Extract global criteria (if present)
+    global_criteria_raw = data.pop("_global", {})
+
+    # Process global criteria
+    global_criteria = {}
+    for criterion_name, metadata in global_criteria_raw.items():
+        processed_metadata = {}
+        for key, value in metadata.items():
+            # Handle nested dicts (like triplet_example_hint)
+            if isinstance(value, dict):
+                processed_metadata[key] = {
+                    k: read_or_return(v, base_dir=project_root) if v else v
+                    for k, v in value.items()
+                }
+            else:
+                processed_metadata[key] = (
+                    read_or_return(value, base_dir=project_root) if value else value
+                )
+        global_criteria[criterion_name] = processed_metadata
+
+    # Process each dataset's criteria, merging with global criteria
     processed = {}
     for dataset_name, criteria_dict in data.items():
-        processed[dataset_name] = {}
+        # Start with a copy of global criteria
+        processed[dataset_name] = global_criteria.copy()
+
+        # Process dataset-specific criteria (these override global)
         for criterion_name, metadata in criteria_dict.items():
             processed_metadata = {}
             for key, value in metadata.items():
@@ -63,6 +94,7 @@ def load_criteria_metadata():
                     processed_metadata[key] = (
                         read_or_return(value, base_dir=project_root) if value else value
                     )
+            # Override global criterion if present
             processed[dataset_name][criterion_name] = processed_metadata
 
     return processed
