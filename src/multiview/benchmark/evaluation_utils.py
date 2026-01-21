@@ -249,6 +249,28 @@ def _prepare_instruction_overrides(
     return preset_overrides if preset_overrides else None
 
 
+def _get_default_cache_name(method_type: str, method_config: dict) -> str:
+    """Get the default cache name for a method type.
+
+    Most methods use their type as the cache name, but some have special cases.
+    """
+    if method_type == "lm_judge_triplet":
+        return "lmjudge"
+    elif method_type == "lm_judge_pair":
+        return "lmjudge_pair"
+    elif method_type == "document_rewrite":
+        embedding_preset = method_config.get("embedding_preset", "bm25_lexical")
+        return f"dr_{embedding_preset}"
+    elif method_type == "query_expansion_bm25":
+        return "qe_bm25"
+    elif method_type == "query_relevance_vectors":
+        return "qrv"
+    elif method_type == "in_one_word":
+        return "inoneword"
+    else:
+        return method_type
+
+
 def evaluate_method(
     *, method_type: str, task: Any, method_config: dict
 ) -> dict[str, Any]:
@@ -321,8 +343,17 @@ def evaluate_method(
             # Preset not found in registry - let it fail later with better error message
             pass
 
+    # Extract shared data once
+    document_texts = _extract_document_texts(task)
     criterion_metadata = (
         task.document_set.get_criterion_metadata(task.criterion_name) or {}
+    )
+
+    # Compute cache alias once (used by most methods except bm25)
+    cache_alias = make_cache_alias(
+        task=task,
+        method_config=method_config,
+        default_name=_get_default_cache_name(method_type, method_config),
     )
 
     if method_type == "lm_judge_triplet":
@@ -339,11 +370,6 @@ def evaluate_method(
                 "reason": "Missing or insufficient annotations",
                 "method_name": display_name,
             }
-
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="lmjudge"
-        )
-        document_texts = _extract_document_texts(task)
 
         raw = evaluate_with_lm_judge_triplet(
             triplets=build_triplet_dicts(document_texts, task.triplets),
@@ -370,11 +396,6 @@ def evaluate_method(
                 "method_name": display_name,
             }
 
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="lmjudge_pair"
-        )
-        document_texts = _extract_document_texts(task)
-
         raw = evaluate_with_lm_judge_pair(
             triplets=build_triplet_dicts(document_texts, task.triplets),
             criterion=task.criterion_name,
@@ -391,10 +412,6 @@ def evaluate_method(
         preset_overrides = _prepare_instruction_overrides(
             method_config, criterion_metadata
         )
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="embeddings"
-        )
-        document_texts = _extract_document_texts(task)
         criterion_description = criterion_metadata.get("description")
 
         raw = evaluate_with_embeddings(
@@ -425,11 +442,6 @@ def evaluate_method(
                 preset_overrides = {}
             preset_overrides["instruction"] = instruction
 
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="reranker"
-        )
-        document_texts = _extract_document_texts(task)
-
         raw = evaluate_with_reranker(
             documents=document_texts,
             triplet_ids=task.triplets,
@@ -446,11 +458,6 @@ def evaluate_method(
         if method_config.get("use_annotations"):
             logger.warning("bm25: use_annotations is not supported; ignoring.")
 
-        # Extract text from documents (handle both string and dict formats)
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
-
         raw = evaluate_with_bm25(
             documents=document_texts,
             triplet_ids=task.triplets,
@@ -464,17 +471,6 @@ def evaluate_method(
         summary_preset = method_config.get("summary_preset", "document_summary_gemini")
         embedding_preset = method_config.get("embedding_preset", "bm25_lexical")
         preset_overrides = method_config.get("preset_overrides")
-
-        cache_alias = make_cache_alias(
-            task=task,
-            method_config=method_config,
-            default_name=f"dr_{embedding_preset}",
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
 
         raw = evaluate_with_document_rewrite(
             documents=document_texts,
@@ -501,17 +497,6 @@ def evaluate_method(
         num_summaries = method_config.get("num_summaries", 5)
         preset_overrides = method_config.get("preset_overrides")
 
-        cache_alias = make_cache_alias(
-            task=task,
-            method_config=method_config,
-            default_name="multisummary",
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
-
         raw = evaluate_with_multisummary(
             documents=document_texts,
             triplet_ids=task.triplets,
@@ -531,15 +516,6 @@ def evaluate_method(
     # Backwards compatibility for query_expansion_bm25
     if method_type == "query_expansion_bm25":
         summary_preset = method_config.get("summary_preset", "document_summary_gemini")
-
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="qe_bm25"
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
 
         raw = evaluate_with_document_rewrite(
             documents=document_texts,
@@ -575,15 +551,6 @@ def evaluate_method(
                 }
             annotations = task.document_annotations
 
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="inoneword"
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
-
         raw = evaluate_with_in_one_word(
             documents=document_texts,
             triplet_ids=task.triplets,
@@ -603,15 +570,6 @@ def evaluate_method(
         classes_file = method_config.get(
             "classes_file", "prompts/custom/gsm8k_classes.json"
         )
-
-        cache_alias = make_cache_alias(
-            task=task, method_config=method_config, default_name="pseudologit"
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
 
         raw = evaluate_with_pseudologit(
             documents=document_texts,
@@ -636,17 +594,6 @@ def evaluate_method(
         num_expansions = method_config.get("num_expansions", 10)
         dev_set_size = method_config.get("dev_set_size", 25)
         preset_overrides = method_config.get("preset_overrides")
-
-        cache_alias = make_cache_alias(
-            task=task,
-            method_config=method_config,
-            default_name="qrv",
-        )
-
-        # Extract text from documents
-        document_texts = [
-            task.document_set.get_document_text(doc) for doc in task.documents
-        ]
 
         raw = evaluate_with_query_relevance_vectors(
             documents=document_texts,
