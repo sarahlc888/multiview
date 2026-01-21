@@ -12,22 +12,10 @@ from typing import Any
 
 import numpy as np
 
+from multiview.eval.similarity import cosine_similarity
 from multiview.inference.inference import run_inference
 
 logger = logging.getLogger(__name__)
-
-
-def cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
-    """Compute cosine similarity between two vectors."""
-    a = np.array(vec_a)
-    b = np.array(vec_b)
-
-    norm_a = np.linalg.norm(a)
-    norm_b = np.linalg.norm(b)
-    if norm_a == 0 or norm_b == 0:
-        return 0.0
-
-    return float(np.dot(a, b) / (norm_a * norm_b))
 
 
 def get_category_list(annotation: dict) -> list[str]:

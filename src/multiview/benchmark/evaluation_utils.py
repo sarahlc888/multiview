@@ -14,7 +14,6 @@ from typing import Any
 
 from omegaconf import OmegaConf
 
-from multiview.benchmark.triplets.utils import build_triplet_dicts
 from multiview.eval import (
     evaluate_with_bm25,
     evaluate_with_document_rewrite,
@@ -30,6 +29,63 @@ from multiview.eval import (
 from multiview.inference.presets import is_gpu_available, preset_requires_gpu
 
 logger = logging.getLogger(__name__)
+
+
+def build_triplet_dicts(
+    documents: list[str],
+    triplet_ids: list[tuple[int, int, int]],
+) -> list[dict]:
+    """Convert ID triplets into text triplet dicts (doc IDs NEVER in prompts!).
+
+    Validates that anchor, positive, and negative are all distinct indices.
+    Filters out any invalid triplets and logs warnings.
+    """
+    valid_triplets = []
+    invalid_count = 0
+
+    for triplet_idx, (anchor_id, positive_id, negative_id) in enumerate(triplet_ids):
+        # Validate that all three indices are distinct
+        if anchor_id == positive_id:
+            logger.warning(
+                f"Skipping invalid triplet {triplet_idx}: anchor_id == positive_id ({anchor_id})"
+            )
+            invalid_count += 1
+            continue
+
+        if anchor_id == negative_id:
+            logger.warning(
+                f"Skipping invalid triplet {triplet_idx}: anchor_id == negative_id ({anchor_id})"
+            )
+            invalid_count += 1
+            continue
+
+        if positive_id == negative_id:
+            logger.warning(
+                f"Skipping invalid triplet {triplet_idx}: positive_id == negative_id ({positive_id})"
+            )
+            invalid_count += 1
+            continue
+
+        # Triplet is valid
+        valid_triplets.append(
+            {
+                "anchor": documents[anchor_id],
+                "positive": documents[positive_id],
+                "negative": documents[negative_id],
+                # Include IDs for annotation lookup / artifact writing
+                "anchor_id": anchor_id,
+                "positive_id": positive_id,
+                "negative_id": negative_id,
+            }
+        )
+
+    if invalid_count > 0:
+        logger.error(
+            f"⚠️  Filtered out {invalid_count} invalid triplet(s) where anchor/positive/negative were not distinct "
+            f"({len(triplet_ids)} -> {len(valid_triplets)} triplets)"
+        )
+
+    return valid_triplets
 
 
 def _resolved_document_type(task: Any) -> str | None:
@@ -935,6 +991,7 @@ def compute_instruction_sensitivity(
 
 
 __all__ = [
+    "build_triplet_dicts",
     "compute_instruction_sensitivity",
     "evaluate_method",
     "finalize_method_results",

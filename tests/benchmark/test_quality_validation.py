@@ -14,7 +14,7 @@ import pytest
 
 from multiview.benchmark.benchmark import Benchmark
 from multiview.benchmark.task import Task
-from multiview.benchmark.triplets.utils import build_triplet_dicts
+from multiview.benchmark.evaluation_utils import build_triplet_dicts
 from multiview.eval.lm_judge import evaluate_with_lm_judge_triplet
 
 pytestmark = [pytest.mark.integration, pytest.mark.external]

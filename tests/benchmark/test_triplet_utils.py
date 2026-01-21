@@ -3,7 +3,7 @@
 import pytest
 
 from multiview.benchmark.task import Task
-from multiview.benchmark.triplets.utils import build_triplet_dicts
+from multiview.benchmark.evaluation_utils import build_triplet_dicts
 
 
 @pytest.mark.parametrize("dataset", ["abstractsim", "arxiv_abstract_sentences", "gsm8k", "rocstories", "crossword_clues", "hackernews", "analogies", "infinite_prompts", "infinite_chats", "dickinson", "moralfables", "onion_headlines", "goodreads_quotes", "arxiv_cs", "ut_zappos50k"])

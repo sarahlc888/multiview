@@ -108,7 +108,7 @@ class TestTaskAnnotationIntegration:
         task = Task(
             config={
                 "document_set": "gsm8k",
-                "criterion": "test",
+                "criterion": "word_count",
                 "max_docs": 3,
                 "triplet_style": "lm_all",
             }
@@ -190,7 +190,7 @@ class TestAnnotationCaching:
         task = Task(
             config={
                 "document_set": "gsm8k",
-                "criterion": "test_criterion",
+                "criterion": "word_count",
                 "max_docs": 3,
                 "triplet_style": "lm_all",
             }
@@ -242,7 +242,7 @@ class TestAnnotationErrorHandling:
         task = Task(
             config={
                 "document_set": "gsm8k",
-                "criterion": "test",
+                "criterion": "word_count",
                 "triplet_style": "lm_all",
             }
         )
@@ -255,7 +255,7 @@ class TestAnnotationErrorHandling:
         task = Task(
             config={
                 "document_set": "gsm8k",
-                "criterion": "test",
+                "criterion": "word_count",
                 "triplet_style": "lm_all",
             }
         )
@@ -268,7 +268,7 @@ class TestAnnotationErrorHandling:
         task = Task(
             config={
                 "document_set": "gsm8k",
-                "criterion": "test",
+                "criterion": "word_count",
                 "triplet_style": "lm_all",
             }
         )
@@ -536,7 +536,8 @@ class TestTripletStyleIntegration:
         from multiview.benchmark.task import (
             TRIPLET_STYLE_LM_CATEGORY,
             TRIPLET_STYLE_LM_TAGS,
-            TRIPLET_STYLE_LM_SUMMARY,
+            TRIPLET_STYLE_LM_SUMMARY_DICT,
+            TRIPLET_STYLE_LM_SUMMARY_SENTENCE,
             LM_TRIPLET_STYLES,
             RICH_ANNOTATION_STYLES,
         )
@@ -544,16 +545,19 @@ class TestTripletStyleIntegration:
         # Verify constants exist
         assert TRIPLET_STYLE_LM_CATEGORY == "lm_category"
         assert TRIPLET_STYLE_LM_TAGS == "lm_tags"
-        assert TRIPLET_STYLE_LM_SUMMARY == "lm_summary"
+        assert TRIPLET_STYLE_LM_SUMMARY_DICT == "lm_summary_dict"
+        assert TRIPLET_STYLE_LM_SUMMARY_SENTENCE == "lm_summary_sentence"
 
         # Verify they're in the sets
         assert TRIPLET_STYLE_LM_CATEGORY in LM_TRIPLET_STYLES
         assert TRIPLET_STYLE_LM_TAGS in LM_TRIPLET_STYLES
-        assert TRIPLET_STYLE_LM_SUMMARY in LM_TRIPLET_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY_DICT in LM_TRIPLET_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY_SENTENCE in LM_TRIPLET_STYLES
 
         assert TRIPLET_STYLE_LM_CATEGORY in RICH_ANNOTATION_STYLES
         assert TRIPLET_STYLE_LM_TAGS in RICH_ANNOTATION_STYLES
-        assert TRIPLET_STYLE_LM_SUMMARY in RICH_ANNOTATION_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY_DICT in RICH_ANNOTATION_STYLES
+        assert TRIPLET_STYLE_LM_SUMMARY_SENTENCE in RICH_ANNOTATION_STYLES
 
 
 if __name__ == "__main__":

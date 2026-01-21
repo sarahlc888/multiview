@@ -34,6 +34,7 @@ from multiview.benchmark.annotations import (
     annotate_with_lm_tags,
     annotate_with_precomputed,
 )
+from multiview.benchmark.evaluation_utils import build_triplet_dicts
 from multiview.benchmark.triplets.pairwise_similarity import (
     create_pairwise_similarity_triplets,
 )
@@ -46,7 +47,6 @@ from multiview.benchmark.triplets.triplet_utils import (
     create_prelabeled_triplets,
     create_random_triplets,
 )
-from multiview.benchmark.triplets.utils import build_triplet_dicts
 from multiview.docsets import DOCSETS
 from multiview.docsets.d5_applic import D5ApplicabilityDocSet
 from multiview.docsets.d5_triplets import create_d5_applicability_triplets

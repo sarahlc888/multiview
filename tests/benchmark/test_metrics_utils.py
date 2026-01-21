@@ -1,4 +1,4 @@
-from multiview.benchmark.metrics_utils import (
+from multiview.benchmark.evaluation_utils import (
     metrics_from_correctness,
     metrics_from_outcomes,
     outcomes_from_pair_scores,

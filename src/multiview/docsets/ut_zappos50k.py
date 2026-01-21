@@ -41,6 +41,7 @@ import logging
 from typing import Any
 
 from multiview.docsets.base import BaseDocSet
+from multiview.docsets.criteria_metadata import _CRITERIA_BY_DATASET
 
 logger = logging.getLogger(__name__)
 
@@ -174,6 +175,7 @@ class UTZappos50kDocSet(BaseDocSet):
         "material",
         "toe_style",
     ]
+    CRITERION_METADATA = _CRITERIA_BY_DATASET.get("ut_zappos50k", {})
 
     def load_documents(self) -> list[dict]:
         """Load shoe documents with images and attributes.
