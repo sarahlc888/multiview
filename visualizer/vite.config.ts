@@ -34,7 +34,7 @@ export default defineConfig({
     port: 5173,
     open: true,
   },
-  publicDir: '../viz',
+  publicDir: '../outputs/viz',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

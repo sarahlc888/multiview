@@ -2,27 +2,27 @@
 /**
  * Build dataset index for web visualizer.
  *
- * Scans viz/ directory for manifest.json files and builds an index
+ * Scans outputs/viz/ directory for manifest.json files and builds an index
  * of available datasets, criteria, and visualization modes.
  *
- * Output: viz/index.json
+ * Output: outputs/viz/index.json
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const VIZ_DIR = path.join(__dirname, '../../viz');
+const VIZ_DIR = path.join(__dirname, '../../outputs/viz');
 const INDEX_FILE = path.join(VIZ_DIR, 'index.json');
 
 function scanDirectory() {
   const index = {};
 
   if (!fs.existsSync(VIZ_DIR)) {
-    console.log('viz/ directory does not exist, creating empty index');
+    console.log('outputs/viz/ directory does not exist, creating empty index');
     return index;
   }
 
-  // New structure: viz/{benchmark}/{task}/{method}/manifest.json
+  // New structure: outputs/viz/{benchmark}/{task}/{method}/manifest.json
   // Index structure: index[benchmark][dataset][criterion][method]
 
   const benchmarks = fs.readdirSync(VIZ_DIR).filter(name => {
@@ -96,7 +96,7 @@ function main() {
 
   const index = scanDirectory();
 
-  // Ensure viz directory exists
+  // Ensure outputs/viz directory exists
   if (!fs.existsSync(VIZ_DIR)) {
     fs.mkdirSync(VIZ_DIR, { recursive: true });
   }

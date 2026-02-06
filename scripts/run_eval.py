@@ -261,7 +261,7 @@ def main(cfg: DictConfig):
         viz_config = cfg.get("visualization", {})
         reducers = viz_config.get("reducers", ["tsne"])
         use_thumbnails = viz_config.get("thumbnails", True)
-        output_base = viz_config.get("output_dir", "viz")
+        output_base = viz_config.get("output_dir", "outputs/viz")
 
         # Collect task names from evaluated tasks to filter visualizations
         evaluated_task_names = [task.get_task_name() for task in tasks]

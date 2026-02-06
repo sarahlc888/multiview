@@ -120,7 +120,7 @@ def copy_triplet_logs_for_method(
     method_name: str,
     output_base: Path,
 ) -> bool:
-    """Copy triplet files (triplets.json and triplet_logs.jsonl) to viz directory.
+    """Copy triplet files (triplets.json and triplet_logs.jsonl) to visualization directory.
 
     Args:
         benchmark_run: Benchmark run name
@@ -227,7 +227,7 @@ def run_visualization(
                 )
             return None
 
-    # Construct output path: viz/{benchmark}/{task}/{method}/
+    # Construct output path: outputs/viz/{benchmark}/{task}/{method}/
     output_dir = output_base / benchmark_run / task_name / method_name
 
     # Only log per-item details if not quiet
@@ -275,7 +275,7 @@ def create_visualization_index(
     Supports multiple benchmark runs by merging into existing index.
 
     Args:
-        output_base: Base output directory (e.g., viz/)
+        output_base: Base output directory (e.g., outputs/viz/)
         benchmark_run: Benchmark run name
         task_methods: Dict of task -> methods
 
@@ -374,7 +374,7 @@ def create_visualization_index(
 def generate_visualizations_for_benchmark(
     benchmark_run: str,
     reducers: list[str] | None = None,
-    output_base: str | Path = "viz",
+    output_base: str | Path = "outputs/viz",
     use_thumbnails: bool = True,
     task_filter: list[str] | None = None,
     method_filter: list[str] | None = None,
@@ -401,7 +401,7 @@ def generate_visualizations_for_benchmark(
     output_base.mkdir(parents=True, exist_ok=True)
 
     # Clear existing visualizations for this benchmark run
-    # viz/ is derived from outputs/, so safe to delete stale artifacts
+    # outputs/viz is derived from outputs/, so safe to delete stale artifacts
     # BUT preserve *_markers directories (expensive to regenerate thumbnails)
     benchmark_viz_dir = output_base / benchmark_run
     if benchmark_viz_dir.exists():

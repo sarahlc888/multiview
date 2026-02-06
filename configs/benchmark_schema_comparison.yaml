@@ -24,7 +24,7 @@ auto_visualize: true  # Generate visualizations after evaluation (default: true)
 visualization:
   reducers: ["tsne", "umap", "pca", "som", "dendrogram"]  # All available reducers (graph & heatmap always available)
   thumbnails: true    # Use thumbnails for image datasets and GSM8K (default: true)
-  output_dir: "viz"   # Output directory for visualizations (default: viz)
+  output_dir: "outputs/viz"   # Output directory for visualizations (default: outputs/viz)
 
 reuse_cached_triplets: true
 seed: 42

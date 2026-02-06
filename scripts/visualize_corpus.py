@@ -92,7 +92,7 @@ Usage examples:
         --task gsm8k__arithmetic \\
         --method qwen3_8b_with_instructions \\
         --reducer tsne \\
-        --output viz/gsm8k_arithmetic \\
+        --output outputs/viz/gsm8k_arithmetic \\
         --export-format web
 
     # ============================================================
@@ -103,7 +103,7 @@ Usage examples:
     python scripts/visualize_corpus.py \\
         --mode gsm8k_graphs \\
         --input documents.jsonl \\
-        --output viz/gsm8k \\
+        --output outputs/viz/gsm8k \\
         --num 5
 """
 
@@ -885,7 +885,7 @@ def prepare_markers(
     if args.marker_type == "thumbnail":
         if dataset_name:
             # Thumbnails are task-level (shared by all methods), not method-level
-            # args.output is viz/benchmark/task/method/, so parent is task-level
+            # args.output is outputs/viz/benchmark/task/method/, so parent is task-level
             output_dir = Path(args.output).parent / "_markers"
             image_paths = create_thumbnail_images(
                 documents, dataset_name, args.criterion, str(output_dir)
@@ -1596,7 +1596,7 @@ def run_embedding_mode(args: argparse.Namespace):
             logger.error("No 2D coordinates available for web export")
         else:
             # Determine output directory
-            # Format: viz/{dataset}/{criterion}/{reducer}/
+            # Format: outputs/viz/{dataset}/{criterion}/{reducer}/
             # Use loaded_criterion from benchmark if available, otherwise use args.criterion
             criterion = loaded_criterion or args.criterion or "default"
             if not dataset_name:
