@@ -196,6 +196,22 @@ class CostTracker:
         self.usage.clear()
         self.cache_hits.clear()
 
+    def get_total_requests(self) -> int:
+        """Get total number of API requests made (not including cache hits).
+
+        Returns:
+            Total number of API requests
+        """
+        return sum(stats["requests"] for stats in self.usage.values())
+
+    def get_total_cache_hits(self) -> int:
+        """Get total number of cache hits.
+
+        Returns:
+            Total number of cache hits
+        """
+        return sum(stats["requests"] for stats in self.cache_hits.values())
+
 
 # Global cost tracker instance
 _global_tracker = CostTracker()
@@ -232,3 +248,26 @@ def print_summary():
     # Use logger instead of print() so it appears in both console and log file
     # Log the entire summary as one message to preserve formatting
     logger.info("\n" + summary)
+
+
+def get_total_requests() -> int:
+    """Get total number of API requests made (not including cache hits).
+
+    Returns:
+        Total number of API requests
+    """
+    return _global_tracker.get_total_requests()
+
+
+def get_total_cache_hits() -> int:
+    """Get total number of cache hits.
+
+    Returns:
+        Total number of cache hits
+    """
+    return _global_tracker.get_total_cache_hits()
+
+
+def reset():
+    """Clear all usage data from the global tracker."""
+    _global_tracker.reset()

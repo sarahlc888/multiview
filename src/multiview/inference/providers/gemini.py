@@ -18,11 +18,32 @@ from multiview.inference.cost_tracker import record_usage
 logger = logging.getLogger(__name__)
 
 
+def prettify_parts(contents):
+    pretty_version = []
+    for msg in contents:
+        pretty_msg = {"role": msg["role"], "parts": []}
+        # copy over the 'parts', but for inline data, truncate the data field to a max of like 20 chars
+        for part in msg["parts"]:
+            if "inline_data" in part:
+                pretty_msg["parts"].append(
+                    {
+                        "inline_data": {
+                            "mime_type": part["inline_data"]["mime_type"],
+                            "data": part["inline_data"]["data"][:20] + "...",
+                        }
+                    }
+                )
+            else:
+                pretty_msg["parts"].append(part)
+        pretty_version.append(pretty_msg)
+    return pretty_version
+
+
 def _gemini_single_completion(
     client,
     prompt: str,
     prefill: str | None,
-    image: str | None,
+    image: str | list[str] | None,
     model_name: str,
     temperature: float,
     max_tokens: int,
@@ -38,7 +59,10 @@ def _gemini_single_completion(
         client: Gemini client instance
         prompt: Prompt text
         prefill: Optional prefill string to force response start
-        image: Optional image source (URL or file path) for vision tasks
+        image: Optional image source(s) for vision tasks. Can be:
+               - Single image: str (URL or file path)
+               - Multiple images: list[str] (for multi-image prompts)
+               - None for text-only prompts
         model_name: Model name
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
@@ -59,29 +83,73 @@ def _gemini_single_completion(
             "google-genai package required. Install with: pip install google-genai"
         ) from None
 
-    # Build contents with optional image
+    # Build contents with optional image(s)
     if image:
         # Import VLM utilities for image handling
         from multiview.inference.vlm_utils import prepare_image_for_gemini
 
+        # Support both single image (str) and multiple images (list)
+        images_to_process = [image] if isinstance(image, str) else image
+
         try:
-            # Prepare image in Gemini format
-            image_part = prepare_image_for_gemini(image)
-            logger.debug(f"Prepared image for Gemini: {image}")
+            # Prepare all images in Gemini format
+            # Handle individual image failures gracefully
+            image_parts = []
+            failed_images = []
+
+            for img in images_to_process:
+                if not img:  # Skip None values
+                    continue
+
+                try:
+                    image_part = prepare_image_for_gemini(img)
+                    image_parts.append(image_part)
+                    # logger.debug(f"Prepared image for Gemini: {img}")
+                except Exception as img_error:
+                    logger.warning(f"Failed to load image {img}: {img_error}")
+                    failed_images.append(img)
+                    # Continue with other images
+
+            if not image_parts:
+                # All images failed, fall back to text-only
+                raise ValueError(
+                    f"No valid images to process. Failed: {len(failed_images)}/{len(images_to_process)}"
+                )
 
             # Build multimodal contents
+            # If prompt contains <image> markers, interleave images at those locations
+            # Otherwise, put all images at the start
+            if "<image>" in prompt:
+                # Split text by <image> markers and interleave with images
+                text_parts = prompt.split("<image>")
+                parts = []
+
+                # Interleave text and images
+                for i, text_part in enumerate(text_parts):
+                    if text_part:  # Add non-empty text
+                        parts.append({"text": text_part})
+                    if i < len(image_parts):  # Add image if available
+                        parts.append(image_parts[i])
+
+                # If there are more images than markers, add remaining images at end
+                if len(image_parts) > len(text_parts) - 1:
+                    for remaining_img in image_parts[len(text_parts) - 1 :]:
+                        parts.append(remaining_img)
+            else:
+                # Default: all images at start, then text
+                parts = image_parts + [{"text": prompt}]
+
             if prefill:
                 contents = [
-                    {"role": "user", "parts": [image_part, {"text": prompt}]},
+                    {"role": "user", "parts": parts},
                     {"role": "model", "parts": [{"text": prefill}]},
                 ]
             else:
-                # For simple case, can use parts directly
-                contents = [{"role": "user", "parts": [image_part, {"text": prompt}]}]
-
+                contents = [{"role": "user", "parts": parts}]
+            logger.debug(f"Contents: {prettify_parts(contents)=}")
         except Exception as e:
             logger.warning(
-                f"Failed to load image {image}, falling back to text-only: {e}"
+                f"Failed to load image(s) {image}, falling back to text-only: {e}"
             )
             # Fall back to text-only
             if prefill:
@@ -204,7 +272,7 @@ def gemini_completions(
     temperature: float = 0.0,
     max_tokens: int = 4096,
     force_prefills: list[str] | None = None,
-    images: list[str | None] | None = None,
+    images: list[str | list[str] | None] | None = None,
     max_workers: int = 20,
     max_retries: int = 5,
     initial_retry_delay: float = 1.0,
@@ -220,9 +288,11 @@ def gemini_completions(
         temperature: Sampling temperature
         max_tokens: Maximum tokens to generate
         force_prefills: Optional list of prefill strings to force response start
-        images: Optional list of image sources (URLs or file paths) for vision tasks
-                Each image corresponds to the prompt at the same index
-                Use None for text-only prompts in a mixed batch
+        images: Optional list of image sources for vision tasks. Each element can be:
+                - str: Single image (URL or file path)
+                - list[str]: Multiple images for multi-image prompts
+                - None: No images for text-only prompts
+                Each element corresponds to the prompt at the same index
         max_workers: Maximum concurrent API requests (default 20)
         max_retries: Maximum retry attempts per request (default 5)
         initial_retry_delay: Initial delay for exponential backoff (default 1.0s)

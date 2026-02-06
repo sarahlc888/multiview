@@ -93,6 +93,10 @@ def setup_logging(level: str = "INFO", output_file: str | None = None) -> None:
         "huggingface_hub.repocard",
         "google_genai",
         "google_genai._api_client",
+        "numba",
+        "matplotlib",
+        "PIL",
+        "PIL.PngImagePlugin",
     ]:
         logging.getLogger(package).setLevel(logging.ERROR)
 

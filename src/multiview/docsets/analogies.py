@@ -9,7 +9,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import ANALOGIES_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class AnalogiesDocSet(BaseDocSet):
     DESCRIPTION = "Word analogy pairs (stem and answer)"
     DOCUMENT_TYPE = "Word analogy pair"
     KNOWN_CRITERIA = ["analogy_type"]  # prefix field (e.g., "country-capital")
-    CRITERION_METADATA = ANALOGIES_CRITERIA
+    DATASET_NAME = "analogies"
 
     def __init__(self, config: dict | None = None):
         """Initialize AnalogiesDocSet.

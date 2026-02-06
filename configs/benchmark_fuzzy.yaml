@@ -7,6 +7,13 @@ seed: 42
 use_cache: true
 step_through: false
 
+# Auto-visualization configuration
+auto_visualize: true  # Generate visualizations after evaluation (default: true)
+visualization:
+  reducers: ["tsne", "umap", "pca", "som", "dendrogram"]  # All available reducers (graph & heatmap always available)
+  thumbnails: true    # Use thumbnails for image datasets and GSM8K (default: true)
+  output_dir: "viz"   # Output directory for visualizations (default: viz)
+
 # Task configuration
 tasks:
   defaults:

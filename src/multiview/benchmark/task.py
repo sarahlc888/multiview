@@ -764,12 +764,9 @@ class Task:
         )
 
         # Run quality workflow (handles rating, comparison, filtering, consistency, and top-N selection)
-        # Extract text from documents (handle both dict and string formats)
-        document_texts = [
-            self.document_set.get_document_text(doc) for doc in self.documents
-        ]
+        # Pass full documents (not just text) to preserve images for quality rating
         result = rate_and_filter_quality_workflow(
-            triplets=build_triplet_dicts(document_texts, self.triplets),
+            triplets=build_triplet_dicts(self.documents, self.triplets),
             criterion=self.criterion_name,
             criterion_description=self.criterion_description,
             annotations=self.document_annotations,

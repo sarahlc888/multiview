@@ -9,6 +9,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from multiview.benchmark.annotations.annotation_utils import (
+    add_document_inputs_with_images,
+)
 from multiview.benchmark.triplets.utils import (
     add_annotation_summaries_to_inputs,
     triplet_annotation_summary,
@@ -68,9 +71,14 @@ def evaluate_with_lm_judge_pair(
 
     positive_pairs_inputs = {
         "similarity_criteria": [similarity_criteria] * len(triplets),
-        "document_a": [t["anchor"] for t in triplets],
-        "document_b": [t["positive"] for t in triplets],
     }
+    add_document_inputs_with_images(
+        positive_pairs_inputs,
+        {
+            "a": [t["anchor"] for t in triplets],
+            "b": [t["positive"] for t in triplets],
+        },
+    )
 
     if has_annotations:
         logger.info("Using annotations in evaluation")
@@ -93,9 +101,14 @@ def evaluate_with_lm_judge_pair(
 
     negative_pairs_inputs = {
         "similarity_criteria": [similarity_criteria] * len(triplets),
-        "document_a": [t["anchor"] for t in triplets],
-        "document_b": [t["negative"] for t in triplets],
     }
+    add_document_inputs_with_images(
+        negative_pairs_inputs,
+        {
+            "a": [t["anchor"] for t in triplets],
+            "b": [t["negative"] for t in triplets],
+        },
+    )
 
     if has_annotations:
         add_annotation_summaries_to_inputs(

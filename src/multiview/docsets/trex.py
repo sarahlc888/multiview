@@ -17,7 +17,6 @@ from typing import Any
 
 from datasets import load_dataset
 
-from multiview.docsets.criteria_metadata import TREX_CRITERIA
 from multiview.docsets.kgc_base import KGCBaseDocSet
 from multiview.docsets.wikidata_properties import get_property_name
 
@@ -67,7 +66,7 @@ class TRExDocSet(KGCBaseDocSet):
     KNOWN_CRITERIA = ["relation"]
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = TREX_CRITERIA
+    DATASET_NAME = "trex"
 
     def load_triples(self) -> list[dict[str, Any]]:
         """Load T-REx triples from HuggingFace.

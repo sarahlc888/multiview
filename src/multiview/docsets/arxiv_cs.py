@@ -9,7 +9,6 @@ from typing import Any
 
 from multiview.docsets.arxiv_utils import ARXIV_DATASET_PATH, load_arxiv_abstracts
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import ARXIV_CS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class ArxivCSDocSet(BaseDocSet):
     KNOWN_CRITERIA = []  # word_count auto-included by base class
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = ARXIV_CS_CRITERIA
+    DATASET_NAME = "arxiv_cs"
 
     def load_documents(self) -> list[Any]:
         """Load ArXiv papers from HuggingFace.

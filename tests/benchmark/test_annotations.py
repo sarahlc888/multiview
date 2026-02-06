@@ -106,6 +106,7 @@ class TestSchemaGeneration:
             criterion_description="Types of arithmetic operations used",
             n_samples=3,
             is_spurious=False,
+            config="tag_schema_generation_gemini",
         )
 
         # Verify schema structure

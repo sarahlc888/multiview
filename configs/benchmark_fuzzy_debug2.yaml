@@ -1,0 +1,94 @@
+run_name: "benchmark_fuzzy_debug2"
+logging:
+  level: DEBUG
+  output_file: "outputs/logs/${run_name}.log"
+seed: 42
+use_cache: true
+reuse_cached_triplets: true
+step_through: false
+
+# Auto-visualization configuration
+auto_visualize: true  # Generate visualizations after evaluation (default: true)
+visualization:
+  reducers: ["tsne", "umap", "pca", "som", "dendrogram"]  # All available reducers (graph & heatmap always available)
+  thumbnails: true    # Use thumbnails for image datasets and GSM8K (default: true)
+  output_dir: "viz"   # Output directory for visualizations (default: viz)
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 20
+    max_triplets: 5
+    # max_docs: 200
+    # max_triplets: 50
+    num_synthetic_docs: 0
+    triplet_style: "lm_all"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 10
+    n_schema_samples: 10
+    rate_triplet_quality: true
+    min_triplet_quality: 2
+    # Consistency validation (NEW) - ensures swapped (a,c,b) gets Invalid rating
+    validate_consistency: true        # Enable consistency check (default: true)
+    consistency_max_invalid: 1        # Swapped triplet must be rated ≤1 Invalid (default: 1, strict)
+    prelabeled_selection: "hard_negatives"
+
+  task_list:
+    # - document_set: ut_zappos50k
+    #   criterion: suggested_gender
+    #   triplet_style: lm_tags
+    - document_set: ut_zappos50k
+      criterion: functional_type
+      triplet_style: lm_tags
+    - document_set: ut_zappos50k
+      criterion: color
+      triplet_style: lm_tags
+
+    # - document_set: hackernews
+    #   criterion: angle_of_interest
+    #   triplet_style: lm_tags
+
+    # - document_set: gsm8k
+    #   criterion: final_expression
+    #   triplet_style: lm_tags
+
+
+# Evaluation methods configuration
+methods_to_evaluate:
+  bm25:
+    - name: bm25_lexical
+      preset: bm25_lexical
+  reranker:
+    - name: voyage_rerank_lite
+      preset: voyage_rerank_2_5_lite
+
+  # Document rewriting: Generate summaries and compare them
+  document_rewrite:
+    # Embeddings over summaries
+    - name: dr_gemini_lite_openai_small
+      embedding_preset: openai_embedding_small
+      summary_preset: document_summary_gemini_flash
+  lm_judge_triplet:
+    # - name: gemini_flash_triplet_with_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_flash
+    - name: gemini_flash_triplet
+      preset: lmjudge_triplet_plaintext_binaryhard_gemini_flash
+    # - name: gemini_pro_triplet_with_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_with_annotation_gemini_pro
+    # - name: gemini_pro_triplet_no_annotation
+    #   preset: lmjudge_triplet_plaintext_binaryhard_gemini_pro
+
+  # query_relevance_vectors:
+  #   - name: qrv_gemini_openai_k10_dev25
+  #     expansion_preset: query_relevance_scores_gemini
+  #     embedding_preset: openai_embedding_small
+  #     num_expansions: 10
+  #     dev_set_size: 5
+
+  embeddings:
+    - name: qwen3_8b_with_instructions
+      preset: instr_hf_qwen3_embedding_8b
+    - name: qwen3_8b_no_instructions
+      preset: hf_qwen3_embedding_8b

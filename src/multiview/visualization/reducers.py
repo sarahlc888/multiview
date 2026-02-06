@@ -90,6 +90,15 @@ class TSNEReducer(DimensionalityReducer):
         Returns:
             2D coordinates of shape (n_samples, 2)
         """
+        # Validate embeddings to prevent segfaults
+        if np.isnan(embeddings).any() or np.isinf(embeddings).any():
+            raise ValueError("Embeddings contain NaN or Inf values")
+        # Check if all embeddings are identical (not just if some dimensions have zero variance)
+        if embeddings.shape[0] > 1 and np.all(embeddings == embeddings[0]):
+            raise ValueError(
+                "Embeddings have zero variance (constant vectors). This often happens with pseudologit when all samples get the same class."
+            )
+
         # Adjust perplexity if needed
         n_samples = embeddings.shape[0]
         perplexity = min(self.perplexity, (n_samples - 1) / 3.0)
@@ -150,6 +159,15 @@ class PCAReducer(DimensionalityReducer):
         Returns:
             2D coordinates of shape (n_samples, 2)
         """
+        # Validate embeddings to prevent segfaults
+        if np.isnan(embeddings).any() or np.isinf(embeddings).any():
+            raise ValueError("Embeddings contain NaN or Inf values")
+        # Check if all embeddings are identical (not just if some dimensions have zero variance)
+        if embeddings.shape[0] > 1 and np.all(embeddings == embeddings[0]):
+            raise ValueError(
+                "Embeddings have zero variance (constant vectors). This often happens with pseudologit when all samples get the same class."
+            )
+
         # Standardize the embeddings
         whitened = self.scaler.fit_transform(embeddings)
 
@@ -359,7 +377,7 @@ class SOMReducer(DimensionalityReducer):
 
         for sample_idx in order:
             # Get nodes sorted by distance to this sample
-            node_candidates = np.argsort(distances[sample_idx])
+            node_candidates = np.argsort(distances[sample_idx], kind="stable")
 
             # Assign to the closest unused node
             for node_idx in node_candidates:
@@ -456,6 +474,7 @@ class DendrogramReducer(DimensionalityReducer):
         self.kwargs = kwargs
         self.linkage_matrix = None
         self.dendrogram_data = None
+        self.coords_2d_ = None
 
     def fit_transform(self, embeddings: np.ndarray) -> np.ndarray:
         """Apply hierarchical clustering and extract leaf positions.
@@ -513,5 +532,8 @@ class DendrogramReducer(DimensionalityReducer):
         # Normalize x-coordinates to [0, 1] range
         if n_samples > 1:
             coords_2d[:, 0] /= n_samples - 1
+
+        # Store coordinates for later access (web export, etc.)
+        self.coords_2d_ = coords_2d
 
         return coords_2d

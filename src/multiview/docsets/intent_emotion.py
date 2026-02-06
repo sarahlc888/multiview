@@ -13,7 +13,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import INTENT_EMOTION_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class IntentEmotionDocSet(BaseDocSet):
     KNOWN_CRITERIA = ["intent_similarity", "emotion_similarity"]
 
     # Metadata for LM-based criteria (descriptions, hints, etc.)
-    CRITERION_METADATA = INTENT_EMOTION_CRITERIA
+    DATASET_NAME = "inb_intent_emotion"
 
     def __init__(self, config: dict | None = None):
         """Initialize IntentEmotionDocSet.

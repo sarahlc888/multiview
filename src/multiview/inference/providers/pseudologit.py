@@ -64,7 +64,6 @@ from collections import Counter
 from pathlib import Path
 
 import numpy as np
-from tqdm import tqdm
 
 from multiview.inference.parsers import get_parser
 from multiview.utils.prompt_utils import read_or_return
@@ -210,12 +209,11 @@ def pseudologit_completions(
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
-    # For each document, format prompts with taxonomy and sample N times
-    all_vectors = []
+    # Format ALL prompts for ALL documents upfront (batch them together)
+    all_sample_prompts = []
+    doc_prompt_indices = []  # Track which prompts belong to which document
 
-    for doc_idx, document in tqdm(
-        enumerate(prompts), desc="Pseudologit sampling", total=len(prompts), unit="doc"
-    ):
+    for doc_idx, document in enumerate(prompts):
         # Format the classification prompt using template
         full_prompt = template_text.format(
             document=document,
@@ -223,27 +221,44 @@ def pseudologit_completions(
             instruction=instruction,
         )
 
-        # Create N copies of this prompt (one per sample)
-        sample_prompts = [full_prompt] * n_samples
+        # Track start index for this document's samples
+        start_idx = len(all_sample_prompts)
 
-        logger.debug(
-            f"Sampling document {doc_idx + 1}/{len(prompts)} ({n_samples} samples)..."
-        )
-        logger.debug(f"Sample prompt: {sample_prompts[0]}")
-        # Sample N times
-        result = completion_fn(
-            prompts=sample_prompts,
-            model_name=model_name,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_workers=max_workers,
-            **kwargs,
-        )
+        # Create N copies of this prompt (one per sample)
+        all_sample_prompts.extend([full_prompt] * n_samples)
+
+        # Track end index for this document's samples
+        end_idx = len(all_sample_prompts)
+        doc_prompt_indices.append((start_idx, end_idx))
+
+        if doc_idx == 0:
+            logger.debug(f"Sample prompt: {full_prompt}")
+
+    logger.info(
+        f"Processing {len(prompts)} documents x {n_samples} samples = "
+        f"{len(all_sample_prompts)} total prompts"
+    )
+
+    # Process ALL prompts in one batch
+    result = completion_fn(
+        prompts=all_sample_prompts,
+        model_name=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        max_workers=max_workers,
+        **kwargs,
+    )
+
+    all_completions = result["completions"]
+
+    # Process results for each document
+    all_vectors = []
+    for doc_idx, (start_idx, end_idx) in enumerate(doc_prompt_indices):
+        # Get completions for this document
+        completions = all_completions[start_idx:end_idx]
 
         # Extract class labels from each sample using regex parser
-        completions = result["completions"]
         extracted_labels = []
-
         for completion in completions:
             label = regex_parser(completion, **parser_kwargs)
             if label:
@@ -287,6 +302,11 @@ def pseudologit_completions(
                     f"Invalid normalize value: {normalize}. Must be 'sum', 'l2', or False"
                 )
 
-        all_vectors.append({"vector": vector})
+        all_vectors.append(
+            {
+                "vector": vector,
+                "raw_samples": completions,  # Cache N raw LM samples for re-aggregation
+            }
+        )
 
     return {"completions": all_vectors}

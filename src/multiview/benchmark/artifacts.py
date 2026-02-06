@@ -225,24 +225,45 @@ def save_triplets_json(
 
         triplet_records.append(payload)
 
-    # Save category_schema separately if it exists in annotations
+    # Save category_schema and tag_schema separately if they exist in annotations
     if document_annotations is not None and len(document_annotations) > 0:
         # Extract category_schema from first non-null annotation
         category_schema = None
+        tag_schema = None
         for annot in document_annotations:
-            if annot and "category_schema" in annot:
-                category_schema = annot["category_schema"]
-                break
+            if annot:
+                if "category_schema" in annot and category_schema is None:
+                    category_schema = annot["category_schema"]
+                if "tag_schema" in annot and tag_schema is None:
+                    tag_schema = annot["tag_schema"]
+                if category_schema is not None and tag_schema is not None:
+                    break
 
         if category_schema is not None:
             schema_file = task_dir / "category_schema.json"
             with open(schema_file, "w") as f:
                 json.dump(category_schema, f, indent=2)
+            logger.info(f"Saved category schema to {schema_file}")
+
+        if tag_schema is not None:
+            schema_file = task_dir / "tag_schema.json"
+            with open(schema_file, "w") as f:
+                json.dump(tag_schema, f, indent=2)
+            logger.info(f"Saved tag schema to {schema_file}")
 
     # Write as formatted JSON array for easy browsing
     with open(output_file, "w") as f:
         json.dump(triplet_records, f, indent=2)
     logger.info(f"Saved {len(triplet_records)} triplets to {output_file}")
+
+    # Automatically generate HTML viewer for the triplets
+    try:
+        from multiview.visualization.triplet_viewer import generate_triplet_viewer
+
+        viewer_path = generate_triplet_viewer(output_file)
+        logger.info(f"Generated triplet viewer: {viewer_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate triplet viewer: {e}")
 
     return output_file
 
@@ -404,15 +425,20 @@ def save_dropped_triplets_json(
 
         triplet_records.append(payload)
 
-    # Save category_schema separately if it exists in annotations
+    # Save category_schema and tag_schema separately if they exist in annotations
     # (same schema file as main triplets)
     if document_annotations is not None and len(document_annotations) > 0:
-        # Extract category_schema from first non-null annotation
+        # Extract schemas from first non-null annotation
         category_schema = None
+        tag_schema = None
         for annot in document_annotations:
-            if annot and "category_schema" in annot:
-                category_schema = annot["category_schema"]
-                break
+            if annot:
+                if "category_schema" in annot and category_schema is None:
+                    category_schema = annot["category_schema"]
+                if "tag_schema" in annot and tag_schema is None:
+                    tag_schema = annot["tag_schema"]
+                if category_schema is not None and tag_schema is not None:
+                    break
 
         if category_schema is not None:
             schema_file = task_dir / "category_schema.json"
@@ -421,9 +447,28 @@ def save_dropped_triplets_json(
                 with open(schema_file, "w") as f:
                     json.dump(category_schema, f, indent=2)
 
+        if tag_schema is not None:
+            schema_file = task_dir / "tag_schema.json"
+            # Only write if it doesn't exist (avoid overwriting from main triplets)
+            if not schema_file.exists():
+                with open(schema_file, "w") as f:
+                    json.dump(tag_schema, f, indent=2)
+
     # Write as formatted JSON array for easy browsing
     with open(output_file, "w") as f:
         json.dump(triplet_records, f, indent=2)
+
+    # Automatically generate HTML viewer for dropped triplets
+    try:
+        from multiview.visualization.triplet_viewer import generate_triplet_viewer
+
+        viewer_path = generate_triplet_viewer(
+            output_file,
+            output_html_path=task_dir / "dropped_triplets_viewer.html",
+        )
+        logger.info(f"Generated dropped triplets viewer: {viewer_path}")
+    except Exception as e:
+        logger.warning(f"Failed to generate dropped triplets viewer: {e}")
 
     return output_file
 
@@ -559,8 +604,40 @@ def load_documents_from_jsonl(
             record = json.loads(line)
             documents.append(record["document"])
 
-    logger.info(f"Loaded {len(documents)} documents from {documents_file}")
+    logger.debug(f"Loaded {len(documents)} documents from {documents_file}")
     return documents
+
+
+def load_schema_from_json(
+    *,
+    output_dir: str | Path,
+    task_name: str,
+) -> dict | None:
+    """Load category/tag schema from saved JSON file.
+
+    Returns:
+        Schema dict (category_schema or tag_schema), or None if not found
+    """
+    task_dir = Path(output_dir) / task_name
+
+    # Try category_schema first
+    category_schema_file = task_dir / "category_schema.json"
+    if category_schema_file.exists():
+        with open(category_schema_file) as f:
+            schema = json.load(f)
+        logger.info(f"Loaded category schema from {category_schema_file}")
+        return {"category_schema": schema}
+
+    # Try tag_schema
+    tag_schema_file = task_dir / "tag_schema.json"
+    if tag_schema_file.exists():
+        with open(tag_schema_file) as f:
+            schema = json.load(f)
+        logger.info(f"Loaded tag schema from {tag_schema_file}")
+        return {"tag_schema": schema}
+
+    logger.debug(f"No schema files found in {task_dir}")
+    return None
 
 
 def load_triplets_from_json(
@@ -595,6 +672,18 @@ def load_triplets_from_json(
         quality_ratings = [r["quality_rating"] for r in triplet_records]
 
     logger.info(f"Loaded {len(triplets)} triplets from {triplets_file}")
+
+    # Generate viewer if it doesn't exist
+    viewer_path = triplets_file.parent / "viewer.html"
+    if not viewer_path.exists():
+        try:
+            from multiview.visualization.triplet_viewer import generate_triplet_viewer
+
+            generate_triplet_viewer(triplets_file)
+            logger.info(f"Generated viewer: {viewer_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate viewer: {e}")
+
     return triplets, quality_ratings
 
 
@@ -702,6 +791,20 @@ def try_load_cached_triplets(
         logger.info(f"  ✓ Successfully loaded {len(triplets)} cached triplets")
         if quality_ratings:
             logger.info(f"     (with {len(quality_ratings)} quality ratings)")
+
+        # Generate viewer if it doesn't exist
+        triplets_file = Path(output_dir) / task_name / "triplets.json"
+        viewer_path = triplets_file.parent / "viewer.html"
+        if not viewer_path.exists():
+            try:
+                from multiview.visualization.triplet_viewer import (
+                    generate_triplet_viewer,
+                )
+
+                generate_triplet_viewer(triplets_file)
+                logger.info(f"  ✓ Generated viewer for cached triplets: {viewer_path}")
+            except Exception as e:
+                logger.warning(f"  ⚠ Failed to generate viewer: {e}")
 
         return triplets, quality_ratings
 

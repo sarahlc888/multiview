@@ -193,10 +193,18 @@ def evaluate_with_multisummary(
         f"Multisummary evaluation complete: {len(positive_scores)} triplets evaluated"
     )
 
+    # Step 5: Aggregate embeddings for visualization (mean of k summaries per document)
+    aggregated_embeddings = []
+    for doc_embs in embeddings_by_doc:
+        # Compute mean embedding across k summaries
+        mean_emb = np.mean(doc_embs, axis=0).tolist()
+        aggregated_embeddings.append(mean_emb)
+
     return {
         "positive_scores": positive_scores,
         "negative_scores": negative_scores,
         "triplet_logs": triplet_logs,
+        "embeddings": aggregated_embeddings,
     }
 
 

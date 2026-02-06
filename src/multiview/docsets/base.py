@@ -21,6 +21,7 @@ class BaseDocSet(ABC):
     - DATASET_PATH: Path to the document_set
     - DESCRIPTION: Human-readable description
     - DOCUMENT_TYPE: Human-readable description of document type (e.g., "math word problem")
+    - DATASET_NAME: Name used to lookup criteria in available_criteria.yaml (optional, for auto-resolution)
     - KNOWN_CRITERIA: List of criteria that can be extracted deterministically
       (word_count is automatically included)
     """
@@ -29,6 +30,7 @@ class BaseDocSet(ABC):
     DATASET_PATH: str
     DESCRIPTION: str
     DOCUMENT_TYPE: str = "document"  # Default fallback
+    DATASET_NAME: str | None = None  # Optional: for auto-resolving CRITERION_METADATA
     KNOWN_CRITERIA: list[str] = []
 
     # Optional: Metadata for LM-based criteria (schema hints, descriptions, etc.)
@@ -37,7 +39,9 @@ class BaseDocSet(ABC):
     #
     # Note: values may be non-strings (e.g., dicts for structured hints like
     # triplet_example_hint), so we type this as Any.
-    CRITERION_METADATA: dict[str, dict[str, Any]] = {}
+    #
+    # If not explicitly set, this will auto-resolve from DATASET_NAME via the property below.
+    _CRITERION_METADATA: dict[str, dict[str, Any]] | None = None
     # Synthesis prompts for criterion-specific document generation
     # Maps criterion name → {remix_prompt}
     # Subclasses can override to provide custom synthesis logic per criterion
@@ -58,6 +62,26 @@ class BaseDocSet(ABC):
         self.document_set_path = Path(
             self.config.get("document_set_path", self.DATASET_PATH)
         )
+
+    @property
+    def CRITERION_METADATA(self) -> dict[str, dict[str, Any]]:
+        """Get criterion metadata, auto-resolving from DATASET_NAME if needed.
+
+        Returns:
+            Dictionary mapping criterion names to their metadata
+        """
+        # If explicitly set on the class, use that
+        if self.__class__._CRITERION_METADATA is not None:
+            return self.__class__._CRITERION_METADATA
+
+        # Otherwise, auto-resolve from DATASET_NAME
+        if self.__class__.DATASET_NAME:
+            from multiview.docsets.criteria_metadata import DATASET_CRITERIA
+
+            return DATASET_CRITERIA.get(self.__class__.DATASET_NAME, {})
+
+        # No dataset name and no explicit metadata
+        return {}
 
     @abstractmethod
     def load_documents(self) -> list[Any]:
@@ -153,6 +177,7 @@ class BaseDocSet(ABC):
 
     def get_criterion_metadata(self, criterion: str) -> dict[str, Any]:
         """Get metadata for a criterion (description, schema hints, etc.)."""
+        # Note: CRITERION_METADATA is now a property that auto-resolves
         return self.CRITERION_METADATA.get(criterion, {})
 
     def has_precomputed_annotations(self, criterion: str) -> bool:

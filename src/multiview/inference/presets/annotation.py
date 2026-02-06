@@ -14,7 +14,7 @@ ANNOTATION_PRESETS = {
         prompt_template="prompts/schema/category_schema_generation.txt",
         parser="json",
         temperature=1.0,
-        max_tokens=8192,
+        max_tokens=12288,
     ),
     "tag_schema_generation_gemini": InferenceConfig(
         provider="gemini",
@@ -22,7 +22,7 @@ ANNOTATION_PRESETS = {
         prompt_template="prompts/schema/tag_schema_generation.txt",
         parser="json",
         temperature=0.7,
-        max_tokens=8192,
+        max_tokens=16384,
     ),
     "spurious_tag_schema_generation_gemini": InferenceConfig(
         provider="gemini",

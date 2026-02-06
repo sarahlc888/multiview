@@ -11,5 +11,8 @@ from multiview.utils.prompt_utils import read_or_return
 GSM8K_SYNTHESIS_CONFIGS = {
     "arithmetic": {
         "remix_prompt": read_or_return("prompts/custom/gsm8k_arithmetic_remix.txt"),
-    }
+    },
+    "final_expression": {
+        "remix_prompt": read_or_return("prompts/custom/gsm8k_arithmetic_remix.txt"),
+    },
 }

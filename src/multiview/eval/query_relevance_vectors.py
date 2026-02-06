@@ -157,7 +157,7 @@ def evaluate_with_query_relevance_vectors(
     logger.debug(f"Example expanded queries: {expanded_queries=}")
 
     # Step 2: Create score vectors for all documents
-    score_vectors = _create_score_vectors(
+    score_vectors, document_embeddings = _create_score_vectors(
         documents=documents,
         expanded_queries=expanded_queries,
         embedding_preset=embedding_preset,
@@ -227,6 +227,7 @@ def evaluate_with_query_relevance_vectors(
         "positive_scores": positive_scores,
         "negative_scores": negative_scores,
         "triplet_logs": triplet_logs,
+        "embeddings": document_embeddings,  # Add document embeddings to results
     }
 
 
@@ -276,7 +277,7 @@ def _create_score_vectors(
     run_name: str | None,
     preset_overrides: dict | None,
     criterion: str | None = None,
-) -> list[list[float]]:
+) -> tuple[list[list[float]], list]:
     """Create k-dimensional score vectors for all documents.
 
     For each document, computes embedding-based relevance scores against all
@@ -292,7 +293,9 @@ def _create_score_vectors(
         criterion: Criterion name (for instruction-tuned embeddings)
 
     Returns:
-        List of k-dimensional score vectors (one per document)
+        Tuple of (score_vectors, document_embeddings):
+        - score_vectors: List of k-dimensional score vectors (one per document)
+        - document_embeddings: List of embedding vectors for documents
     """
     k = len(expanded_queries)
     n_docs = len(documents)
@@ -349,4 +352,4 @@ def _create_score_vectors(
 
     logger.info(f"Created {len(score_vectors)} score vectors of dimension {k}")
 
-    return score_vectors
+    return score_vectors, document_embeddings

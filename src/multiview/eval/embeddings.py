@@ -131,4 +131,5 @@ def evaluate_with_embeddings(
         "avg_positive_score": avg_positive_score,
         "avg_negative_score": avg_negative_score,
         "triplet_logs": triplet_logs,
+        "embeddings": embeddings,  # Add embeddings array to results
     }

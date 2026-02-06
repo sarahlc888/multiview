@@ -26,6 +26,7 @@ def generate_tag_schema(
     cache_alias: str | None = None,
     run_name: str | None = None,
     config: str | None = None,
+    images: list[str | None] | None = None,
 ) -> dict:
     """Generate a tag schema from sample documents.
 
@@ -39,9 +40,8 @@ def generate_tag_schema(
         is_spurious: If True, generate spurious tags (surface-level properties)
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
-        config: Inference config name to use. If None, defaults to
-            "spurious_tag_schema_generation_gemini" for spurious tags or
-            "tag_schema_generation_gemini" for regular tags.
+        config: Inference config name to use
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         Tag schema dict with structure:
@@ -55,9 +55,24 @@ def generate_tag_schema(
     # Sample documents deterministically based on criterion (and spurious flag for uniqueness)
     seed_base = f"{criterion}_spurious" if is_spurious else criterion
     sample_docs = deterministic_sample(documents, n_samples, seed_base)
-    sample_docs_str = "\n\n".join(
-        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
-    )
+
+    # Sample images if provided (using same indices)
+    sample_images = None
+    if images is not None:
+        indices = deterministic_sample(
+            list(range(len(documents))), n_samples, seed_base
+        )
+        sample_images = [images[i] for i in indices]
+
+    # Format sample documents with <image> markers if images are provided
+    if sample_images is not None:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n<image>" for i in range(len(sample_docs))
+        )
+    else:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+        )
 
     # Format schema_hint with heading if provided
     schema_hint_formatted = (
@@ -74,20 +89,15 @@ def generate_tag_schema(
         "n_samples": [str(len(sample_docs))],
     }
 
-    # Use preset based on tag type (if not explicitly provided)
-    if config is None:
-        preset_name = (
-            "spurious_tag_schema_generation_gemini"
-            if is_spurious
-            else "tag_schema_generation_gemini"
-        )
-    else:
-        preset_name = config
+    # Add images if available
+    # Wrap in list for multi-image single prompt (needed for proper interleaving)
+    if sample_images is not None:
+        inputs["images"] = [sample_images]
 
     # Generate schema using inference
     results = run_inference(
         inputs=inputs,
-        config=preset_name,
+        config=config,
         cache_alias=cache_alias,
         run_name=run_name,
         verbose=True,
@@ -115,6 +125,7 @@ def generate_spurious_tag_schema(
     cache_alias: str | None = None,
     run_name: str | None = None,
     config: str | None = None,
+    images: list[str | None] | None = None,
 ) -> dict:
     """Generate spurious tag schema (surface-level properties).
 
@@ -129,6 +140,7 @@ def generate_spurious_tag_schema(
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
         config: Inference config name to use (default: "spurious_tag_schema_generation_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         Spurious tag schema dict
@@ -144,6 +156,7 @@ def generate_spurious_tag_schema(
         cache_alias=cache_alias,
         run_name=run_name,
         config=config,
+        images=images,
     )
 
 
@@ -155,6 +168,7 @@ def apply_tags_batch(
     cache_alias: str | None = None,
     run_name: str | None = None,
     config: str = "tag_apply_gemini",
+    images: list[str | None] | None = None,
 ) -> list[dict]:
     """Apply binary tags to multiple documents.
 
@@ -166,6 +180,7 @@ def apply_tags_batch(
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
         config: Inference config name to use (default: "tag_apply_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         List of annotation dicts:
@@ -185,6 +200,10 @@ def apply_tags_batch(
         "criterion_description": [criterion_description or ""] * len(documents),
         "tag_schema": [tags_text] * len(documents),
     }
+
+    # Add images if available
+    if images is not None:
+        inputs["images"] = images
 
     # Run inference
     results = run_inference(

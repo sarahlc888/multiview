@@ -259,6 +259,8 @@ def cached_fn_completions(
         logger.debug(
             f"Example non-packed prompt (sent to provider fn):\n{non_packed_prompts[0]}"
         )
+        if "'text':" in non_packed_prompts[0]:
+            logger.debug("Cache mismatch detected for packed vs non-packed prompts")
 
     # Hash prompts for cache keys
     prompt_hashes = [hash_prompt(p) for p in packed_prompts]

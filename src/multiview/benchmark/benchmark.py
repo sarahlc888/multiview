@@ -9,6 +9,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from multiview.benchmark.artifacts import save_method_triplet_logs_jsonl
 from multiview.benchmark.evaluation_utils import (
     compute_instruction_sensitivity,
@@ -18,18 +20,98 @@ from multiview.benchmark.evaluation_utils import (
 logger = logging.getLogger(__name__)
 
 
+def save_embeddings_to_npy(
+    embeddings: list,
+    output_dir: Path,
+    task_name: str,
+    method_name: str,
+) -> None:
+    """Save embeddings array to NPY file.
+
+    Args:
+        embeddings: List of embedding vectors (from run_inference)
+        output_dir: Base embeddings output directory
+        task_name: Name of the task
+        method_name: Name of the method
+    """
+    # Create task subdirectory
+    task_dir = output_dir / task_name
+    task_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save embeddings array
+    embeddings_path = task_dir / f"{method_name}.npy"
+    embeddings_array = np.array(embeddings)
+    np.save(embeddings_path, embeddings_array)
+
+    # Save document IDs (indices)
+    doc_ids = np.arange(len(embeddings))
+    doc_ids_path = task_dir / f"{method_name}_doc_ids.npy"
+    np.save(doc_ids_path, doc_ids)
+
+    logger.info(
+        f"Saved embeddings to {embeddings_path} (shape: {embeddings_array.shape})"
+    )
+    logger.info(f"Saved document IDs to {doc_ids_path}")
+
+
+def save_similarity_matrix_to_npy(
+    similarity_matrix: np.ndarray,
+    output_dir: Path,
+    task_name: str,
+    method_name: str,
+) -> None:
+    """Save similarity matrix (NxN) to NPY file for heatmap visualization.
+
+    For methods like BM25 that compute pairwise similarity scores but don't produce
+    embeddings, we save the full NxN similarity matrix. The heatmap visualizer will
+    detect the NxN shape and use it directly instead of computing similarities.
+
+    Args:
+        similarity_matrix: NxN similarity matrix (e.g., from BM25)
+        output_dir: Base embeddings output directory
+        task_name: Name of the task
+        method_name: Name of the method
+    """
+    # Create task subdirectory
+    task_dir = output_dir / task_name
+    task_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save similarity matrix using same filename as embeddings for consistency
+    # Visualizer will detect NxN shape vs NxD shape
+    matrix_path = task_dir / f"{method_name}.npy"
+    np.save(matrix_path, similarity_matrix)
+
+    # Save document IDs (indices)
+    n_docs = similarity_matrix.shape[0]
+    doc_ids = np.arange(n_docs)
+    doc_ids_path = task_dir / f"{method_name}_doc_ids.npy"
+    np.save(doc_ids_path, doc_ids)
+
+    logger.info(
+        f"Saved similarity matrix to {matrix_path} (shape: {similarity_matrix.shape})"
+    )
+    logger.info(f"Saved document IDs to {doc_ids_path}")
+
+
 class Benchmark:
     """Benchmark orchestrator.
 
     Manages a set of tasks and evaluates them using various methods.
     """
 
-    def __init__(self, tasks: list, *, method_log_output_dir: str | None = None):
+    def __init__(
+        self,
+        tasks: list,
+        *,
+        method_log_output_dir: str | None = None,
+        embeddings_output_dir: str | None = None,
+    ):
         """Initialize benchmark with tasks.
 
         Args:
             tasks: List of Task objects to evaluate
             method_log_output_dir: Directory to write per-triplet per-method logs (optional)
+            embeddings_output_dir: Directory to write embeddings NPY files (optional)
         """
         self.tasks = tasks
         self.method_log_output_dir = (
@@ -37,6 +119,12 @@ class Benchmark:
         )
         if self.method_log_output_dir:
             self.method_log_output_dir.mkdir(parents=True, exist_ok=True)
+
+        self.embeddings_output_dir = (
+            Path(embeddings_output_dir) if embeddings_output_dir else None
+        )
+        if self.embeddings_output_dir:
+            self.embeddings_output_dir.mkdir(parents=True, exist_ok=True)
 
     def evaluate(
         self, method_configs: dict[str, list[dict]]
@@ -120,22 +208,109 @@ class Benchmark:
                             task=task,
                             method_config=method_config,
                         )
-                        triplet_logs = method_results.get("triplet_logs")
 
-                        if self.method_log_output_dir and triplet_logs:
-                            save_method_triplet_logs_jsonl(
-                                triplet_logs=triplet_logs,
-                                output_dir=self.method_log_output_dir,
-                                task_name=task_name,
-                                method_name=method_name,
-                            )
+                        # Handle multi-trial results
+                        if method_results.get("_multi_trial"):
+                            # Expand trials into separate rows
+                            for trial_result in method_results["trials"]:
+                                trial_name = trial_result.get(
+                                    "method_name", method_name
+                                )
+                                triplet_logs = trial_result.get("triplet_logs")
+                                embeddings = trial_result.get("embeddings")
+                                similarity_matrix = trial_result.get(
+                                    "similarity_matrix"
+                                )
 
-                        # Keep returned results lean: logs are written to disk.
-                        task_results[method_name] = {
-                            k: v
-                            for k, v in method_results.items()
-                            if k != "triplet_logs"
-                        }
+                                if self.method_log_output_dir and triplet_logs:
+                                    save_method_triplet_logs_jsonl(
+                                        triplet_logs=triplet_logs,
+                                        output_dir=self.method_log_output_dir,
+                                        task_name=task_name,
+                                        method_name=trial_name,
+                                    )
+
+                                # Save embeddings if available
+                                if (
+                                    self.embeddings_output_dir
+                                    and embeddings is not None
+                                ):
+                                    save_embeddings_to_npy(
+                                        embeddings=embeddings,
+                                        output_dir=self.embeddings_output_dir,
+                                        task_name=task_name,
+                                        method_name=trial_name,
+                                    )
+
+                                # Save similarity matrix if available (e.g., from BM25)
+                                if (
+                                    self.embeddings_output_dir
+                                    and similarity_matrix is not None
+                                ):
+                                    save_similarity_matrix_to_npy(
+                                        similarity_matrix=similarity_matrix,
+                                        output_dir=self.embeddings_output_dir,
+                                        task_name=task_name,
+                                        method_name=trial_name,
+                                    )
+
+                                # Store trial result as separate row (exclude large data)
+                                task_results[trial_name] = {
+                                    k: v
+                                    for k, v in trial_result.items()
+                                    if k
+                                    not in (
+                                        "triplet_logs",
+                                        "embeddings",
+                                        "similarity_matrix",
+                                    )
+                                }
+                        else:
+                            # Single result (normal case)
+                            triplet_logs = method_results.get("triplet_logs")
+                            embeddings = method_results.get("embeddings")
+                            similarity_matrix = method_results.get("similarity_matrix")
+
+                            if self.method_log_output_dir and triplet_logs:
+                                save_method_triplet_logs_jsonl(
+                                    triplet_logs=triplet_logs,
+                                    output_dir=self.method_log_output_dir,
+                                    task_name=task_name,
+                                    method_name=method_name,
+                                )
+
+                            # Save embeddings if available
+                            if self.embeddings_output_dir and embeddings is not None:
+                                save_embeddings_to_npy(
+                                    embeddings=embeddings,
+                                    output_dir=self.embeddings_output_dir,
+                                    task_name=task_name,
+                                    method_name=method_name,
+                                )
+
+                            # Save similarity matrix if available (e.g., from BM25)
+                            if (
+                                self.embeddings_output_dir
+                                and similarity_matrix is not None
+                            ):
+                                save_similarity_matrix_to_npy(
+                                    similarity_matrix=similarity_matrix,
+                                    output_dir=self.embeddings_output_dir,
+                                    task_name=task_name,
+                                    method_name=method_name,
+                                )
+
+                            # Keep returned results lean: logs and embeddings written to disk
+                            task_results[method_name] = {
+                                k: v
+                                for k, v in method_results.items()
+                                if k
+                                not in (
+                                    "triplet_logs",
+                                    "embeddings",
+                                    "similarity_matrix",
+                                )
+                            }
 
                         # Check if method was skipped before trying to log accuracy
                         if method_results.get("skipped"):
@@ -148,11 +323,33 @@ class Benchmark:
                                     "reason": reason,
                                 }
                             )
+                        elif method_results.get("_multi_trial"):
+                            # Log summary for multi-trial results
+                            num_trials = method_results.get("num_trials", 0)
+                            successful_trials = [
+                                t
+                                for t in method_results["trials"]
+                                if not t.get("error") and not t.get("skipped")
+                            ]
+                            if successful_trials:
+                                avg_accuracy = sum(
+                                    t.get("accuracy", 0.0) for t in successful_trials
+                                ) / len(successful_trials)
+                                logger.info(
+                                    f"      Multi-trial result: {len(successful_trials)}/{num_trials} trials successful, "
+                                    f"avg accuracy: {avg_accuracy:.2%}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"      Multi-trial result: {num_trials} trials, all failed or skipped"
+                                )
                         else:
-                            logger.info(
-                                f"      Result: {task_results[method_name]['accuracy']:.2%} accuracy "
-                                f"({task_results[method_name]['n_correct']}/{task_results[method_name]['n_total']} correct)"
-                            )
+                            # Single result (normal case)
+                            if method_name in task_results:
+                                logger.info(
+                                    f"      Result: {task_results[method_name]['accuracy']:.2%} accuracy "
+                                    f"({task_results[method_name]['n_correct']}/{task_results[method_name]['n_total']} correct)"
+                                )
 
                     except Exception as e:
                         logger.error(

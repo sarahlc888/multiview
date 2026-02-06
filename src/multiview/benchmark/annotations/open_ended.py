@@ -24,6 +24,7 @@ def generate_pairwise_sim_hint(
     n_samples: int = 10,
     cache_alias: str | None = None,
     run_name: str | None = None,
+    images: list[str | None] | None = None,
 ) -> dict:
     """Generate a summary hint from sample documents.
 
@@ -38,6 +39,7 @@ def generate_pairwise_sim_hint(
         n_samples: Number of documents to sample
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         Dict with structure:
@@ -47,9 +49,24 @@ def generate_pairwise_sim_hint(
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(
-        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
-    )
+
+    # Sample images if provided (using same indices)
+    sample_images = None
+    if images is not None:
+        indices = deterministic_sample(
+            list(range(len(documents))), n_samples, criterion
+        )
+        sample_images = [images[i] for i in indices]
+
+    # Format sample documents with <image> markers if images are provided
+    if sample_images is not None:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n<image>" for i in range(len(sample_docs))
+        )
+    else:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+        )
 
     # Prepare inputs
     inputs = {
@@ -58,6 +75,11 @@ def generate_pairwise_sim_hint(
         "criterion_description": [criterion_description or ""],
         "sample_documents": [sample_docs_str],
     }
+
+    # Add images if available
+    # Wrap in list for multi-image single prompt (needed for proper interleaving)
+    if sample_images is not None:
+        inputs["images"] = [sample_images]
 
     # Generate hint using inference
     results = run_inference(
@@ -89,6 +111,7 @@ def generate_summary_guidance(
     cache_alias: str | None = None,
     run_name: str | None = None,
     guidance_preset: str = "summary_guidance_generation_gemini",
+    images: list[str | None] | None = None,
 ) -> dict:
     """Generate summary guidance from sample documents.
 
@@ -103,6 +126,7 @@ def generate_summary_guidance(
         run_name: Optional experiment/run name for cache organization
         guidance_preset: Inference preset to use for guidance generation
             (default: "summary_guidance_generation_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         Summary guidance dict with structure:
@@ -112,9 +136,24 @@ def generate_summary_guidance(
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(
-        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
-    )
+
+    # Sample images if provided (using same indices)
+    sample_images = None
+    if images is not None:
+        indices = deterministic_sample(
+            list(range(len(documents))), n_samples, criterion
+        )
+        sample_images = [images[i] for i in indices]
+
+    # Format sample documents with <image> markers if images are provided
+    if sample_images is not None:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n<image>" for i in range(len(sample_docs))
+        )
+    else:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+        )
 
     criterion_description = (criterion_description or "").strip()
 
@@ -131,6 +170,11 @@ def generate_summary_guidance(
         "summary_hint": [summary_hint_formatted],
         "sample_documents": [sample_docs_str],
     }
+
+    # Add images if available
+    # Wrap in list for multi-image single prompt (needed for proper interleaving)
+    if sample_images is not None:
+        inputs["images"] = [sample_images]
 
     # Generate guidance using inference with retry on failure
     for attempt in range(2):
@@ -161,6 +205,7 @@ def generate_summaries_batch(
     cache_alias: str | None = None,
     run_name: str | None = None,
     generate_preset: str = "summary_generate_gemini",
+    images: list[str | None] | None = None,
 ) -> list[dict]:
     """Generate structured summaries for multiple documents.
 
@@ -173,6 +218,7 @@ def generate_summaries_batch(
         run_name: Optional experiment/run name for cache organization
         generate_preset: Inference preset to use for summary generation
             (default: "summary_generate_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         List of annotation dicts:
@@ -202,6 +248,10 @@ def generate_summaries_batch(
         "criterion_description": [criterion_description] * len(documents),
         "summary_guidance": [guidance_str] * len(documents),
     }
+
+    # Add images if available
+    if images is not None:
+        inputs["images"] = images
 
     # Run inference
     results = run_inference(

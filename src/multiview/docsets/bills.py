@@ -19,7 +19,6 @@ from multiview.constants import (
     INSTRUCTLF_REPO_URL,
 )
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import BILLS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ class BillsDocSet(BaseDocSet):
     DATASET_PATH = str(INSTRUCTLF_BILLS_DATA)
     DESCRIPTION = "Legislative bills with topic labels from InstructLF"
     KNOWN_CRITERIA = ["topic", "subtopic"]
-    CRITERION_METADATA = BILLS_CRITERIA
+    DATASET_NAME = "bills"
 
     def __init__(self, config: dict | None = None):
         """Initialize Bills dataset.

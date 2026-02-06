@@ -192,16 +192,27 @@ def _build_quality_rating_inputs(
     annotations: list[dict] | None,
 ) -> dict:
     """Build inputs for quality rating inference."""
+    from multiview.benchmark.annotations.annotation_utils import (
+        add_document_inputs_with_images,
+    )
+
     similarity_criteria = (
         f"{criterion}: {criterion_description}" if criterion_description else criterion
     )
 
     inputs = {
         "similarity_criteria": [similarity_criteria] * len(triplets),
-        "document_a": [t["anchor"] for t in triplets],
-        "document_b": [t["positive"] for t in triplets],
-        "document_c": [t["negative"] for t in triplets],
     }
+
+    # Use shared function to handle document/image extraction properly
+    add_document_inputs_with_images(
+        inputs,
+        {
+            "a": [t["anchor"] for t in triplets],
+            "b": [t["positive"] for t in triplets],
+            "c": [t["negative"] for t in triplets],
+        },
+    )
 
     if annotations:
         add_annotation_summaries_to_inputs(
@@ -376,6 +387,10 @@ def validate_triplet_consistency(
     original_ratings = [t["quality_rating"] for t in triplets]
 
     # Build inputs for SWAPPED triplets only (a, c, b)
+    from multiview.benchmark.annotations.annotation_utils import (
+        add_document_inputs_with_images,
+    )
+
     similarity_criteria = (
         f"{criterion}: {criterion_description}" if criterion_description else criterion
     )
@@ -383,10 +398,16 @@ def validate_triplet_consistency(
     n = len(triplets)
     inputs_swapped = {
         "similarity_criteria": [similarity_criteria] * n,
-        "document_a": [t["anchor"] for t in triplets],
-        "document_b": [t["negative"] for t in triplets],  # SWAPPED
-        "document_c": [t["positive"] for t in triplets],  # SWAPPED
     }
+    # Use shared function to handle document/image extraction properly
+    add_document_inputs_with_images(
+        inputs_swapped,
+        {
+            "a": [t["anchor"] for t in triplets],
+            "b": [t["negative"] for t in triplets],  # SWAPPED
+            "c": [t["positive"] for t in triplets],  # SWAPPED
+        },
+    )
 
     # Add annotations if available (with swapped roles)
     if annotations:
@@ -702,17 +723,39 @@ def rate_and_filter_quality_workflow(
             f"consistency check (min_orig={consistency_min_quality}, max_swap={consistency_max_invalid})",
         )
 
+        # Save reference to source before overwriting
+        source_before_consistency = result["kept_triplets"]
+
         result["kept_triplets"] = kept_consistent
         result["dropped_triplets"].extend(dropped_inconsistent)
         result["consistency_stats"] = consistency_result
+
+        # Filter main ratings/reasoning to match consistent triplets
+        # Build mapping from triplet ID to index before consistency filter
+        triplet_to_idx = {
+            (t["anchor_id"], t["positive_id"], t["negative_id"]): i
+            for i, t in enumerate(source_before_consistency)
+        }
+
+        # Filter ratings and reasoning to match kept_consistent
+        result["ratings"] = [
+            result["ratings"][
+                triplet_to_idx[(t["anchor_id"], t["positive_id"], t["negative_id"])]
+            ]
+            for t in kept_consistent
+        ]
+        result["reasoning"] = [
+            result["reasoning"][
+                triplet_to_idx[(t["anchor_id"], t["positive_id"], t["negative_id"])]
+            ]
+            for t in kept_consistent
+        ]
 
         # Filter individual preset ratings to match consistent triplets
         if len(presets_config) > 1:
             _filter_preset_ratings_to_match_triplets(
                 result,
-                list(
-                    result["kept_triplets"] + dropped_inconsistent
-                ),  # Source before consistency filter
+                source_before_consistency,  # Source before consistency filter
                 kept_consistent,
             )
 

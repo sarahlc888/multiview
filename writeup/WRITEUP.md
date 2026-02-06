@@ -1,17 +1,21 @@
 # Multiview: scalable evaluations for conditional semantic similarity
 
 ## Overview
+
 - Semantic similarity is **criteria-dependent**.
     - Consider this example from [Prismatic Synthesis](https://nvlabs.github.io/prismatic-synthesis/). Sample A and B are more similar with respect to arithmetic structure (distance formula), but Sample A and C are more similar with respect to the word problem's narrative setup (Bill walking).
          <div align="center">
            <img src="https://nvlabs.github.io/prismatic-synthesis/assets/motivation.png" width="300">
          </div>
-
 - A performant instruction-tuned embedding model
 should be able to produce representations
-based on **arbitrary criteria**,
-but in practice, this capability is limited.
-- In this benchmark, we evaluate a model's ability to represent multiple different 'views' of the same document.
+conditioned on **arbitrary criteria**.
+- In practice, this capability is limited.
+- We evaluate how well representations reflect similarity in the context of a specific criteria/instruction. Specifically, we measure the ability to represent multiple different 'views' of the same document.
+- Given a **corpus of unlabeled documents** and **a freetext criteria**, `multiview` will...
+    - Annotate each document with how it relates to the criteria
+    - Use the annotations to create criteria-specific triplets `(anchor, positive, negative)`
+    - Evaluate how well embedding models, rerankers, and LMs can distinguish positives from negatives
 - Tasks include:
     - GSM8K problems by arithmetic structure
     - GSM8K problems by narrative setup
@@ -19,11 +23,13 @@ but in practice, this capability is limited.
     - Crossword clues by clue type
     - Haiku by literal images
     - Haiku by meaning evoked
-- See [TASKS_TABLE.md](../TASKS_TABLE.md) for additional examples.
+    - ...
+    - See [TASKS_TABLE.md](../TASKS_TABLE.md) for additional examples.
+
 
 ## Related work
-- Conditional semantic similarity is a canonical task in computer vision and NLP, but existing benchmarks focus primarily on simple conditions and sentence-length texts.
-- We build upon existing evaluations to include more complex documents and criteria, focusing on tasks where criteria *cannot* be trivially extracted into a single word or phrase.
+- Conditional semantic similarity is a canonical task in computer vision and NLP. However, existing benchmarks focus primarily on simple conditions and sentence-length texts.
+- We build upon existing evaluations to include more complex documents and criteria, and we focus on tasks where criteria *cannot* be trivially extracted into a single word or phrase.
 - See [Related Work](sections/0_related_work.md) for references, including a discussion of instructed retrieval benchmarks.
 
 ## Technical artifacts
@@ -32,7 +38,6 @@ but in practice, this capability is limited.
 data generated via the above method as well as data adapted from pre-existing sources.
 3. **Leaderboard**. Evaluation results for instruction-tuned embedding models, rerankers, embedding models with query expansion, and additional baselines. See [Scoring Methods](sections/2_scoring_methods.md) and [Results](sections/3_results.md).
 
-See [Discussion](sections/4_discussion.md).
 
 ## Future work
 - Future work could scale this evaluation to even more realistic documents and criteria.

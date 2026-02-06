@@ -14,7 +14,6 @@ import requests
 from bs4 import BeautifulSoup
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import DICKINSON_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +168,7 @@ class DickinsonDocSet(BaseDocSet):
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria (descriptions and schema hints)
-    CRITERION_METADATA = DICKINSON_CRITERIA
+    DATASET_NAME = "dickinson"
     # Synthesis prompts for LM-based document generation
     SYNTHESIS_CONFIGS = {}
 

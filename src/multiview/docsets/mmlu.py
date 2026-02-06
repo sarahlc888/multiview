@@ -6,7 +6,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import MMLU_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class MMLUDocSet(BaseDocSet):
     KNOWN_CRITERIA = ["subject"]
 
     # Metadata for LM-based criteria (Bloom's taxonomy)
-    CRITERION_METADATA = MMLU_CRITERIA
+    DATASET_NAME = "mmlu"
 
     def load_documents(self) -> list[Any]:
         """Load MMLU questions as documents from Hugging Face.

@@ -6,7 +6,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import CROSSWORD_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class CrosswordCluesDocSet(BaseDocSet):
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = CROSSWORD_CRITERIA
+    DATASET_NAME = "crossword"
 
     def load_documents(self) -> list[Any]:
         """Load crossword clues as documents from Hugging Face."""

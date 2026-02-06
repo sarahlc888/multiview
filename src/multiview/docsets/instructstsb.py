@@ -25,7 +25,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import INSTRUCTSTSB_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ class InstructSTSBDocSet(BaseDocSet):
     KNOWN_CRITERIA = ["instructed_similarity"]
 
     # Metadata for LM-based criteria (descriptions, hints, etc.)
-    CRITERION_METADATA = INSTRUCTSTSB_CRITERIA
+    DATASET_NAME = "inb_instructstsb"
 
     def __init__(self, config: dict | None = None):
         """Initialize InstructSTSBDocSet.

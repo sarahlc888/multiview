@@ -6,7 +6,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import ONION_NEWS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class OnionNewsDocSet(BaseDocSet):
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = ONION_NEWS_CRITERIA
+    DATASET_NAME = "onion_headlines"
 
     def load_documents(self) -> list[Any]:
         """Load Onion News headlines as documents from Hugging Face."""

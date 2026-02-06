@@ -27,8 +27,8 @@ _global:
 # GSM8K word problems have clear orthogonal criteria (algebraic structure vs. narrative context)
 gsm8k:
   final_expression:
-    description: "The expression that needs to be evaluated to produce the final answer. Independent of specific numerical values, what is the structure of this expression?"
-    summary_hint: "Use this format for the summary: 'answer = 150 / 5 + 30 / 5'"
+    description: "The expression that needs to be evaluated to produce the final answer. What is the structure of this expression, independent of the specific numerical values involved?"
+    summary_hint: "Use this type of 'one-liner' format for the summary: 'answer = 150 / 5 + 30 / 5'"
 
   arithmetic:
     embed_instr: "Given a document, retrieve documents that have a similar sequence of arithmetic operations"
@@ -410,4 +410,10 @@ moralfables: {}
 infinite_chats: {}
 
 # UT Zappos 50K
-ut_zappos50k: {}
+ut_zappos50k:
+  suggested_gender:
+    description: "The expected gender of the target audience."
+  functional_type:
+    description: "The functional type of the shoe."
+  color:
+    description: "The color of the shoe."

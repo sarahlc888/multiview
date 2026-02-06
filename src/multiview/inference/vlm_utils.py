@@ -21,10 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 def load_image_from_source(source: str, timeout: int = 10) -> bytes:
-    """Load image from URL or local file path.
+    """Load image from URL, local file path, or data URI.
 
     Args:
-        source: Image source - either a URL (http:// or https://) or local file path
+        source: Image source - can be:
+                - URL: http:// or https://
+                - Data URI: data:image/jpeg;base64,... (from streaming datasets)
+                - Local file path
         timeout: Timeout in seconds for URL requests (default: 10)
 
     Returns:
@@ -37,6 +40,21 @@ def load_image_from_source(source: str, timeout: int = 10) -> bytes:
     """
     if not source:
         raise ValueError("Image source cannot be empty")
+
+    # Check if source is a data URI (e.g., from HuggingFace streaming)
+    if source.startswith("data:"):
+        logger.debug("Loading image from data URI")
+        try:
+            # Parse data URI: data:image/jpeg;base64,<base64_data>
+            if ";base64," in source:
+                # Extract base64 data after the comma
+                base64_data = source.split(";base64,", 1)[1]
+                # Decode base64 to bytes
+                return base64.b64decode(base64_data)
+            else:
+                raise ValueError("Data URI must use base64 encoding")
+        except Exception as e:
+            raise ValueError(f"Failed to decode data URI: {e}") from e
 
     # Check if source is a URL
     if source.startswith("http://") or source.startswith("https://"):
@@ -148,6 +166,42 @@ def prepare_image_for_gemini(
     )
 
     return {"inline_data": {"mime_type": mime_type, "data": base64_data}}
+
+
+def prepare_image_for_openai(image_source: str, timeout: int = 10) -> str:
+    """Prepare image as base64 data URI for OpenAI-compatible APIs.
+
+    Args:
+        image_source: Image URL, local file path, or data URI
+        timeout: Timeout in seconds for URL requests
+
+    Returns:
+        Data URI string in format: "data:image/jpeg;base64,..."
+
+    Raises:
+        ValueError: If image cannot be loaded or encoded
+        FileNotFoundError: If local file doesn't exist
+    """
+    # If already a data URI, return as-is (avoid decode/re-encode)
+    if image_source.startswith("data:") and ";base64," in image_source:
+        logger.debug("Image is already a data URI, using as-is")
+        return image_source
+
+    # Load image
+    image_bytes = load_image_from_source(image_source, timeout=timeout)
+
+    # Detect MIME type
+    mime_type = detect_mime_type(image_bytes, source_path=image_source)
+
+    # Encode to base64
+    base64_data = encode_image_base64(image_bytes)
+
+    logger.debug(
+        f"Prepared image for OpenAI: {len(image_bytes)} bytes, {mime_type}, "
+        f"{len(base64_data)} base64 chars"
+    )
+
+    return f"data:{mime_type};base64,{base64_data}"
 
 
 def validate_image_list(images: list[str | None]) -> list[str | None]:

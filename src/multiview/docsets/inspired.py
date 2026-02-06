@@ -22,7 +22,6 @@ from multiview.constants import (
     INSTRUCTLF_REPO_URL,
 )
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import INSPIRED_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +50,7 @@ class InspiredDocSet(BaseDocSet):
     DATASET_PATH = str(INSTRUCTLF_INSPIRED_TRAIN)
     DESCRIPTION = "Movie recommendation dialogues from InstructLF"
     KNOWN_CRITERIA = ["movie_recommendation"]
-    CRITERION_METADATA = INSPIRED_CRITERIA
+    DATASET_NAME = "inspired"
 
     def __init__(self, config: dict | None = None):
         """Initialize Inspired dataset.

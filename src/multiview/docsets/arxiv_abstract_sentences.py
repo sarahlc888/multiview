@@ -13,7 +13,6 @@ from multiview.docsets.arxiv_utils import (
     split_into_sentences,
 )
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import ARXIV_ABSTRACT_SENTENCES_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class ArxivAbstractSentencesDocSet(BaseDocSet):
     KNOWN_CRITERIA = []  # source_abstract handled via precomputed annotations
 
     # Metadata for LM-based criteria
-    CRITERION_METADATA = ARXIV_ABSTRACT_SENTENCES_CRITERIA
+    DATASET_NAME = "arxiv_abstract_sentences"
 
     def __init__(self, config: dict | None = None):
         """Initialize ArXiv abstract sentences dataset.

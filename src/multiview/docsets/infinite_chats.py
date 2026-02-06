@@ -20,7 +20,6 @@ from datasets import load_dataset
 
 from multiview.constants import INFINITE_CHATS_DATASET_ID
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import _CRITERIA_BY_DATASET
 from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
@@ -43,8 +42,8 @@ class InfiniteChatsDocSet(BaseDocSet):
 
     DATASET_PATH = INFINITE_CHATS_DATASET_ID
     DESCRIPTION = "Full conversations from infinite-chats grouped by prompt"
+    DATASET_NAME = "infinite_chats"
     KNOWN_CRITERIA = []  # Documents are strings; no metadata extracted
-    CRITERION_METADATA = _CRITERIA_BY_DATASET.get("infinite_chats", {})
 
     def __init__(self, config: dict | None = None):
         """Initialize infinite-chats dataset.

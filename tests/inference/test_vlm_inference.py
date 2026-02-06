@@ -1,4 +1,4 @@
-"""Tests for VLM inference with Gemini.
+"""Tests for VLM inference with Gemini and HuggingFace.
 
 Tests cover:
 - Basic VLM inference with images
@@ -185,5 +185,190 @@ class TestGeminiVLMInference:
 
         # Should mention key elements
         assert "cat" in description or "feline" in description
+        # Should have reasonable length
+        assert len(description) > 20
+
+
+@pytest.mark.external
+class TestHuggingFaceVLMInference:
+    """Test HuggingFace Vision-Language Model inference with GLM-4.6V-Flash."""
+
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN")
+        and not os.getenv("HF_API_KEY")
+        and not os.getenv("HUGGINGFACE_API_KEY"),
+        reason="HF_TOKEN, HF_API_KEY, or HUGGINGFACE_API_KEY not set",
+    )
+    def test_hf_glm_vlm_basic_image_from_url(self):
+        """Test basic HF GLM-4.6V-Flash VLM inference with image from URL."""
+        config = InferenceConfig(
+            provider="hf_chat",
+            model_name="zai-org/GLM-4.6V-Flash",
+            prompt_template="{document}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=100,
+        )
+
+        # Use a simple public domain image
+        image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/400px-Cat03.jpg"
+
+        results = run_inference(
+            inputs={
+                "documents": ["What animal is in this image? Answer in one word."],
+                "images": [image_url],
+            },
+            config=config,
+        )
+
+        assert len(results) == 1
+        assert isinstance(results[0], str)
+        # Should recognize it's a cat
+        assert "cat" in results[0].lower()
+
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN")
+        and not os.getenv("HF_API_KEY")
+        and not os.getenv("HUGGINGFACE_API_KEY"),
+        reason="HF_TOKEN, HF_API_KEY, or HUGGINGFACE_API_KEY not set",
+    )
+    def test_hf_glm_vlm_batch_processing(self):
+        """Test batch processing with multiple images."""
+        config = InferenceConfig(
+            provider="hf_chat",
+            model_name="zai-org/GLM-4.6V-Flash",
+            prompt_template="{document}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=50,
+        )
+
+        # Two different cat images
+        images = [
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/400px-Cat03.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Cat_November_2010-1a.jpg/400px-Cat_November_2010-1a.jpg",
+        ]
+
+        prompts = [
+            "What animal is this?",
+            "What animal is this?",
+        ]
+
+        results = run_inference(
+            inputs={
+                "documents": prompts,
+                "images": images,
+            },
+            config=config,
+        )
+
+        assert len(results) == 2
+        # Both should recognize cats
+        for result in results:
+            assert isinstance(result, str)
+            assert "cat" in result.lower()
+
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN")
+        and not os.getenv("HF_API_KEY")
+        and not os.getenv("HUGGINGFACE_API_KEY"),
+        reason="HF_TOKEN, HF_API_KEY, or HUGGINGFACE_API_KEY not set",
+    )
+    def test_hf_glm_vlm_mixed_image_and_text(self):
+        """Test mixed batch with some images and some text-only prompts."""
+        config = InferenceConfig(
+            provider="hf_chat",
+            model_name="zai-org/GLM-4.6V-Flash",
+            prompt_template="{document}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=50,
+        )
+
+        # Mix of text-only and image prompts
+        results = run_inference(
+            inputs={
+                "documents": [
+                    "What is 2 + 2? Answer with just the number.",
+                    "What animal is in this image?",
+                ],
+                "images": [
+                    None,  # No image for first prompt
+                    "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/400px-Cat03.jpg",
+                ],
+            },
+            config=config,
+        )
+
+        assert len(results) == 2
+
+        # First should answer math question
+        assert "4" in results[0]
+
+        # Second should recognize cat
+        assert "cat" in results[1].lower()
+
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN")
+        and not os.getenv("HF_API_KEY")
+        and not os.getenv("HUGGINGFACE_API_KEY"),
+        reason="HF_TOKEN, HF_API_KEY, or HUGGINGFACE_API_KEY not set",
+    )
+    def test_hf_glm_vlm_with_invalid_image_url(self):
+        """Test that invalid image URL falls back gracefully to text-only."""
+        config = InferenceConfig(
+            provider="hf_chat",
+            model_name="zai-org/GLM-4.6V-Flash",
+            prompt_template="{document}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=50,
+        )
+
+        # Invalid URL should fall back to text-only processing
+        results = run_inference(
+            inputs={
+                "documents": ["What is 2 + 2?"],
+                "images": ["https://invalid-url-that-does-not-exist.com/image.jpg"],
+            },
+            config=config,
+        )
+
+        # Should still get a response (falls back to text-only)
+        assert len(results) == 1
+        assert isinstance(results[0], str)
+
+    @pytest.mark.skipif(
+        not os.getenv("HF_TOKEN")
+        and not os.getenv("HF_API_KEY")
+        and not os.getenv("HUGGINGFACE_API_KEY"),
+        reason="HF_TOKEN, HF_API_KEY, or HUGGINGFACE_API_KEY not set",
+    )
+    def test_hf_glm_vlm_image_description(self):
+        """Test detailed image description task."""
+        config = InferenceConfig(
+            provider="hf_chat",
+            model_name="zai-org/GLM-4.6V-Flash",
+            prompt_template="{document}",
+            parser="text",
+            temperature=0.0,
+            max_tokens=200,
+        )
+
+        image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Cat03.jpg/400px-Cat03.jpg"
+
+        results = run_inference(
+            inputs={
+                "documents": ["Describe what you see in this image in 2-3 sentences."],
+                "images": [image_url],
+            },
+            config=config,
+        )
+
+        assert len(results) == 1
+        description = results[0].lower()
+
+        # Should mention key elements
+        assert "cat" in description or "feline" in description, f"{description=}"
         # Should have reasonable length
         assert len(description) > 20

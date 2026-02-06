@@ -25,6 +25,7 @@ def generate_category_schema(
     cache_alias: str | None = None,
     run_name: str | None = None,
     config: str = "category_schema_generation_gemini",
+    images: list[str | None] | None = None,
 ) -> dict:
     """Generate a category schema from sample documents.
 
@@ -38,6 +39,7 @@ def generate_category_schema(
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
         config: Inference config name to use (default: "category_schema_generation_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         Category schema dict with structure:
@@ -50,9 +52,25 @@ def generate_category_schema(
     """
     # Sample documents deterministically based on criterion
     sample_docs = deterministic_sample(documents, n_samples, criterion)
-    sample_docs_str = "\n\n".join(
-        f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
-    )
+
+    # Sample images if provided (using same indices)
+    sample_images = None
+    if images is not None:
+        # Get the indices used for sampling
+        indices = deterministic_sample(
+            list(range(len(documents))), n_samples, criterion
+        )
+        sample_images = [images[i] for i in indices]
+
+    # Format sample documents with <image> markers if images are provided
+    if sample_images is not None:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n<image>" for i in range(len(sample_docs))
+        )
+    else:
+        sample_docs_str = "\n\n".join(
+            f"[Document {i+1}]\n{doc}" for i, doc in enumerate(sample_docs)
+        )
 
     # Format schema_hint with heading if provided
     schema_hint_formatted = (
@@ -70,6 +88,11 @@ def generate_category_schema(
         "schema_hint": [schema_hint_formatted],
         "sample_documents": [sample_docs_str],
     }
+
+    # Add images if available
+    # Wrap in list for multi-image single prompt (needed for proper interleaving)
+    if sample_images is not None:
+        inputs["images"] = [sample_images]
 
     # Generate schema using inference
     results = run_inference(
@@ -107,6 +130,7 @@ def classify_documents_batch(
     cache_alias: str | None = None,
     run_name: str | None = None,
     config: str = "category_classify_gemini",
+    images: list[str | None] | None = None,
 ) -> list[dict]:
     """Classify multiple documents into categories.
 
@@ -119,6 +143,7 @@ def classify_documents_batch(
         cache_alias: Optional cache alias for inference calls
         run_name: Optional experiment/run name for cache organization
         config: Inference config name to use (default: "category_classify_gemini")
+        images: Optional list of image paths/URLs corresponding to documents
 
     Returns:
         List of annotation dicts:
@@ -144,6 +169,10 @@ def classify_documents_batch(
         "criterion_description": [criterion_description or ""] * len(documents),
         "category_schema": [categories_text] * len(documents),
     }
+
+    # Add images if available
+    if images is not None:
+        inputs["images"] = images
 
     # Run inference
     results = run_inference(

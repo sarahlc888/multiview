@@ -8,7 +8,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import _CRITERIA_BY_DATASET
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +33,8 @@ class MoralFablesDocSet(BaseDocSet):
 
     DATASET_PATH = "klusai/ds-tf1-en-100k"
     DESCRIPTION = "Moralistic fables with structured moral metadata"
+    DATASET_NAME = "moralfables"
     KNOWN_CRITERIA = ["setting", "challenge", "outcome", "teaching"]
-    CRITERION_METADATA = _CRITERIA_BY_DATASET.get("moralfables", {})
 
     def __init__(self, config: dict | None = None):
         """Initialize MoralFablesDocSet.

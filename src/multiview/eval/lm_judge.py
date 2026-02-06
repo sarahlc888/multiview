@@ -13,6 +13,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from multiview.benchmark.annotations.annotation_utils import (
+    add_document_inputs_with_images,
+)
 from multiview.benchmark.triplets.utils import (
     add_annotation_summaries_to_inputs,
     triplet_annotation_summary,
@@ -81,10 +84,15 @@ def evaluate_with_lm_judge_triplet(
             "criterion": [criterion] * n,
             "criterion_description": [criterion_description] * n,
             "document_type": [document_type or "document"] * n,
-            "document_a": [t["anchor"] for t in triplets],
-            "document_b": [t["positive"] for t in triplets],
-            "document_c": [t["negative"] for t in triplets],
         }
+        add_document_inputs_with_images(
+            inputs,
+            {
+                "a": [t["anchor"] for t in triplets],
+                "b": [t["positive"] for t in triplets],
+                "c": [t["negative"] for t in triplets],
+            },
+        )
 
         if has_annotations:
             logger.info("Using annotations in evaluation")
@@ -123,20 +131,30 @@ def evaluate_with_lm_judge_triplet(
             "criterion": [criterion] * n,
             "criterion_description": [criterion_description] * n,
             "document_type": [document_type or "document"] * n,
-            "document_a": [t["anchor"] for t in triplets],
-            "document_b": [t["positive"] for t in triplets],
-            "document_c": [t["negative"] for t in triplets],
         }
+        add_document_inputs_with_images(
+            inputs_forward,
+            {
+                "a": [t["anchor"] for t in triplets],
+                "b": [t["positive"] for t in triplets],
+                "c": [t["negative"] for t in triplets],
+            },
+        )
 
         # Direction 2 (reversed): b=negative, c=positive (SWAPPED)
         inputs_reversed = {
             "criterion": [criterion] * n,
             "criterion_description": [criterion_description] * n,
             "document_type": [document_type or "document"] * n,
-            "document_a": [t["anchor"] for t in triplets],
-            "document_b": [t["negative"] for t in triplets],  # SWAPPED
-            "document_c": [t["positive"] for t in triplets],  # SWAPPED
         }
+        add_document_inputs_with_images(
+            inputs_reversed,
+            {
+                "a": [t["anchor"] for t in triplets],
+                "b": [t["negative"] for t in triplets],  # SWAPPED
+                "c": [t["positive"] for t in triplets],  # SWAPPED
+            },
+        )
 
         # Add annotations if present (for both directions)
         if has_annotations:

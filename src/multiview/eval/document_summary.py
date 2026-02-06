@@ -133,13 +133,15 @@ def evaluate_with_document_rewrite(
     positive_scores: list[float] = []
     negative_scores: list[float] = []
     triplet_logs: list[dict[str, Any]] = []
+    all_embeddings = None  # Will be populated only for embedding-based methods
+    bm25_similarity_matrix = None  # Will be populated only for BM25 methods
 
     if is_bm25:
         # For BM25, we still need a matrix over unique documents
         logger.info(
             f"Computing BM25 similarity matrix over {len(unique_summaries)} unique summaries"
         )
-        similarity_matrix = _compute_bm25_similarity_matrix(unique_summaries)
+        bm25_similarity_matrix = _compute_bm25_similarity_matrix(unique_summaries)
         # Create mapping from original doc ID to matrix index
         doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(unique_doc_ids)}
 
@@ -148,8 +150,8 @@ def evaluate_with_document_rewrite(
             positive_idx = doc_id_to_idx[positive_id]
             negative_idx = doc_id_to_idx[negative_id]
 
-            pos_score = similarity_matrix[anchor_idx][positive_idx]
-            neg_score = similarity_matrix[anchor_idx][negative_idx]
+            pos_score = bm25_similarity_matrix[anchor_idx][positive_idx]
+            neg_score = bm25_similarity_matrix[anchor_idx][negative_idx]
             positive_scores.append(float(pos_score))
             negative_scores.append(float(neg_score))
     else:
@@ -168,6 +170,12 @@ def evaluate_with_document_rewrite(
             run_name=run_name,
             preset_overrides=preset_overrides,
             criterion=criterion,
+        )
+
+        # Create full-sized embedding array for all documents (with NaN for unused docs)
+        all_embeddings = _create_full_embedding_array(
+            doc_id_to_embedding=doc_id_to_embedding,
+            total_docs=len(documents),
         )
 
         # Compute only the specific similarities needed for triplets
@@ -224,11 +232,32 @@ def evaluate_with_document_rewrite(
         f"{len(positive_scores)} triplets evaluated"
     )
 
-    return {
+    result = {
         "positive_scores": positive_scores,
         "negative_scores": negative_scores,
         "triplet_logs": triplet_logs,
     }
+
+    # Add embeddings only if using embedding-based method (not BM25)
+    if all_embeddings is not None:
+        result["embeddings"] = all_embeddings
+    # For BM25, add the similarity matrix for visualization
+    elif bm25_similarity_matrix is not None:
+        # Expand similarity matrix to full document count if needed
+        # (similarity_matrix is computed over unique documents only)
+        if len(unique_doc_ids) == len(documents):
+            result["similarity_matrix"] = bm25_similarity_matrix
+        else:
+            # Need to expand to full size with NaN for unused docs
+            full_matrix = np.full(
+                (len(documents), len(documents)), np.nan, dtype=np.float32
+            )
+            for i, doc_id_i in enumerate(unique_doc_ids):
+                for j, doc_id_j in enumerate(unique_doc_ids):
+                    full_matrix[doc_id_i, doc_id_j] = bm25_similarity_matrix[i, j]
+            result["similarity_matrix"] = full_matrix
+
+    return result
 
 
 def _generate_summaries(
@@ -309,6 +338,37 @@ def _compute_bm25_similarity_matrix(summaries: list[str]) -> np.ndarray:
         N×N similarity matrix where matrix[i][j] is BM25 score from summary i to summary j
     """
     return compute_bm25_matrix(summaries)
+
+
+def _create_full_embedding_array(
+    doc_id_to_embedding: dict[int, list[float]],
+    total_docs: int,
+) -> list:
+    """Create full-sized embedding array with NaN for unused documents.
+
+    Args:
+        doc_id_to_embedding: Dict mapping doc_id -> embedding vector
+        total_docs: Total number of documents in corpus
+
+    Returns:
+        List of embeddings (one per document), with NaN arrays for documents not in dict
+    """
+    if not doc_id_to_embedding:
+        return []
+
+    # Get embedding dimension from first embedding
+    embedding_dim = len(next(iter(doc_id_to_embedding.values())))
+
+    # Create full array with NaN for unused documents
+    full_embeddings = []
+    for doc_id in range(total_docs):
+        if doc_id in doc_id_to_embedding:
+            full_embeddings.append(doc_id_to_embedding[doc_id])
+        else:
+            # Use NaN array for documents not in triplets
+            full_embeddings.append([float("nan")] * embedding_dim)
+
+    return full_embeddings
 
 
 def _compute_embeddings_for_documents(

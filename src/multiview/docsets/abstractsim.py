@@ -12,7 +12,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import ABSTRACTSIM_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ class AbstractSimDocSet(BaseDocSet):
     KNOWN_CRITERIA = ["abstract_similarity", "abstraction_level"]
 
     # Metadata for LM-based criteria (descriptions, schema hints, etc.)
-    CRITERION_METADATA = ABSTRACTSIM_CRITERIA
+    DATASET_NAME = "abstractsim"
 
     def __init__(self, config: dict | None = None):
         """Initialize AbstractSimDocSet.

@@ -1,0 +1,46 @@
+---
+extends: default
+
+rules:
+  # Indentation: 2 spaces
+  indentation:
+    spaces: 2
+    indent-sequences: true
+    check-multi-line-strings: false
+
+  # Line length: Allow longer lines for readability
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+    allow-non-breakable-inline-mappings: true
+
+  # Comments: Require space after #, but allow inline comments
+  comments:
+    min-spaces-from-content: 2
+
+  # Document start: Don't require ---
+  document-start: disable
+
+  # Trailing spaces: Not allowed
+  trailing-spaces: enable
+
+  # Empty lines: Allow at most 1
+  empty-lines:
+    max: 1
+
+  # Key duplicates: Not allowed
+  key-duplicates: enable
+
+  # Truthy values: Allow yes/no/on/off
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+
+  # Brackets: Enforce consistent spacing
+  brackets:
+    min-spaces-inside: 0
+    max-spaces-inside: 0
+
+  # Braces: Enforce consistent spacing
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 0

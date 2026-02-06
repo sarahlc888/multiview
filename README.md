@@ -1,9 +1,21 @@
 # Multiview: scalable evaluations for conditional semantic similarity
 
-- Standard embedding models prioritize general notions of semantic similarity.
-- This benchmark evaluates embedding models on **criteria-specific** semantic similarity.
+Standard embedding models prioritize general notions of semantic similarity. This benchmark evaluates embedding models on **criteria-specific** semantic similarity.
 
 See [WRITEUP.md](writeup/WRITEUP.md) for more information.
+## Benchmark format
+
+Given a set of documents and a freetext criteria, we create triplets `(anchor, positive, negative)` for which the anchor document is more similar to the positive than negative, in the context of the criteria.
+
+Our evaluation metric is accuracy rate over triplets.
+
+For each document set, we create triplets for at least two different criteria.
+## Example triplet
+| Document Set | Criteria | Anchor | Positive | Negative |
+|--------------|------------------------|----------------|------------------|------------------|
+| haiku | **poem_composition**<br/>The relationship between the haiku's parts. What is the composition of the poem? Does the haiku have a 'turn'? Does the last line make a general pronouncement or a question? | weeds choke the garden / yet bloom with defiant grace / beauty in the low | starry night's vastness / infinite and dark and deep / human soul's smallness | tailor's voice is low / as he speaks to the fabric / coaxing it to form | [0][0][0][8][42] n=50 | ✗ | ✗ | ✗ | [Results](outputs/benchmark_fuzzy_debug/results/task_reports/haiku__poem_composition.md) | [Triplets](outputs/benchmark_fuzzy_debug/triplets/haiku__poem_composition__tag__50/triplets.json) |
+
+See [TASKS_TABLE.md](TASKS_TABLE.md) for example triplets for all tasks.
 
 ## Usage
 1. Set up
@@ -13,7 +25,7 @@ See [WRITEUP.md](writeup/WRITEUP.md) for more information.
     uv pip install -e .
     ```
 2. Update `CACHE_ROOT` in `src/multiview/constants.py` to a valid local path
-### Prepare triplets for evaluation
+### Create triplets for evaluation
 ```bash
 python scripts/create_eval.py --config-name benchmark
 ```
@@ -21,29 +33,52 @@ python scripts/create_eval.py --config-name benchmark
 ```bash
 python scripts/run_eval.py --config-name benchmark
 ```
-## Benchmark format
+### View results
+After running `create_eval.py`, a `viewer.html` file is automatically generated alongside each `triplets.json`:
 
-Given a set of documents and a freetext criteria, we create triplets `(anchor, positive, negative)` for which the anchor document is more similar to the positive than negative, in the context of the criteria.
+```bash
+# Open viewer for a specific task
+open outputs/benchmark_fuzzy_debug/triplets/haiku__poem_composition__tag__50/viewer.html
 
-Our evaluation metric is accuracy rate over triplets.
+# Or find all viewers
+find outputs -name "viewer.html"
+```
 
-For each document set, we create triplets for at least two different criteria.
+The viewer displays:
+- All triplets (anchor/positive/negative) with color coding
+- Document text content (scrollable for long documents)
+- Images (for vision datasets like ut_zappos50k)
+- Quality assessments with ratings and reasoning
+- Metadata for each document
 
+The viewer is a standalone HTML file with all data embedded - no server required!
 
-## Examples
-See [TASKS_TABLE.md](TASKS_TABLE.md) for example triplets for all tasks.
+- **Visualize Embeddings**
+
+  For exploring document embeddings and triplet relationships in 2D space, use the interactive visualizer:
+
+  ```bash
+  cd visualizer
+  npm install
+  npm run dev
+  ```
+
+  The visualizer shows embeddings with multiple reducers (t-SNE, UMAP, SOM, PCA) and supports triplet highlighting.
 
 ## Development
 
-- Overview
+- Primitives
     - `Benchmark: List[Task]`
     - `Task: List[Triplet]`
     - `Triplet: Tuple[String]` composed of `(anchor, positive, negative)`
+- Note: All API calls are cached. Re-running evaluations costs $0 after first run.
 
 ### View triplets
+
 - Show random triplets from documents
     ```bash
     pytest tests/benchmark/test_triplet_utils.py::test_create_random_triplets"[arxiv_abstract_sentences]" -vs
+    pytest tests/benchmark/test_triplet_utils.py::test_create_random_triplets"[arxiv_cs]" -vs
     ```
 - Show triplets from labeled data
     ```bash

@@ -16,7 +16,6 @@ from datasets import load_dataset
 
 from multiview.constants import INFINITE_CHATS_DATASET_ID
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import INFINITE_PROMPTS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +26,7 @@ class InfinitePromptsDocSet(BaseDocSet):
     DATASET_PATH = INFINITE_CHATS_DATASET_ID
     DESCRIPTION = "User prompts from infinite-chats dataset with category tags"
     KNOWN_CRITERIA = ["categories"]
-    CRITERION_METADATA = INFINITE_PROMPTS_CRITERIA
+    DATASET_NAME = "infinite_prompts"
 
     def __init__(self, config: dict | None = None):
         """Initialize InfinitePromptsDocSet.

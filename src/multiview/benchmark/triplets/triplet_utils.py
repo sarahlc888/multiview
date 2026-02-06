@@ -20,6 +20,7 @@ import logging
 
 import numpy as np
 
+from multiview.benchmark.annotations import extract_image, extract_text
 from multiview.benchmark.triplets.utils import (
     annotation_final_summary,
     extract_active_tags,
@@ -392,8 +393,11 @@ def _format_candidates_text(
 
     candidates_text_parts = []
     for i, cand_idx in enumerate(candidate_indices):
-        cand = documents[cand_idx]
+        cand_doc = documents[cand_idx]
         cand_ann = annotations[cand_idx]
+
+        # Extract text from document (image-only docs have text="<image>")
+        cand_text_content = extract_text(cand_doc)
 
         # Get BM25 lexical similarity score
         lexical_sim = bm25_scores[cand_idx]
@@ -402,8 +406,11 @@ def _format_candidates_text(
             cand_ann, include_spurious=include_spurious_tags
         )
 
-        cand_text = f"[Document {i+1}]\n{cand}\n\n"
+        cand_text = f"[Document {i+1}]\n{cand_text_content}\n\n"
         cand_text += f"[Annotation {i+1}]\n{cand_annotation}\n"
+
+        # Determine if this is an image-only document (no real text for lexical similarity)
+        is_image_only = cand_text_content.strip() == "<image>"
 
         # Only show tag-based similarity scores if annotations have tags
         if has_tags:
@@ -414,8 +421,13 @@ def _format_candidates_text(
             true_sim = jaccard_similarity(anchor_tags, cand_tags)
             spurious_sim = jaccard_similarity(anchor_spurious, cand_spurious)
 
-            cand_text += f"Similarity to anchor: Criterion={true_sim:.2f} | Spurious={spurious_sim:.2f} | Lexical={lexical_sim:.2f}"
-        else:
+            # For image-only docs, skip lexical similarity (not meaningful)
+            if is_image_only:
+                cand_text += f"Similarity to anchor: Criterion={true_sim:.2f} | Spurious={spurious_sim:.2f}"
+            else:
+                cand_text += f"Similarity to anchor: Criterion={true_sim:.2f} | Spurious={spurious_sim:.2f} | Lexical={lexical_sim:.2f}"
+        elif not is_image_only:
+            # Only show lexical similarity for text documents
             cand_text += f"Similarity to anchor: Lexical={lexical_sim:.2f}"
 
         candidates_text_parts.append(cand_text)
@@ -550,13 +562,38 @@ def select_positive_batch(
     )
 
     anchor_docs = []
+    all_images = []  # List of image lists (one per prompt)
     anchor_annotations = []
     candidates_texts = []
 
     for anchor_idx, candidate_indices in zip(
         multi_anchor_indices, multi_candidate_lists, strict=False
     ):
-        anchor_docs.append(documents[anchor_idx])
+        anchor_doc = documents[anchor_idx]
+        # Extract text and image separately for proper formatting
+        anchor_text = extract_text(anchor_doc)
+        anchor_image = extract_image(anchor_doc)
+
+        # If document has an image, use <image> placeholder to mark where it should go
+        if anchor_image and not anchor_text:
+            anchor_text = "<image>"
+
+        anchor_docs.append(anchor_text)
+
+        # Collect all images for this prompt: anchor + candidates
+        prompt_images = []
+        if anchor_image:
+            prompt_images.append(anchor_image)
+
+        # Add candidate images
+        for cand_idx in candidate_indices:
+            cand_image = extract_image(documents[cand_idx])
+            if cand_image:
+                prompt_images.append(cand_image)
+
+        # Add to all_images (list of lists)
+        all_images.append(prompt_images if prompt_images else None)
+
         anchor_ann = annotations[anchor_idx]
         anchor_annotations.append(format_annotation_for_display(anchor_ann))
         bm25_scores = (
@@ -583,6 +620,10 @@ def select_positive_batch(
         "anchor_annotation": anchor_annotations,
         "candidates": candidates_texts,
     }
+
+    # Add images if any prompt has images (list of lists format)
+    if any(imgs for imgs in all_images):
+        inputs["images"] = all_images
 
     logger.debug(
         f"Running LM judge for positive selection (batch_size={len(multi_anchor_indices)}, "
@@ -720,6 +761,7 @@ def select_negative_batch(
     )
 
     anchor_docs = []
+    all_images = []  # List of image lists (one per prompt)
     anchor_annotations = []
     positive_docs = []
     positive_annotations = []
@@ -731,17 +773,53 @@ def select_negative_batch(
         multi_candidate_lists,
         strict=False,
     ):
-        anchor_docs.append(documents[anchor_idx])
+        # Extract anchor text and image
+        anchor_doc = documents[anchor_idx]
+        anchor_text = extract_text(anchor_doc)
+        anchor_image = extract_image(anchor_doc)
+
+        # If document has an image, use <image> placeholder to mark where it should go
+        if anchor_image and not anchor_text:
+            anchor_text = "<image>"
+
+        anchor_docs.append(anchor_text)
+
         anchor_ann = annotations[anchor_idx]
         anchor_annotations.append(
             format_annotation_for_display(anchor_ann, include_spurious=True)
         )
 
-        positive_docs.append(documents[positive_idx])
+        # Extract positive text and image
+        positive_doc = documents[positive_idx]
+        positive_text = extract_text(positive_doc)
+        positive_image = extract_image(positive_doc)
+
+        # If document has an image, use <image> placeholder to mark where it should go
+        if positive_image and not positive_text:
+            positive_text = "<image>"
+
+        positive_docs.append(positive_text)
+
         positive_ann = annotations[positive_idx]
         positive_annotations.append(
             format_annotation_for_display(positive_ann, include_spurious=True)
         )
+
+        # Collect all images for this prompt: anchor + positive + candidates
+        prompt_images = []
+        if anchor_image:
+            prompt_images.append(anchor_image)
+        if positive_image:
+            prompt_images.append(positive_image)
+
+        # Add candidate images
+        for cand_idx in candidate_indices:
+            cand_image = extract_image(documents[cand_idx])
+            if cand_image:
+                prompt_images.append(cand_image)
+
+        # Add to all_images (list of lists)
+        all_images.append(prompt_images if prompt_images else None)
 
         bm25_scores = (
             bm25_scores_by_anchor.get(anchor_idx) if bm25_scores_by_anchor else None
@@ -770,6 +848,10 @@ def select_negative_batch(
         "positive_annotation": positive_annotations,
         "candidates": candidates_texts,
     }
+
+    # Add images if any prompt has images (list of lists format)
+    if any(imgs for imgs in all_images):
+        inputs["images"] = all_images
 
     logger.debug(
         f"Running LM judge for negative selection (batch_size={len(multi_anchor_indices)}, "
@@ -1015,14 +1097,18 @@ def create_lm_triplets(
         if candidate_strategy == "bm25":
             scores = bm25_summary_matrix[anchor_idx].copy()
             scores[anchor_idx] = -np.inf
-            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
+            top_k_indices = np.argsort(scores, kind="stable")[::-1][
+                : max_num_candidates * 2
+            ]
             # Filter out anchor in case corpus size < max_num_candidates * 2
             candidate_indices = [int(idx) for idx in top_k_indices if idx != anchor_idx]
 
         elif candidate_strategy == "embedding":
             similarities = embedding_summary @ embedding_summary[anchor_idx]
             similarities[anchor_idx] = -np.inf
-            top_k_indices = np.argsort(similarities)[::-1][: max_num_candidates * 2]
+            top_k_indices = np.argsort(similarities, kind="stable")[::-1][
+                : max_num_candidates * 2
+            ]
             # Filter out anchor in case corpus size < max_num_candidates * 2
             candidate_indices = [int(idx) for idx in top_k_indices if idx != anchor_idx]
 
@@ -1035,7 +1121,9 @@ def create_lm_triplets(
         elif candidate_strategy == "multi":
             bm25_scores = bm25_summary_matrix[anchor_idx].copy()
             bm25_scores[anchor_idx] = -np.inf
-            bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+            bm25_top_indices = np.argsort(bm25_scores, kind="stable")[::-1][
+                :max_num_candidates
+            ]
             # Filter out anchor in case corpus size < max_num_candidates
             bm25_top_indices = [idx for idx in bm25_top_indices if idx != anchor_idx]
             bm25_candidates = [
@@ -1044,7 +1132,9 @@ def create_lm_triplets(
 
             emb_scores = embedding_summary @ embedding_summary[anchor_idx]
             emb_scores[anchor_idx] = -np.inf
-            emb_top_indices = np.argsort(emb_scores)[::-1][:max_num_candidates]
+            emb_top_indices = np.argsort(emb_scores, kind="stable")[::-1][
+                :max_num_candidates
+            ]
             # Filter out anchor in case corpus size < max_num_candidates
             emb_top_indices = [idx for idx in emb_top_indices if idx != anchor_idx]
             emb_candidates = [
@@ -1123,7 +1213,9 @@ def create_lm_triplets(
         if candidate_strategy == "bm25":
             scores = bm25_raw_matrix[anchor_idx].copy()
             scores[anchor_idx] = -np.inf
-            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
+            top_k_indices = np.argsort(scores, kind="stable")[::-1][
+                : max_num_candidates * 2
+            ]
             # Filter out anchor and positive
             negative_candidate_indices = [
                 int(idx)
@@ -1135,7 +1227,9 @@ def create_lm_triplets(
             # Use BM25 on raw docs for negatives (avoid evaluation bias from embeddings)
             scores = bm25_raw_matrix[anchor_idx].copy()
             scores[anchor_idx] = -np.inf
-            top_k_indices = np.argsort(scores)[::-1][: max_num_candidates * 2]
+            top_k_indices = np.argsort(scores, kind="stable")[::-1][
+                : max_num_candidates * 2
+            ]
             # Filter out anchor and positive
             negative_candidate_indices = [
                 int(idx)
@@ -1157,7 +1251,9 @@ def create_lm_triplets(
             # For negatives, use BM25, Jaccard, and spurious (NO embeddings to avoid bias)
             bm25_scores = bm25_raw_matrix[anchor_idx].copy()
             bm25_scores[anchor_idx] = -np.inf
-            bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+            bm25_top_indices = np.argsort(bm25_scores, kind="stable")[::-1][
+                :max_num_candidates
+            ]
             # Filter out anchor in case corpus size < max_num_candidates
             bm25_top_indices = [idx for idx in bm25_top_indices if idx != anchor_idx]
             bm25_neg = [(int(idx), float(bm25_scores[idx])) for idx in bm25_top_indices]
@@ -1374,7 +1470,9 @@ def create_lm_triplets_category(
         # Limit to max_num_candidates by BM25 score (prefer lower similarity = harder positives)
         if len(pos_candidates) > max_num_candidates:
             scores = bm25_matrix[anchor_idx][pos_candidates]
-            sorted_indices = np.argsort(scores)  # Lower BM25 = harder positives
+            sorted_indices = np.argsort(
+                scores, kind="stable"
+            )  # Lower BM25 = harder positives
             pos_candidates = [
                 pos_candidates[i] for i in sorted_indices[:max_num_candidates]
             ]
@@ -1463,7 +1561,9 @@ def create_lm_triplets_category(
         # Sort by BM25 score (prefer high similarity = confusable negatives)
         if len(neg_candidates) > max_num_candidates:
             scores = bm25_matrix[anchor_idx][neg_candidates]
-            sorted_indices = np.argsort(scores)[::-1]  # Higher BM25 = harder negatives
+            sorted_indices = np.argsort(scores, kind="stable")[
+                ::-1
+            ]  # Higher BM25 = harder negatives
             neg_candidates = [
                 neg_candidates[i] for i in sorted_indices[:max_num_candidates]
             ]
@@ -1647,7 +1747,7 @@ def create_lm_triplets_tags(
 
         bm25_scores = bm25_matrix[anchor_idx].copy()
         bm25_scores[anchor_idx] = -np.inf
-        bm25_top_indices = np.argsort(bm25_scores)[:max_num_candidates]
+        bm25_top_indices = np.argsort(bm25_scores, kind="stable")[:max_num_candidates]
         # Filter out anchor in case corpus size < max_num_candidates
         bm25_top_indices = [idx for idx in bm25_top_indices if idx != anchor_idx]
         bm25_candidates = [
@@ -1675,7 +1775,7 @@ def create_lm_triplets_tags(
     judge_cache_alias = (
         f"{cache_alias_prefix}_judge_pos" if cache_alias_prefix else None
     )
-
+    logger.debug(f"Selecting positives with {lm_judge_preset=}...")
     positive_indices, pos_parse_successes, pos_abstentions = select_positive_batch(
         anchor_indices=anchors_for_pos,
         candidate_indices_by_anchor=[
@@ -1734,7 +1834,9 @@ def create_lm_triplets_tags(
         # Get BM25 negatives
         bm25_scores = bm25_matrix[anchor_idx].copy()
         bm25_scores[anchor_idx] = -np.inf
-        bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+        bm25_top_indices = np.argsort(bm25_scores, kind="stable")[::-1][
+            :max_num_candidates
+        ]
         # Filter out anchor in case corpus size < max_num_candidates
         bm25_top_indices = [idx for idx in bm25_top_indices if idx != anchor_idx]
         bm25_neg = [(int(idx), float(bm25_scores[idx])) for idx in bm25_top_indices]
@@ -1759,6 +1861,7 @@ def create_lm_triplets_tags(
     # Select negatives using LM judge
     neg_cache_alias = f"{cache_alias_prefix}_judge_neg" if cache_alias_prefix else None
 
+    logger.debug(f"Selecting negatives with {lm_judge_preset_negative=}...")
     negative_indices, neg_parse_successes, neg_abstentions = select_negative_batch(
         anchor_indices=anchors_for_neg,
         positive_indices=positive_indices_for_neg,
@@ -1940,7 +2043,9 @@ def create_lm_triplets_summary_dict(
         # BM25 on summaries
         bm25_scores = bm25_summary_matrix[anchor_idx].copy()
         bm25_scores[anchor_idx] = -np.inf
-        bm25_top_indices = np.argsort(bm25_scores)[::-1][:max_num_candidates]
+        bm25_top_indices = np.argsort(bm25_scores, kind="stable")[::-1][
+            :max_num_candidates
+        ]
         # Filter out anchor in case corpus size < max_num_candidates
         bm25_top_indices = [idx for idx in bm25_top_indices if idx != anchor_idx]
         bm25_candidates = [
@@ -1950,7 +2055,9 @@ def create_lm_triplets_summary_dict(
         # Embeddings on summaries
         emb_scores = embedding_summary @ embedding_summary[anchor_idx]
         emb_scores[anchor_idx] = -np.inf
-        emb_top_indices = np.argsort(emb_scores)[::-1][:max_num_candidates]
+        emb_top_indices = np.argsort(emb_scores, kind="stable")[::-1][
+            :max_num_candidates
+        ]
         # Filter out anchor in case corpus size < max_num_candidates
         emb_top_indices = [idx for idx in emb_top_indices if idx != anchor_idx]
         emb_candidates = [(int(idx), float(emb_scores[idx])) for idx in emb_top_indices]
@@ -2024,7 +2131,9 @@ def create_lm_triplets_summary_dict(
         # Use BM25 on raw docs for negatives (high text similarity but semantically different)
         bm25_scores = bm25_raw_matrix[anchor_idx].copy()
         bm25_scores[anchor_idx] = -np.inf
-        bm25_top_indices = np.argsort(bm25_scores)[::-1][: max_num_candidates * 2]
+        bm25_top_indices = np.argsort(bm25_scores, kind="stable")[::-1][
+            : max_num_candidates * 2
+        ]
         # Filter out anchor (in case corpus size < max_num_candidates * 2) and positive
         negative_candidate_indices = [
             int(idx)

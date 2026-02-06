@@ -6,7 +6,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import GSM8K_CRITERIA
 from multiview.docsets.synthesis_configs import GSM8K_SYNTHESIS_CONFIGS
 
 logger = logging.getLogger(__name__)
@@ -25,7 +24,7 @@ class GSM8KDocSet(BaseDocSet):
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria (descriptions and schema hints)
-    CRITERION_METADATA = GSM8K_CRITERIA
+    DATASET_NAME = "gsm8k"
     # Synthesis prompts for LM-based document generation
     SYNTHESIS_CONFIGS = GSM8K_SYNTHESIS_CONFIGS
 

@@ -14,7 +14,6 @@ import logging
 from typing import Any
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import TRIZ40_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +101,7 @@ class TRIZ40DocSet(BaseDocSet):
     KNOWN_CRITERIA = ["triz_principle"]
 
     # Metadata for the criterion
-    CRITERION_METADATA = TRIZ40_CRITERIA
+    DATASET_NAME = "triz40"
 
     def __init__(self, config: dict | None = None):
         """Initialize TRIZ40DocSet.

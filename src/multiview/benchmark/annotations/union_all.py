@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 
+from multiview.benchmark.annotations.annotation_utils import extract_image, extract_text
 from multiview.benchmark.annotations.class_schema import (
     classify_documents_batch,
     generate_category_schema,
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 def annotate_with_lm_all(
-    documents: list[str],
+    documents: list[str | dict],
     criterion: str,
     document_type: str,
     criterion_description: str | None = None,
@@ -42,7 +43,7 @@ def annotate_with_lm_all(
     include_debug: bool = False,
     cache_alias_prefix: str | None = None,
     run_name: str | None = None,
-    schema_documents: list[str] | None = None,
+    schema_documents: list[str | dict] | None = None,
     category_schema_preset: str | None = None,
     category_classify_preset: str | None = None,
     tag_schema_preset: str | None = None,
@@ -59,7 +60,7 @@ def annotate_with_lm_all(
     3. Returns rich annotations with categories, tags, spurious tags, and summaries
 
     Args:
-        documents: List of document strings to annotate
+        documents: List of documents (strings or dicts) to annotate
         criterion: Criterion name (e.g., "arithmetic_operations")
         document_type: Type of documents being annotated (e.g., "math word problem", "story", "sentence")
         criterion_description: Brief description of what the criterion means
@@ -102,8 +103,33 @@ def annotate_with_lm_all(
         f"with criterion '{criterion}'"
     )
 
+    # Set defaults for presets
+    category_schema_preset = (
+        category_schema_preset or "category_schema_generation_gemini"
+    )
+    category_classify_preset = category_classify_preset or "category_classify_gemini"
+    tag_schema_preset = tag_schema_preset or "tag_schema_generation_gemini"
+    spurious_tag_schema_preset = (
+        spurious_tag_schema_preset or "spurious_tag_schema_generation_gemini"
+    )
+    tag_apply_preset = tag_apply_preset or "tag_apply_gemini"
+    summary_guidance_preset = (
+        summary_guidance_preset or "summary_guidance_generation_gemini"
+    )
+    summary_generate_preset = summary_generate_preset or "summary_generate_gemini"
+
     # Use schema_documents for schema generation if provided, otherwise use documents
     schema_pool = schema_documents if schema_documents is not None else documents
+
+    # Extract text strings and images
+    schema_pool_texts = [extract_text(doc) for doc in schema_pool]
+    schema_pool_images = [extract_image(doc) for doc in schema_pool]
+    document_texts = [extract_text(doc) for doc in documents]
+    document_images = [extract_image(doc) for doc in documents]
+
+    # Only pass images if at least one is present
+    has_schema_images = any(img is not None for img in schema_pool_images)
+    has_doc_images = any(img is not None for img in document_images)
 
     # Generate cache aliases for schemas
     schema_cache_prefix = f"schema_{criterion}" if cache_alias_prefix else None
@@ -112,7 +138,7 @@ def annotate_with_lm_all(
     logger.info("Step 1/2: Generating annotation schemas...")
 
     category_schema = generate_category_schema(
-        documents=schema_pool,
+        documents=schema_pool_texts,
         criterion=criterion,
         criterion_description=criterion_description or "",
         document_type=document_type,
@@ -120,11 +146,12 @@ def annotate_with_lm_all(
         schema_hint=category_schema_hint,
         cache_alias=f"{schema_cache_prefix}_category" if schema_cache_prefix else None,
         run_name=run_name,
-        config=category_schema_preset or "category_schema_generation_gemini",
+        config=category_schema_preset,
+        images=schema_pool_images if has_schema_images else None,
     )
 
     tag_schema = generate_tag_schema(
-        documents=schema_pool,
+        documents=schema_pool_texts,
         criterion=criterion,
         criterion_description=criterion_description or "",
         document_type=document_type,
@@ -134,10 +161,11 @@ def annotate_with_lm_all(
         cache_alias=f"{schema_cache_prefix}_tags" if schema_cache_prefix else None,
         run_name=run_name,
         config=tag_schema_preset,
+        images=schema_pool_images if has_schema_images else None,
     )
 
     spurious_tag_schema = generate_spurious_tag_schema(
-        documents=schema_pool,
+        documents=schema_pool_texts,
         criterion=criterion,
         criterion_description=criterion_description or "",
         document_type=document_type,
@@ -145,6 +173,7 @@ def annotate_with_lm_all(
         cache_alias=f"{schema_cache_prefix}_spurious" if schema_cache_prefix else None,
         run_name=run_name,
         config=spurious_tag_schema_preset,
+        images=schema_pool_images if has_schema_images else None,
     )
 
     # If summary_hint not provided, auto-generate it from samples
@@ -152,7 +181,7 @@ def annotate_with_lm_all(
     if not enriched_summary_hint:
         logger.info("No summary_hint provided, generating from samples...")
         generated_hint = generate_pairwise_sim_hint(
-            documents=schema_pool,
+            documents=schema_pool_texts,
             criterion=criterion,
             criterion_description=criterion_description or "",
             document_type=document_type,
@@ -161,11 +190,12 @@ def annotate_with_lm_all(
             if schema_cache_prefix
             else None,
             run_name=run_name,
+            images=schema_pool_images if has_schema_images else None,
         )
         enriched_summary_hint = generated_hint.get("summary_hint") or ""
 
     summary_guidance = generate_summary_guidance(
-        documents=schema_pool,
+        documents=schema_pool_texts,
         criterion=criterion,
         criterion_description=criterion_description or "",
         document_type=document_type,
@@ -173,7 +203,8 @@ def annotate_with_lm_all(
         summary_hint=enriched_summary_hint,
         cache_alias=f"{schema_cache_prefix}_guidance" if schema_cache_prefix else None,
         run_name=run_name,
-        guidance_preset=summary_guidance_preset or "summary_guidance_generation_gemini",
+        guidance_preset=summary_guidance_preset,
+        images=schema_pool_images if has_schema_images else None,
     )
 
     # Step 2: Apply schemas to all documents
@@ -185,46 +216,50 @@ def annotate_with_lm_all(
     spur_alias = f"{cache_alias_prefix}_spurious" if cache_alias_prefix else None
     summ_alias = f"{cache_alias_prefix}_summary" if cache_alias_prefix else None
 
-    # Run all annotation types
+    # Run all annotation types (using extracted text strings and images)
     category_annotations = classify_documents_batch(
-        documents,
+        document_texts,
         criterion,
         criterion_description or "",
         category_schema,
         document_type=document_type,
         cache_alias=cat_alias,
         run_name=run_name,
-        config=category_classify_preset or "category_classify_gemini",
+        config=category_classify_preset,
+        images=document_images if has_doc_images else None,
     )
 
     tag_annotations = apply_tags_batch(
-        documents,
+        document_texts,
         criterion,
         criterion_description or "",
         tag_schema,
         cache_alias=tag_alias,
         run_name=run_name,
-        config=tag_apply_preset or "tag_apply_gemini",
+        config=tag_apply_preset,
+        images=document_images if has_doc_images else None,
     )
 
     spurious_annotations = apply_tags_batch(
-        documents,
+        document_texts,
         criterion,
         "spurious/superficial properties",
         spurious_tag_schema,
         cache_alias=spur_alias,
         run_name=run_name,
-        config=tag_apply_preset or "tag_apply_gemini",
+        config=tag_apply_preset,
+        images=document_images if has_doc_images else None,
     )
 
     summary_annotations = generate_summaries_batch(
-        documents,
+        document_texts,
         criterion,
         criterion_description or "",
         summary_guidance,
         cache_alias=summ_alias,
         run_name=run_name,
-        generate_preset=summary_generate_preset or "summary_generate_gemini",
+        generate_preset=summary_generate_preset,
+        images=document_images if has_doc_images else None,
     )
 
     # Combine annotations

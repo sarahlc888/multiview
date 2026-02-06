@@ -173,13 +173,17 @@ def format_annotation_for_display(ann: dict, include_spurious: bool = False) -> 
     """Format annotation dict for display in LM judge prompts.
 
     Args:
-        ann: Annotation dict with category, tags, spurious_tags, summary
+        ann: Annotation dict with category, tags, spurious_tags, summary, or prelabel
         include_spurious: If True, include spurious_tags in the output
 
     Returns:
         Formatted string with annotation details
     """
     parts = []
+
+    # Prelabel (from known criterion extraction)
+    if ann.get("prelabel") is not None:
+        parts.append(f"Label: {ann['prelabel']}")
 
     # Category
     if ann.get("category"):

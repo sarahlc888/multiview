@@ -123,10 +123,24 @@ def _build_packed_prompt(
     if instruction:
         packed = instruction + packed
 
-    # Append image signature
+    # Append image signature(s)
+    # Support both single image and list of images
     if image is not None:
-        image_sig = _build_image_signature(image)
-        packed = f"{packed}\n\n<image_signature>{image_sig}</image_signature>"
+        if isinstance(image, list):
+            # Multi-image: build signatures for each
+            image_sigs = [
+                _build_image_signature(img) for img in image if img is not None
+            ]
+            if image_sigs:
+                # Join all signatures to create unique cache key
+                combined_sig = "|".join(image_sigs)
+                packed = (
+                    f"{packed}\n\n<image_signatures>{combined_sig}</image_signatures>"
+                )
+        else:
+            # Single image (backward compatible)
+            image_sig = _build_image_signature(image)
+            packed = f"{packed}\n\n<image_signature>{image_sig}</image_signature>"
 
     # Append prefill
     if force_prefill:
@@ -359,9 +373,30 @@ def format_prompts(
         for i in range(n_items)
     ]
 
-    # if verbose and len(prompts) > 0:
-    #     logger.info(f"Example formatted prompt:\n{prompts[0]}")
-    #     logger.info(f"Example packed prompt:\n{packed_prompts[0]}")
+    # Debug: Check if images are being included in packed prompts
+    if images:
+        sample_image_sigs = []
+        for i in range(min(3, len(packed_prompts))):
+            if "<image_signatures>" in packed_prompts[i]:
+                start = packed_prompts[i].index("<image_signatures>") + len(
+                    "<image_signatures>"
+                )
+                end = packed_prompts[i].index("</image_signatures>")
+                sample_image_sigs.append(
+                    packed_prompts[i][start:end][:100]
+                )  # First 100 chars
+        if sample_image_sigs:
+            logger.debug(
+                f"Image signatures in packed prompts (first 3): {sample_image_sigs}"
+            )
+        else:
+            logger.warning(
+                "Images provided but NO image signatures found in packed prompts!"
+            )
+
+    if verbose and len(prompts) > 0:
+        logger.debug(f"Example formatted prompt:\n{prompts[0]}")
+        logger.debug(f"Example packed prompt:\n{packed_prompts[0]}")
 
     return PromptCollection(
         packed_prompts=packed_prompts,

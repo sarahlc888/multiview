@@ -30,6 +30,8 @@ venv/
 env/
 .env
 uv.lock
+.uv*cache/
+trash/
 
 # IDE
 .vscode/
@@ -60,3 +62,7 @@ Thumbs.db
 outputs/
 data/
 *.log
+viz/
+visualizer/dist/
+visualizer/node_modules/
+writeup/assets/ye_2022_fig5.png

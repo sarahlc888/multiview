@@ -12,7 +12,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import HACKERNEWS_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class HackerNewsDocSet(BaseDocSet):
     KNOWN_CRITERIA = []  # word_count auto-included by base class
 
     # Metadata for LM-based criteria (descriptions, schema hints, etc.)
-    CRITERION_METADATA = HACKERNEWS_CRITERIA
+    DATASET_NAME = "hackernews"
 
     def load_documents(self) -> list[Any]:
         """Load HackerNews posts from HuggingFace.

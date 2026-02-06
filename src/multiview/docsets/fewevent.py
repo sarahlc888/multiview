@@ -7,7 +7,6 @@ Paper: "Answer is All You Need" (https://arxiv.org/abs/2402.09642)
 
 from __future__ import annotations
 
-from multiview.docsets.criteria_metadata import FEWEVENT_CRITERIA
 from multiview.docsets.inbedder_clustering import InBedderClusteringDocSet
 
 
@@ -48,4 +47,4 @@ class FewEventClusteringDocSet(InBedderClusteringDocSet):
     KNOWN_CRITERIA = ["cluster"]
 
     # Metadata for LM-based criteria (descriptions, hints, etc.)
-    CRITERION_METADATA = FEWEVENT_CRITERIA
+    DATASET_NAME = "inb_fewevent"

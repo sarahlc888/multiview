@@ -133,4 +133,5 @@ def evaluate_with_pseudologit(
         "avg_positive_score": avg_positive_score,
         "avg_negative_score": avg_negative_score,
         "triplet_logs": triplet_logs,
+        "embeddings": embeddings,
     }

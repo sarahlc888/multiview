@@ -24,18 +24,19 @@ logger = logging.getLogger(__name__)
 
 def _texts_for_similarity(
     *,
-    documents: list[str],
+    documents: list[str | dict],
     annotations: list[dict],
     use_summary: bool,
-) -> list[str]:
-    """Return a text corpus for similarity scoring (summaries or raw documents)."""
+) -> list[str | dict]:
+    """Return a corpus for similarity scoring (summaries or raw documents)."""
     if not use_summary:
+        # Return documents as-is (BM25 will handle text extraction)
         return documents
     return [annotation_final_summary(ann) for ann in annotations]
 
 
 def select_candidates_bm25(
-    documents: list[str],
+    documents: list[str | dict],
     annotations: list[dict],
     anchor_idx: int,
     k: int = 10,
@@ -44,7 +45,7 @@ def select_candidates_bm25(
     """Select candidates using BM25 similarity.
 
     Args:
-        documents: List of document strings
+        documents: List of documents (strings or dicts)
         annotations: List of annotation dicts (with summaries if use_summary=True)
         anchor_idx: Index of anchor document
         k: Number of candidates to return
@@ -64,7 +65,7 @@ def select_candidates_bm25(
     scores[anchor_idx] = -np.inf
 
     # Get top k indices
-    top_k_indices = np.argsort(scores)[::-1][:k]
+    top_k_indices = np.argsort(scores, kind="stable")[::-1][:k]
 
     # Return (index, score) tuples
     candidates = [(int(idx), float(scores[idx])) for idx in top_k_indices]
@@ -73,7 +74,7 @@ def select_candidates_bm25(
 
 
 def select_candidates_embedding(
-    documents: list[str],
+    documents: list[str | dict],
     annotations: list[dict],
     anchor_idx: int,
     k: int = 10,
@@ -127,7 +128,7 @@ def select_candidates_embedding(
     similarities[anchor_idx] = -np.inf
 
     # Get top k indices
-    top_k_indices = np.argsort(similarities)[::-1][:k]
+    top_k_indices = np.argsort(similarities, kind="stable")[::-1][:k]
 
     # Return (index, score) tuples
     candidates = [(int(idx), float(similarities[idx])) for idx in top_k_indices]
@@ -174,7 +175,7 @@ def select_candidates_jaccard(
 
     # Get top k indices
     similarities = np.array(similarities)
-    top_k_indices = np.argsort(similarities)[::-1][:k]
+    top_k_indices = np.argsort(similarities, kind="stable")[::-1][:k]
     # Filter out anchor in case corpus size < k (anchor has -np.inf score)
     top_k_indices = [idx for idx in top_k_indices if idx != anchor_idx]
 

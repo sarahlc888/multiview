@@ -10,7 +10,6 @@ from typing import Any
 from datasets import load_dataset
 
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import HAIKU_CRITERIA
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class HaikuDocSet(BaseDocSet):
     KNOWN_CRITERIA = []
 
     # Metadata for LM-based criteria (descriptions and schema hints)
-    CRITERION_METADATA = HAIKU_CRITERIA
+    DATASET_NAME = "haiku"
     # Synthesis prompts for LM-based document generation
     SYNTHESIS_CONFIGS = {}
 

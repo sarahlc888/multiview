@@ -19,70 +19,97 @@ logger = logging.getLogger(__name__)
 
 
 def get_category_list(annotation: dict) -> list[str]:
-    """Extract list of category names from annotation's category schema.
+    """Extract list of category names from annotation's category or tag schema.
 
     Args:
-        annotation: Annotation dict with category_schema field
+        annotation: Annotation dict with category_schema or tag_schema field
 
     Returns:
-        List of category names (e.g., ["addition", "multiplication", ...])
+        List of category/tag names (e.g., ["addition", "multiplication", ...])
 
     Raises:
-        ValueError: If category_schema is missing or malformed
+        ValueError: If both category_schema and tag_schema are missing or malformed
     """
-    if "category_schema" not in annotation:
-        raise ValueError("Annotation missing 'category_schema' field")
+    # Try category_schema first (from lm_all)
+    if "category_schema" in annotation and annotation["category_schema"]:
+        schema = annotation["category_schema"]
 
-    schema = annotation["category_schema"]
-    if not schema:
-        raise ValueError("Annotation has empty category_schema")
+        if "categories" not in schema:
+            raise ValueError("category_schema missing 'categories' field")
 
-    if "categories" not in schema:
-        raise ValueError("category_schema missing 'categories' field")
+        categories = schema["categories"]
+        if not isinstance(categories, list):
+            raise ValueError(
+                f"category_schema['categories'] must be list, got {type(categories)}"
+            )
 
-    categories = schema["categories"]
-    if not isinstance(categories, list):
+        # Extract category names
+        category_names = []
+        for cat in categories:
+            if isinstance(cat, dict) and "name" in cat:
+                category_names.append(cat["name"])
+            else:
+                raise ValueError(f"Malformed category entry: {cat}")
+
+        if not category_names:
+            raise ValueError("category_schema has no categories")
+
+        return category_names
+
+    # Fall back to tag_schema (from lm_tags)
+    elif "tag_schema" in annotation and annotation["tag_schema"]:
+        schema = annotation["tag_schema"]
+
+        if "tags" not in schema:
+            raise ValueError("tag_schema missing 'tags' field")
+
+        tags = schema["tags"]
+        if not isinstance(tags, list):
+            raise ValueError(f"tag_schema['tags'] must be list, got {type(tags)}")
+
+        # Extract tag names
+        tag_names = []
+        for tag in tags:
+            if isinstance(tag, dict) and "name" in tag:
+                tag_names.append(tag["name"])
+            else:
+                raise ValueError(f"Malformed tag entry: {tag}")
+
+        if not tag_names:
+            raise ValueError("tag_schema has no tags")
+
+        return tag_names
+
+    else:
         raise ValueError(
-            f"category_schema['categories'] must be list, got {type(categories)}"
+            "Annotation missing both 'category_schema' and 'tag_schema' fields. "
+            "Make sure triplet_style is 'lm_all' or 'lm_tags'."
         )
-
-    # Extract category names
-    category_names = []
-    for cat in categories:
-        if isinstance(cat, dict) and "name" in cat:
-            category_names.append(cat["name"])
-        else:
-            raise ValueError(f"Malformed category entry: {cat}")
-
-    if not category_names:
-        raise ValueError("category_schema has no categories")
-
-    return category_names
 
 
 def validate_annotations(annotations: list[dict]) -> None:
-    """Validate that annotations have required category schema information.
+    """Validate that annotations have required schema information.
 
     Args:
         annotations: List of annotation dicts
 
     Raises:
-        ValueError: If annotations are missing or lack category schemas
+        ValueError: If annotations are missing or lack category/tag schemas
     """
     if not annotations:
         raise ValueError(
-            "in_one_word evaluation requires annotations with category schemas"
+            "in_one_word evaluation requires annotations with category or tag schemas"
         )
 
     if not isinstance(annotations, list):
         raise ValueError(f"annotations must be a list, got {type(annotations)}")
 
-    # Check first annotation has category schema
+    # Check first annotation has category or tag schema
     try:
         get_category_list(annotations[0])
     except ValueError as e:
         raise ValueError(
-            f"in_one_word evaluation requires annotations with category schemas: {e}"
+            f"in_one_word evaluation requires annotations with category_schema or tag_schema: {e}"
         ) from e
 
 
@@ -263,6 +290,7 @@ def evaluate_with_in_one_word(
         "avg_positive_score": avg_pos,
         "avg_negative_score": avg_neg,
         "triplet_logs": triplet_logs,
+        "embeddings": embeddings,
     }
 
 

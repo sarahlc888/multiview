@@ -346,6 +346,10 @@ def evaluate_method(
         - n_ties: Number of tied triplets
         - Additional method-specific fields
 
+        OR for multi-trial configs (when num_trials > 1):
+        - _multi_trial: True
+        - trials: List of result dicts, one per trial
+
     Example method configs:
         pseudologit:
             {
@@ -369,6 +373,14 @@ def evaluate_method(
                 # Will extract categories from task annotations
             }
 
+        in_one_word (with multiple trials):
+            {
+                "name": "inoneword_proposed",
+                "preset": "inoneword_hf_qwen3_8b",
+                "generate_schema": true,
+                "num_trials": 10  # Run 10 times with different schemas
+            }
+
         embeddings:
             {
                 "name": "qwen3_embeddings",
@@ -377,6 +389,62 @@ def evaluate_method(
     """
     if task.triplets is None:
         raise ValueError("Task has no triplets.")
+
+    # Check for multi-trial configuration
+    num_trials = method_config.get("num_trials", 1)
+    if num_trials > 1:
+        logger.info(
+            f"Running {num_trials} trials for method: {method_config.get('name', method_type)}"
+        )
+        trials = []
+
+        for trial_idx in range(num_trials):
+            # Create trial-specific config
+            # Convert OmegaConf to plain dict to avoid struct mode issues
+            trial_config = _to_plain_python(method_config)
+
+            # Remove num_trials to avoid recursion
+            if "num_trials" in trial_config:
+                del trial_config["num_trials"]
+
+            # Add trial suffix to name
+            base_name = method_config.get("name", method_type)
+            trial_name = f"{base_name}_trial{trial_idx + 1}"
+            trial_config["name"] = trial_name
+
+            # CRITICAL: Add trial index to config hash so each trial gets unique cache key
+            # This prevents caching from returning identical schemas across trials
+            trial_config["_trial_idx"] = trial_idx
+
+            # Run evaluation for this trial
+            logger.info(f"  Trial {trial_idx + 1}/{num_trials}")
+            try:
+                trial_result = evaluate_method(
+                    method_type=method_type, task=task, method_config=trial_config
+                )
+            except Exception as e:
+                # If a trial fails, store error result but continue with other trials
+                logger.error(
+                    f"Error in trial {trial_idx + 1}/{num_trials}: {e}", exc_info=True
+                )
+                trial_result = {
+                    "error": str(e),
+                    "accuracy": 0.0,
+                    "n_correct": 0,
+                    "n_incorrect": 0,
+                    "n_ties": 0,
+                    "n_total": 0,
+                    "method_name": trial_name,
+                }
+            trials.append(trial_result)
+
+        # Return multi-trial result
+        return {
+            "_multi_trial": True,
+            "trials": trials,
+            "num_trials": num_trials,
+            "base_method_name": method_config.get("name", method_type),
+        }
 
     # Use user-provided name for display (hash still used in cache alias for safety)
     method_name = method_config.get("name", method_type)
@@ -428,7 +496,7 @@ def evaluate_method(
             }
 
         raw = evaluate_with_lm_judge_triplet(
-            triplets=build_triplet_dicts(document_texts, task.triplets),
+            triplets=build_triplet_dicts(task.documents, task.triplets),
             criterion=task.criterion_name,
             criterion_description=task.criterion_description,
             document_type=_resolved_document_type(task),
@@ -453,7 +521,7 @@ def evaluate_method(
             }
 
         raw = evaluate_with_lm_judge_pair(
-            triplets=build_triplet_dicts(document_texts, task.triplets),
+            triplets=build_triplet_dicts(task.documents, task.triplets),
             criterion=task.criterion_name,
             criterion_description=task.criterion_description,
             lm_judge_preset=preset,
@@ -591,20 +659,88 @@ def evaluate_method(
         preset = method_config.get("preset", "inoneword_hf_qwen3_8b")
 
         # Support config-based category_context (no annotations needed)
-        category_context = method_config.get("category_context")
+        # Can be a string (same for all tasks) or dict (per-task)
+        category_context_config = method_config.get("category_context")
+        category_context = None
+
+        if category_context_config is not None:
+            if isinstance(category_context_config, dict):
+                # Dict format: {task_name: context} or {criterion: context}
+                task_key = f"{task.document_set.DATASET_NAME}_{task.criterion_name}"
+                category_context = category_context_config.get(
+                    task_key, category_context_config.get(task.criterion_name)
+                )
+                if category_context is None:
+                    logger.warning(
+                        f"No category_context found for task '{task_key}' "
+                        f"or criterion '{task.criterion_name}' in dict config. "
+                        f"Available keys: {list(category_context_config.keys())}"
+                    )
+            else:
+                # String format: use for all tasks
+                category_context = category_context_config
+
+        annotations = None
+
+        # Check if we should generate a fresh schema (for "proposed schema" experiments)
+        generate_schema = method_config.get("generate_schema", False)
+
+        if generate_schema:
+            # Generate a fresh schema dynamically during evaluation
+            logger.info("Generating fresh schema for in_one_word evaluation")
+            from multiview.benchmark.annotations import generate_category_schema
+
+            schema = generate_category_schema(
+                documents=document_texts,
+                criterion=task.criterion_name,
+                criterion_description=task.criterion_description,
+                document_type=_resolved_document_type(task),
+                n_samples=method_config.get("n_schema_samples", 10),
+                cache_alias=f"{cache_alias}_generated_schema",
+                run_name=task.run_name,
+            )
+
+            # Format category context from generated schema
+            categories = schema.get("categories", [])
+            category_names = [cat["name"] for cat in categories]
+            category_str = ", ".join(category_names)
+            category_context = (
+                f"Categories: {category_str}\n"
+                f"Question: Categorize this text in one word."
+            )
+            logger.info(f"Generated schema with categories: {category_names}")
 
         # Fallback to annotations if config doesn't provide category_context
-        annotations = None
-        if not category_context:
-            if not has_category_schemas(task.document_annotations):
+        if not category_context and not generate_schema:
+            if not task.document_annotations:
                 logger.error(
-                    "in_one_word requires either 'category_context' in config or category schemas in annotations"
+                    "in_one_word requires either 'category_context' in config, "
+                    "'generate_schema: true', or annotations with schemas"
                 )
                 return {
                     "skipped": True,
-                    "reason": "Missing category_context",
+                    "reason": "Missing category_context and annotations",
                     "method_name": display_name,
                 }
+
+            # Check for category schema (lm_all) or tag schema (lm_tags)
+            first_ann = task.document_annotations[0]
+            has_schema = (
+                "category_schema" in first_ann and first_ann.get("category_schema")
+            ) or ("tag_schema" in first_ann and first_ann.get("tag_schema"))
+
+            if not has_schema:
+                logger.error(
+                    "in_one_word requires either 'category_context' in config, "
+                    "'generate_schema: true', or annotations with category_schema/tag_schema. "
+                    "Make sure triplet_style is 'lm_all' or 'lm_tags'."
+                )
+                return {
+                    "skipped": True,
+                    "reason": "Missing schemas in annotations",
+                    "method_name": display_name,
+                }
+
             annotations = task.document_annotations
 
         raw = evaluate_with_in_one_word(
@@ -623,9 +759,192 @@ def evaluate_method(
 
     if method_type == "pseudologit":
         preset = method_config.get("preset", "pseudologit_gemini_n100")
-        classes_file = method_config.get(
-            "classes_file", "prompts/custom/gsm8k_classes.json"
-        )
+        classes_file_config = method_config.get("classes_file")
+        classes_file = None
+
+        # Handle classes_file: can be string (same for all) or dict (per-task)
+        if classes_file_config is not None:
+            # Convert OmegaConf to plain Python types
+            classes_file_config = _to_plain_python(classes_file_config)
+
+            if isinstance(classes_file_config, dict):
+                # Dict format: {task_name: file} or {criterion: file}
+                task_key = f"{task.document_set.DATASET_NAME}_{task.criterion_name}"
+                classes_file = classes_file_config.get(
+                    task_key, classes_file_config.get(task.criterion_name)
+                )
+                if classes_file is None:
+                    logger.warning(
+                        f"No classes_file found for task '{task_key}' "
+                        f"or criterion '{task.criterion_name}' in dict config. "
+                        f"Available keys: {list(classes_file_config.keys())}"
+                    )
+            else:
+                # String format: use for all tasks
+                classes_file = classes_file_config
+
+        # Check if we should use oracle schema from annotations
+        use_oracle_schema = method_config.get("use_oracle_schema", False)
+
+        # Check if we should generate a fresh schema (for "proposed schema" experiments)
+        generate_schema = method_config.get("generate_schema", False)
+
+        if use_oracle_schema:
+            # Extract classes from oracle schema in annotations
+            logger.info("Extracting classes from oracle schema in annotations")
+
+            if not task.document_annotations:
+                logger.error("use_oracle_schema=true but no annotations available")
+                return {
+                    "skipped": True,
+                    "reason": "Missing annotations",
+                    "method_name": display_name,
+                }
+
+            # Try category schema first (from lm_all)
+            schema = task.document_annotations[0].get("category_schema")
+            if schema:
+                categories = schema.get("categories", [])
+                category_names = [cat["name"] for cat in categories]
+
+                # Convert category names to letters (A, B, C, ...)
+                classes = [chr(65 + i) for i in range(len(categories))]
+                descriptions = {
+                    chr(65 + i): cat["description"] for i, cat in enumerate(categories)
+                }
+
+                # Build taxonomy_context with letter-to-name mapping
+                taxonomy_lines = []
+                for i, cat in enumerate(categories):
+                    letter = chr(65 + i)
+                    taxonomy_lines.append(
+                        f"{letter}. {cat['name']}\n{cat['description']}\n"
+                    )
+                taxonomy_context = "\n".join(taxonomy_lines)
+
+                logger.info(
+                    f"Using oracle category schema with {len(classes)} classes: {classes} -> {category_names}"
+                )
+            else:
+                # Fall back to tag schema (from lm_tags)
+                tag_schema = task.document_annotations[0].get("tag_schema")
+                if tag_schema:
+                    tags = tag_schema.get("tags", [])
+                    tag_names = [tag["name"] for tag in tags]
+
+                    # Convert tag names to letters (A, B, C, ...)
+                    classes = [chr(65 + i) for i in range(len(tags))]
+                    descriptions = {
+                        chr(65 + i): tag["description"] for i, tag in enumerate(tags)
+                    }
+
+                    # Build taxonomy_context with letter-to-name mapping
+                    taxonomy_lines = []
+                    for i, tag in enumerate(tags):
+                        letter = chr(65 + i)
+                        taxonomy_lines.append(
+                            f"{letter}. {tag['name']}\n{tag['description']}\n"
+                        )
+                    taxonomy_context = "\n".join(taxonomy_lines)
+
+                    logger.info(
+                        f"Using oracle tag schema with {len(classes)} tags: {classes} -> {tag_names}"
+                    )
+                else:
+                    logger.error(
+                        "use_oracle_schema=true but no category_schema or tag_schema in annotations. "
+                        "Make sure triplet_style is 'lm_all' or 'lm_tags'."
+                    )
+                    return {
+                        "skipped": True,
+                        "reason": "Missing category_schema or tag_schema in annotations",
+                        "method_name": display_name,
+                    }
+
+            # Create temporary classes file with all required fields
+            import json
+            import tempfile
+
+            temp_classes_file = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            )
+            classes_data = {
+                "classes": classes,
+                "descriptions": descriptions,
+                "taxonomy_context": taxonomy_context,
+                "instruction": (
+                    "Instruction: think out loud and explain your reasoning, then choose "
+                    "the SINGLE best letter. For the final judgement, use this format exactly: "
+                    "'The final answer is $\\boxed{<letter>}$'"
+                ),
+            }
+            json.dump(classes_data, temp_classes_file, indent=2)
+            temp_classes_file.close()
+            classes_file = temp_classes_file.name
+
+        elif generate_schema:
+            # Generate a fresh schema dynamically during evaluation
+            logger.info("Generating fresh schema for pseudologit evaluation")
+            from multiview.benchmark.annotations import generate_category_schema
+
+            schema = generate_category_schema(
+                documents=document_texts,
+                criterion=task.criterion_name,
+                criterion_description=task.criterion_description,
+                document_type=_resolved_document_type(task),
+                n_samples=method_config.get("n_schema_samples", 10),
+                cache_alias=f"{cache_alias}_generated_schema",
+                run_name=task.run_name,
+            )
+
+            # Extract categories and create classes file with all required fields
+            categories = schema.get("categories", [])
+
+            # Convert category names to letters (A, B, C, ...)
+            classes = [
+                chr(65 + i) for i in range(len(categories))
+            ]  # ["A", "B", "C", ...]
+            descriptions = {
+                chr(65 + i): cat["description"] for i, cat in enumerate(categories)
+            }
+
+            # Build taxonomy_context with letter-to-name mapping
+            taxonomy_lines = []
+            for i, cat in enumerate(categories):
+                letter = chr(65 + i)
+                taxonomy_lines.append(
+                    f"{letter}. {cat['name']}\n{cat['description']}\n"
+                )
+            taxonomy_context = "\n".join(taxonomy_lines)
+
+            # Create temporary classes file
+            import json
+            import tempfile
+
+            temp_classes_file = tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False
+            )
+            classes_data = {
+                "classes": classes,
+                "descriptions": descriptions,
+                "taxonomy_context": taxonomy_context,
+                "instruction": (
+                    "Instruction: think out loud and explain your reasoning, then choose "
+                    "the SINGLE best letter. For the final judgement, use this format exactly: "
+                    "'The final answer is $\\boxed{<letter>}$'"
+                ),
+            }
+            json.dump(classes_data, temp_classes_file, indent=2)
+            temp_classes_file.close()
+            classes_file = temp_classes_file.name
+
+            category_names = [cat["name"] for cat in categories]
+            logger.info(f"Generated schema with classes: {classes} -> {category_names}")
+
+        elif not classes_file:
+            # Default fallback
+            classes_file = "prompts/custom/gsm8k_classes.json"
+            logger.warning(f"No classes_file specified, using default: {classes_file}")
 
         raw = evaluate_with_pseudologit(
             documents=document_texts,
@@ -882,6 +1201,49 @@ def _get_method_baseline_key(method_type: str, preset: str) -> str:
     return f"{method_type}:{normalized_preset}"
 
 
+def compute_trial_statistics(
+    results: dict[str, dict[str, dict]],
+) -> dict[str, dict[str, dict]]:
+    """Compute mean and std across trial results.
+
+    Args:
+        results: Nested dict of {task_name: {method_name: metrics_dict}}
+
+    Returns:
+        Dict of {task_name: {base_method_name: {mean_accuracy, std_accuracy, ...}}}
+        Only includes methods with multiple trials (e.g., "method_trial1", "method_trial2")
+    """
+    import numpy as np
+
+    stats = {}
+
+    for task_name, task_results in results.items():
+        stats[task_name] = {}
+
+        # Group methods by base name (before "_trial")
+        trial_groups = {}
+        for method_name, metrics in task_results.items():
+            if "_trial" in method_name:
+                base_name = method_name.rsplit("_trial", 1)[0]
+                if base_name not in trial_groups:
+                    trial_groups[base_name] = []
+                trial_groups[base_name].append(metrics)
+
+        # Compute statistics for each trial group
+        for base_name, trial_results_list in trial_groups.items():
+            if len(trial_results_list) > 1:
+                accuracies = [r.get("accuracy", 0.0) for r in trial_results_list]
+                stats[task_name][f"{base_name}_avg"] = {
+                    "mean_accuracy": float(np.mean(accuracies)),
+                    "std_accuracy": float(np.std(accuracies)),
+                    "min_accuracy": float(np.min(accuracies)),
+                    "max_accuracy": float(np.max(accuracies)),
+                    "num_trials": len(accuracies),
+                }
+
+    return stats
+
+
 def compute_instruction_sensitivity(
     results: dict[str, dict[str, dict]],
     method_configs: dict[str, list[dict]],
@@ -993,6 +1355,7 @@ def compute_instruction_sensitivity(
 __all__ = [
     "build_triplet_dicts",
     "compute_instruction_sensitivity",
+    "compute_trial_statistics",
     "evaluate_method",
     "finalize_method_results",
     "get_annotations_if_required",

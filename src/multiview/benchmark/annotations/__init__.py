@@ -35,6 +35,10 @@ from multiview.benchmark.annotations.annotation_utils import (
     annotate_with_lm_summary_sentence,
     annotate_with_lm_tags,
     annotate_with_precomputed,
+    extract_image,
+    extract_lean_document,
+    extract_text,
+    normalize_document,
 )
 from multiview.benchmark.annotations.class_schema import (
     classify_documents_batch,
@@ -73,4 +77,9 @@ __all__ = [
     "classify_documents_batch",
     "apply_tags_batch",
     "generate_summaries_batch",
+    # Document utilities
+    "extract_text",
+    "extract_image",
+    "extract_lean_document",
+    "normalize_document",
 ]

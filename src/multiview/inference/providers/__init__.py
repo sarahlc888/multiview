@@ -17,7 +17,7 @@ def get_completion_fn(provider: str) -> Callable:
 
     Args:
         provider: Provider name (e.g., "openai", "openai_embedding", "anthropic",
-                  "hf_embedding", "gemini", "hf_local_reranker",
+                  "hf_embedding", "hf_chat", "gemini", "hf_local_reranker",
                   "hf_local_contextual_reranker", "voyage_reranker",
                   "voyage_embedding", "hf_local_hidden_state")
 
@@ -56,6 +56,13 @@ def get_completion_fn(provider: str) -> Callable:
                 fromlist=["hf_embedding_completions"],
             ).hf_embedding_completions,
             "huggingface_hub package not installed. Install with: pip install huggingface_hub",
+        ),
+        "hf_chat": (
+            lambda: __import__(
+                "multiview.inference.providers.hf_api",
+                fromlist=["hf_chat_completions"],
+            ).hf_chat_completions,
+            "openai package not installed. Install with: pip install openai",
         ),
         "gemini": (
             lambda: __import__(

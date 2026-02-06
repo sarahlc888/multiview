@@ -24,7 +24,6 @@ from multiview.constants import (
     AIDANBENCH_RESULTS_PATH,
 )
 from multiview.docsets.base import BaseDocSet
-from multiview.docsets.criteria_metadata import DATASET_CRITERIA
 from multiview.utils.sampling_utils import deterministic_sample
 
 logger = logging.getLogger(__name__)
@@ -46,8 +45,8 @@ class AidanBenchDocSet(BaseDocSet):
     DATASET_PATH = str(AIDANBENCH_RESULTS_PATH)
     DESCRIPTION = "AidanBench open-ended question answers (per-question)"
     DOCUMENT_TYPE = "LLM response to an open-ended question"
+    DATASET_NAME = "aidanbench"
     KNOWN_CRITERIA = []  # Documents are strings; no metadata extracted
-    CRITERION_METADATA = DATASET_CRITERIA.get("aidanbench", {})
 
     def __init__(self, config: dict | None = None):
         """Initialize AidanBench dataset.

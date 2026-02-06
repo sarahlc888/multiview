@@ -168,7 +168,16 @@ def run_inference(
             f"Deduped from {len(prompt_collection.packed_prompts)} to "
             f"{len(deduped_prompt_collection.packed_prompts)} prompts"
         )
-
+        if (
+            len(prompt_collection.packed_prompts)
+            > len(deduped_prompt_collection.packed_prompts) * 2
+        ):
+            raise ValueError(
+                f"More than 2x the number of prompts were deduplicated! "
+                f"This is likely a bug. "
+                f"Original: {len(prompt_collection.packed_prompts)}, "
+                f"Deduped: {len(deduped_prompt_collection.packed_prompts)}"
+            )
     # Get completion function for this provider
     fn_completions = get_completion_fn(config.provider)
 

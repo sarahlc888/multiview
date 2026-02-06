@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate_with_bm25(
-    documents: list[str],
+    documents: list[str | dict],
     triplet_ids: list[tuple[int, int, int]],
     preset: str = "bm25_lexical",
 ) -> dict[str, Any]:
     """Evaluate triplets using BM25 scoring.
 
     Args:
-        documents: List of document texts
+        documents: List of documents (strings or dicts)
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         preset: BM25 preset name (e.g., "bm25_lexical", "bm25_raw")
 
@@ -82,4 +82,5 @@ def evaluate_with_bm25(
         "positive_scores": positive_scores,
         "negative_scores": negative_scores,
         "triplet_logs": triplet_logs,
+        "similarity_matrix": similarity_matrix,  # Return full matrix for visualization
     }

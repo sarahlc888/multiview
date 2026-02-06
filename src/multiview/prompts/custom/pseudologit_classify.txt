@@ -1,6 +1,8 @@
-Document:
+## Document
 {document}
 
+## Taxonomy/Schema
 {taxonomy_context}
 
+## Your task
 {instruction}
