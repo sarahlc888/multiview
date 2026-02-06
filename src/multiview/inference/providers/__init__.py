@@ -70,6 +70,13 @@ def get_completion_fn(provider: str) -> Callable:
             ).gemini_completions,
             "google-genai package not installed. Install with: pip install google-genai",
         ),
+        "gemini_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.gemini",
+                fromlist=["gemini_embedding_completions"],
+            ).gemini_embedding_completions,
+            "google-genai package not installed. Install with: pip install google-genai",
+        ),
         "hf_local_hidden_state": (
             lambda: __import__(
                 "multiview.inference.providers.hf_local",

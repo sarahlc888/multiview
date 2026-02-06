@@ -386,3 +386,113 @@ def gemini_completions(
                 completions.append({"text": ""})
 
     return {"completions": completions}
+
+
+def _extract_embedding_values(embedding_obj) -> list[float] | None:
+    """Extract embedding values from Gemini embed_content response objects."""
+    if embedding_obj is None:
+        return None
+    if isinstance(embedding_obj, dict):
+        values = embedding_obj.get("values")
+        if values is not None:
+            return [float(x) for x in values]
+    if hasattr(embedding_obj, "values"):
+        return [float(x) for x in embedding_obj.values]
+    if isinstance(embedding_obj, list | tuple):
+        return [float(x) for x in embedding_obj]
+    return None
+
+
+def gemini_embedding_completions(
+    prompts: list[str],
+    model_name: str,
+    **kwargs,
+) -> dict:
+    """Get text embeddings from Gemini Embedding API.
+
+    Args:
+        prompts: List of texts to embed
+        model_name: Gemini embedding model name (e.g., "gemini-embedding-001")
+        **kwargs: Additional parameters including:
+            - instructions: Optional list of instructions to prepend to prompts
+            - output_dimensionality: Optional reduced embedding dimension
+            - task_type: Optional task type string (e.g., "RETRIEVAL_DOCUMENT")
+            - title: Optional title when task_type is RETRIEVAL_DOCUMENT
+    """
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        raise ImportError(
+            "google-genai package required. Install with: pip install google-genai"
+        ) from None
+
+    api_key = GEMINI_API_KEY
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set"
+        )
+
+    client = genai.Client(api_key=api_key)
+
+    # Handle embedding instructions by prepending them to prompts
+    instructions = kwargs.pop("instructions", None)
+
+    # Strip internal/provider-level arguments not used by embed_content
+    for key in [
+        "max_retries",
+        "initial_retry_delay",
+        "retry_backoff_factor",
+        "max_workers",
+        "temperature",
+        "max_tokens",
+    ]:
+        kwargs.pop(key, None)
+
+    final_prompts = []
+    for i, prompt in enumerate(prompts):
+        final_prompt = prompt
+        if instructions and i < len(instructions):
+            final_prompt = instructions[i] + final_prompt
+        final_prompts.append(final_prompt)
+
+    # Build optional config
+    config_kwargs = {}
+    if "output_dimensionality" in kwargs:
+        config_kwargs["output_dimensionality"] = kwargs.pop("output_dimensionality")
+    if "task_type" in kwargs:
+        config_kwargs["task_type"] = kwargs.pop("task_type")
+    if "title" in kwargs:
+        config_kwargs["title"] = kwargs.pop("title")
+
+    config = types.EmbedContentConfig(**config_kwargs) if config_kwargs else None
+
+    # Try batch embedding first
+    try:
+        result = client.models.embed_content(
+            model=model_name,
+            contents=final_prompts,
+            config=config,
+        )
+        embeddings = result.embeddings
+        if not isinstance(embeddings, list):
+            embeddings = [embeddings]
+        vectors = [_extract_embedding_values(e) for e in embeddings]
+        if any(v is None for v in vectors) or len(vectors) != len(final_prompts):
+            raise ValueError("Unexpected embeddings response shape")
+    except Exception as e:
+        logger.warning(f"Batch embedding failed, falling back to single: {e}")
+        vectors = []
+        for prompt in final_prompts:
+            single = client.models.embed_content(
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+            values = _extract_embedding_values(
+                single.embeddings if hasattr(single, "embeddings") else None
+            )
+            vectors.append(values or [])
+
+    completions = [{"vector": v} for v in vectors]
+    return {"completions": completions}

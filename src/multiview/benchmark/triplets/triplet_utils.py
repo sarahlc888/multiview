@@ -240,7 +240,7 @@ def create_prelabeled_triplets(
     used_pos_per_anchor = {idx: set() for idx in anchor_indices}
     used_neg_per_anchor = {idx: set() for idx in anchor_indices}
     # Track how many triplets we've created per anchor
-    triplets_per_anchor = {idx: 0 for idx in anchor_indices}
+    triplets_per_anchor = dict.fromkeys(anchor_indices, 0)
 
     # Cycle through anchors until we hit max_triplets
     anchor_cycle_idx = 0

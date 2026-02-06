@@ -92,7 +92,7 @@ class GoodreadsQuotesDocSet(BaseDocSet):
             logger.info(f"Collecting ~{quotes_per_author} quotes per author")
 
             documents = []
-            author_counts = {author: 0 for author in authors_filter}
+            author_counts = dict.fromkeys(authors_filter, 0)
             processed_count = 0
 
             for example in dataset:

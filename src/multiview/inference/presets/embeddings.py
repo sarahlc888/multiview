@@ -13,6 +13,15 @@ CRITERION_AWARE_EMBED_INSTR = (
 
 EMBEDDING_PRESETS = {
     # ========================================================================
+    # Gemini Embeddings (text only)
+    # ========================================================================
+    "gemini_embedding_001": InferenceConfig(
+        provider="gemini_embedding",
+        model_name="gemini-embedding-001",
+        prompt_template="{document}",
+        parser="vector",
+    ),
+    # ========================================================================
     # OpenAI Embeddings
     # ========================================================================
     "openai_embedding_large": InferenceConfig(
