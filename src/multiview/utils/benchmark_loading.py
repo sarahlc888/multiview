@@ -237,11 +237,14 @@ def generate_embeddings(
     criterion_description: str | None = None,
     in_one_word_context: str | None = None,
     pseudologit_classes: str | None = None,
+    images: list[str | None] | None = None,
 ) -> np.ndarray:
     """Generate embeddings for documents."""
     logger.info(f"Generating embeddings with {embedding_preset}")
 
     inputs = {"document": doc_texts}
+    if images and any(img is not None for img in images):
+        inputs["images"] = images
 
     if criterion:
         criterion_description = validate_criterion_description(
@@ -379,15 +382,25 @@ def _regenerate_full_method_embeddings(
     method_type = method_metadata.get("method_type")
 
     if method_type == "embeddings":
-        embedding_preset = method_metadata.get("embedding_preset")
+        embedding_preset = method_metadata.get(
+            "embedding_preset"
+        ) or method_metadata.get("preset")
         if not embedding_preset:
             return None
+        # Extract images from documents for multimodal embedding providers
+        images = None
+        if documents:
+            images = [
+                doc.get("image_path") if isinstance(doc, dict) else None
+                for doc in documents
+            ]
         return generate_embeddings(
             doc_texts=doc_texts,
             embedding_preset=embedding_preset,
             cache_alias=cache_alias,
             criterion=criterion,
             criterion_description=criterion_description,
+            images=images,
         )
 
     if method_type == "document_rewrite":

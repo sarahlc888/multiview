@@ -148,10 +148,16 @@ def evaluate_with_document_rewrite(
 
     if is_bm25:
         # For BM25, we still need a matrix over unique documents
+        # Track which doc IDs have failed (None) summaries
+        failed_doc_ids = {
+            doc_id for doc_id, summary in doc_id_to_summary.items() if summary is None
+        }
+        # Replace None summaries with empty string for BM25 computation
+        bm25_summaries = [s if s is not None else "" for s in unique_summaries]
         logger.info(
-            f"Computing BM25 similarity matrix over {len(unique_summaries)} unique summaries"
+            f"Computing BM25 similarity matrix over {len(bm25_summaries)} unique summaries"
         )
-        bm25_similarity_matrix = _compute_bm25_similarity_matrix(unique_summaries)
+        bm25_similarity_matrix = _compute_bm25_similarity_matrix(bm25_summaries)
         # Create mapping from original doc ID to matrix index
         doc_id_to_idx = {doc_id: idx for idx, doc_id in enumerate(unique_doc_ids)}
 
@@ -160,8 +166,16 @@ def evaluate_with_document_rewrite(
             positive_idx = doc_id_to_idx[positive_id]
             negative_idx = doc_id_to_idx[negative_id]
 
-            pos_score = bm25_similarity_matrix[anchor_idx][positive_idx]
-            neg_score = bm25_similarity_matrix[anchor_idx][negative_idx]
+            # NaN score if either doc in the pair had a failed summary
+            if anchor_id in failed_doc_ids or positive_id in failed_doc_ids:
+                pos_score = float("nan")
+            else:
+                pos_score = bm25_similarity_matrix[anchor_idx][positive_idx]
+
+            if anchor_id in failed_doc_ids or negative_id in failed_doc_ids:
+                neg_score = float("nan")
+            else:
+                neg_score = bm25_similarity_matrix[anchor_idx][negative_idx]
             positive_scores.append(float(pos_score))
             negative_scores.append(float(neg_score))
     else:
@@ -291,7 +305,7 @@ def _generate_summaries(
         run_name: Optional run name
 
     Returns:
-        List of summary strings (one per document)
+        List of summary strings (one per document), or None for failed summaries
     """
     criterion_description = validate_criterion_description(
         criterion=criterion,
@@ -339,25 +353,21 @@ def _generate_summaries(
     )
 
     # Extract final_summary from each result
-    summaries: list[str] = []
+    summaries: list[str | None] = []
     for i, result in enumerate(results):
         if isinstance(result, dict) and "final_summary" in result:
             summary = result["final_summary"]
             if isinstance(summary, str) and summary.strip():
                 summaries.append(summary)
             else:
-                # Fallback to original document if summary is empty
-                logger.warning(
-                    f"Empty summary for document {i}, using original document"
-                )
-                summaries.append(texts[i])
+                logger.warning(f"Empty summary for document {i}, embedding will be NaN")
+                summaries.append(None)
         else:
-            # Fallback to original document if result is malformed
             logger.warning(
                 f"Malformed summary result for document {i}: {result}. "
-                f"Using original document."
+                f"Embedding will be NaN."
             )
-            summaries.append(texts[i])
+            summaries.append(None)
 
     return summaries
 
@@ -406,7 +416,7 @@ def _create_full_embedding_array(
 
 
 def _compute_embeddings_for_documents(
-    summaries: list[str],
+    summaries: list[str | None],
     doc_ids: list[int],
     embedding_preset: str,
     cache_alias: str | None,
@@ -417,7 +427,7 @@ def _compute_embeddings_for_documents(
     """Compute embeddings for document summaries.
 
     Args:
-        summaries: List of summary texts
+        summaries: List of summary texts (None for failed summaries)
         doc_ids: List of document IDs corresponding to summaries
         embedding_preset: Inference preset for embeddings
         cache_alias: Optional cache identifier
@@ -426,8 +436,20 @@ def _compute_embeddings_for_documents(
         criterion: Criterion name (required for instruction-tuned embeddings)
 
     Returns:
-        Dictionary mapping doc_id -> embedding vector
+        Dictionary mapping doc_id -> embedding vector (NaN vector for failed summaries)
     """
+    # Separate valid summaries from failed ones
+    valid_indices = [i for i, s in enumerate(summaries) if s is not None]
+    failed_indices = [i for i, s in enumerate(summaries) if s is None]
+
+    if not valid_indices:
+        logger.warning("All summaries failed, returning NaN embeddings")
+        # Can't determine embedding dim without any valid embeddings; use 1
+        return {doc_ids[i]: [float("nan")] for i in range(len(doc_ids))}
+
+    valid_summaries = [summaries[i] for i in valid_indices]
+    valid_doc_ids = [doc_ids[i] for i in valid_indices]
+
     # Use cache alias with _embeddings suffix
     embedding_cache_alias = f"{cache_alias}_embeddings" if cache_alias else None
 
@@ -436,11 +458,11 @@ def _compute_embeddings_for_documents(
         inference_kwargs.update(preset_overrides)
 
     # Build inputs - include criterion if provided (needed for instruction-tuned embeddings)
-    inputs = {"document": summaries}
+    inputs = {"document": valid_summaries}
     if criterion is not None:
         inputs["criterion"] = criterion
 
-    # Generate embeddings for all summaries
+    # Generate embeddings for valid summaries only
     embeddings = run_inference(
         inputs=inputs,
         config=embedding_preset,
@@ -449,5 +471,14 @@ def _compute_embeddings_for_documents(
         **inference_kwargs,
     )
 
-    # Return mapping from doc_id to embedding
-    return dict(zip(doc_ids, embeddings, strict=False))
+    # Build result mapping for valid summaries
+    result = dict(zip(valid_doc_ids, embeddings, strict=False))
+
+    # Fill NaN embeddings for failed summaries
+    if failed_indices:
+        embedding_dim = len(embeddings[0])
+        nan_embedding = [float("nan")] * embedding_dim
+        for i in failed_indices:
+            result[doc_ids[i]] = nan_embedding
+
+    return result

@@ -85,6 +85,22 @@ EMBEDDING_PRESETS = {
         extra_kwargs={"output_dimension": 1024},
     ),
     # ========================================================================
+    # Voyage AI Multimodal Embeddings (text + images via multimodal_embed)
+    # ========================================================================
+    "voyage_multimodal_3_5": InferenceConfig(
+        provider="voyage_multimodal_embedding",
+        model_name="voyage-multimodal-3.5",
+        prompt_template="{document}",
+        parser="vector",
+    ),
+    "voyage_multimodal_3_5_1024": InferenceConfig(
+        provider="voyage_multimodal_embedding",
+        model_name="voyage-multimodal-3.5",
+        prompt_template="{document}",
+        parser="vector",
+        extra_kwargs={"output_dimension": 1024},
+    ),
+    # ========================================================================
     # HuggingFace API Embeddings (without instruction prefix)
     # ========================================================================
     "hf_qwen3_embedding_8b": InferenceConfig(

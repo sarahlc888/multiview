@@ -1,6 +1,7 @@
 """Voyage AI provider for reranking and embeddings.
 
-Provides access to Voyage AI's reranking and embedding models via their Python SDK.
+Provides access to Voyage AI's reranking and embedding models via their Python SDK,
+including multimodal embeddings via the multimodal_embed endpoint.
 """
 
 from __future__ import annotations
@@ -10,7 +11,11 @@ from typing import Any
 
 from multiview.constants import VOYAGE_API_KEY
 from multiview.inference.cost_tracker import record_usage
-from multiview.inference.vlm_utils import has_any_image_payload
+from multiview.inference.vlm_utils import (
+    has_any_image_payload,
+    load_image_from_source,
+    normalize_image_item,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,3 +227,106 @@ def voyage_embedding_completions(
         logger.error(f"Error getting Voyage embeddings: {e}")
         # Return empty vectors on error
         return {"completions": [{"vector": []} for _ in final_prompts]}
+
+
+def _load_pil_image(source: str):
+    """Load an image source (URL, file path, or data URI) as a PIL Image."""
+    import io
+
+    from PIL import Image
+
+    image_bytes = load_image_from_source(source)
+    return Image.open(io.BytesIO(image_bytes))
+
+
+def voyage_multimodal_embedding_completions(
+    prompts: list[str],
+    model_name: str,
+    **kwargs,
+) -> dict[str, list[dict[str, Any]]]:
+    """Get multimodal embeddings from Voyage AI's multimodal_embed endpoint.
+
+    Each input is a list of content items (text strings and/or PIL images).
+    Text prompts are always included; images are added when available.
+
+    Args:
+        prompts: List of texts to embed
+        model_name: Voyage multimodal model name (e.g., "voyage-multimodal-3.5")
+        **kwargs: Additional parameters including:
+            - images: Optional list of image sources (URLs, paths, data URIs, or None)
+            - input_type: Optional "query" or "document"
+            - output_dimension: Optional output dimension (256, 512, 1024, 2048)
+            - truncation: Whether to truncate oversized inputs (default: True)
+
+    Returns:
+        Dict with "completions" key containing list of dicts with "vector" key.
+    """
+    client = _get_voyage_client()
+
+    images = kwargs.pop("images", None)
+
+    # Strip internal kwargs that must not be forwarded
+    for key in (
+        "instructions",
+        "max_retries",
+        "initial_retry_delay",
+        "retry_backoff_factor",
+        "max_workers",
+        "temperature",
+        "max_tokens",
+    ):
+        kwargs.pop(key, None)
+
+    # Build multimodal inputs: each is a list of [text, image?]
+    multimodal_inputs = []
+    for i, text in enumerate(prompts):
+        parts: list = []
+        if text and text.strip() and text.strip().lower() != "<image>":
+            parts.append(text)
+
+        # Add image if available for this document
+        if images and i < len(images):
+            image_sources = normalize_image_item(images[i])
+            for src in image_sources:
+                try:
+                    pil_img = _load_pil_image(src)
+                    parts.append(pil_img)
+                except Exception as e:
+                    logger.warning(f"Failed to load image for doc {i}: {e}")
+
+        if not parts:
+            # Fallback: use the raw text even if it's a placeholder
+            parts.append(text or "")
+
+        multimodal_inputs.append(parts)
+
+    try:
+        response = client.multimodal_embed(
+            inputs=multimodal_inputs,
+            model=model_name,
+            **kwargs,
+        )
+
+        # Record usage if available
+        if hasattr(response, "total_tokens") and response.total_tokens:
+            record_usage(
+                model_name=model_name,
+                input_tokens=response.total_tokens,
+                output_tokens=0,
+            )
+
+        completions = [{"vector": emb} for emb in response.embeddings]
+
+        n_with_images = sum(
+            1 for inp in multimodal_inputs if any(not isinstance(p, str) for p in inp)
+        )
+        logger.info(
+            f"Generated {len(completions)} multimodal embeddings using {model_name} "
+            f"({n_with_images} with images)"
+        )
+
+        return {"completions": completions}
+
+    except Exception as e:
+        logger.error(f"Error getting Voyage multimodal embeddings: {e}")
+        return {"completions": [{"vector": []} for _ in prompts]}

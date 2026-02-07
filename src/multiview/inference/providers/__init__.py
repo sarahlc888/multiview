@@ -119,6 +119,13 @@ def get_completion_fn(provider: str) -> Callable:
             ).voyage_embedding_completions,
             "voyageai package not installed. Install with: pip install voyageai",
         ),
+        "voyage_multimodal_embedding": (
+            lambda: __import__(
+                "multiview.inference.providers.voyage",
+                fromlist=["voyage_multimodal_embedding_completions"],
+            ).voyage_multimodal_embedding_completions,
+            "voyageai and Pillow packages required. Install with: pip install voyageai Pillow",
+        ),
         "pseudologit": (
             lambda: __import__(
                 "multiview.inference.providers.pseudologit",

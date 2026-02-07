@@ -1228,6 +1228,17 @@ def generate_visualizations_for_benchmark(
         task_methods = {
             k: [m for m in v if m in method_filter_set] for k, v in task_methods.items()
         }
+        # Supplement with config-derived methods that have embeddings on disk
+        # but no method_logs (e.g. methods added by analyze_corpus.py).
+        if task_filter:
+            embeddings_base = Path("outputs") / benchmark_run / "corpus" / "embeddings"
+            for task in task_filter:
+                existing = set(task_methods.get(task, []))
+                for method in method_filter:
+                    if method not in existing:
+                        emb_path = embeddings_base / task / f"{method}.npy"
+                        if emb_path.exists():
+                            task_methods.setdefault(task, []).append(method)
         # Remove tasks with no matching methods
         task_methods = {k: v for k, v in task_methods.items() if v}
 

@@ -24,6 +24,7 @@ type NeighborItem = {
 type CurrentCriterionNeighbors = {
   neighbors: NeighborItem[];
   novelNeighbors: NeighborItem[];
+  baselineNeighbors: NeighborItem[];
   metricLabel: string;
   baselineMethodName?: string;
   baselineMetricLabel?: string;
@@ -303,6 +304,11 @@ function resolveBenchmarkKey(
   return fallback || '';
 }
 
+function preferredMode(modes: string[]): VisualizationMode {
+  if (modes.includes('tsne')) return 'tsne';
+  return (modes[0] || 'tsne') as VisualizationMode;
+}
+
 const App: React.FC = () => {
   const [index, setIndex] = useState<DatasetIndex | null>(null);
   const [loading, setLoading] = useState(true);
@@ -518,7 +524,7 @@ const App: React.FC = () => {
       (name) =>
         name !== selectedMethod &&
         methodsForCriterion[name]?.has_embeddings !== false &&
-        /no[_-]?(instructions?|criteria|criterion|annotation|annotations?)/i.test(name)
+        /no[_-]?(instructions?|criteria|criterion|annotation|annotations?)|voyage_multimodal_3_5/i.test(name)
     );
 
     let cancelled = false;
@@ -537,6 +543,7 @@ const App: React.FC = () => {
           setCurrentCriterionNeighbors({
             neighbors: [],
             novelNeighbors: [],
+            baselineNeighbors: [],
             metricLabel: 'Unavailable',
             baselineMethodName,
             error: `Selected document index ${selectedDocumentIndex} is out of range for this criterion.`,
@@ -558,6 +565,7 @@ const App: React.FC = () => {
 
         const neighbors = ranked.neighbors.slice(0, topK);
         let novelNeighbors: NeighborItem[] = neighbors;
+        let baselineNeighbors: NeighborItem[] = [];
         let baselineMetricLabel: string | undefined;
 
         if (baselineData && selectedDocumentIndex < baselineData.documents.length) {
@@ -571,8 +579,9 @@ const App: React.FC = () => {
             baselineUsePseudologit,
             baselineData.manifest.embedding_dim
           );
+          baselineNeighbors = baselineRanked.neighbors.slice(0, topK);
           const baselineTopKSet = new Set(
-            baselineRanked.neighbors.slice(0, topK).map((n) => n.index)
+            baselineNeighbors.map((n) => n.index)
           );
           novelNeighbors = ranked.neighbors
             .filter((n) => !baselineTopKSet.has(n.index))
@@ -583,6 +592,7 @@ const App: React.FC = () => {
         setCurrentCriterionNeighbors({
           neighbors,
           novelNeighbors,
+          baselineNeighbors,
           metricLabel: ranked.metricLabel,
           baselineMethodName,
           baselineMetricLabel,
@@ -639,7 +649,7 @@ const App: React.FC = () => {
                   setSelectedDataset(firstDataset);
                   setSelectedCriterion(firstCriterion);
                   setSelectedMethod(firstMethod);
-                  setSelectedMode(modes[0] as VisualizationMode);
+                  setSelectedMode(preferredMode(modes));
 
                   // Load results for this benchmark
                   loadBenchmarkResults(firstBenchmarkKey).then(setResults);
@@ -793,6 +803,9 @@ const App: React.FC = () => {
     <div className="app">
       <header className="header">
         <h1>🔬 View X by Y</h1>
+        <p className="header-subtitle">
+          Represent documents <strong>{selectedDataset || 'X'}</strong> according to criteria <strong>{selectedCriterion || 'Y'}</strong>
+        </p>
         <div className="controls">
           <div className="control-group">
             <label>Experiment:</label>
@@ -823,7 +836,7 @@ const App: React.FC = () => {
                       setSelectedMethod(newMethod);
                       const newModes = benchmarkSelectionData![newDataset][newCriterion][newMethod].modes;
                       if (newModes.length > 0) {
-                        setSelectedMode(newModes[0] as VisualizationMode);
+                        setSelectedMode(preferredMode(newModes));
                       }
                     }
                   }
@@ -862,7 +875,7 @@ const App: React.FC = () => {
                       setSelectedMethod(newMethod);
                       const newModes = benchmarkSelectionData![newDataset][newCriterion][newMethod].modes;
                       if (newModes.length > 0) {
-                        setSelectedMode(newModes[0] as VisualizationMode);
+                        setSelectedMode(preferredMode(newModes));
                       }
                     }
                   }
@@ -894,7 +907,7 @@ const App: React.FC = () => {
                     setSelectedMethod(newMethod);
                     const newModes = benchmarkData ? benchmarkData[e.target.value][newCriterion][newMethod].modes : [];
                     if (newModes.length > 0) {
-                      setSelectedMode(newModes[0] as VisualizationMode);
+                      setSelectedMode(preferredMode(newModes));
                     }
                   }
                 }
@@ -921,7 +934,7 @@ const App: React.FC = () => {
                   setSelectedMethod(newMethod);
                   const newModes = benchmarkData ? benchmarkData[selectedDataset][e.target.value][newMethod].modes : [];
                   if (newModes.length > 0) {
-                    setSelectedMode(newModes[0] as VisualizationMode);
+                    setSelectedMode(preferredMode(newModes));
                   }
                 }
               }}
@@ -943,7 +956,7 @@ const App: React.FC = () => {
                 // Reset mode
                 const newModes = benchmarkData ? benchmarkData[selectedDataset][selectedCriterion][e.target.value].modes : [];
                 if (newModes.length > 0) {
-                  setSelectedMode(newModes[0] as VisualizationMode);
+                  setSelectedMode(preferredMode(newModes));
                 }
               }}
             >
@@ -1015,27 +1028,29 @@ const App: React.FC = () => {
       </header>
 
       <main className="main">
-        {/* Leaderboard */}
-        <Leaderboard
-          results={results}
-          currentTask={taskName}
-          currentMethod={selectedMethod}
-          methodsWithEmbeddings={
-            benchmarkData && selectedDataset && selectedCriterion
-              ? Object.entries(benchmarkData[selectedDataset]?.[selectedCriterion] || {})
-                  .filter(([_, data]) => data.has_embeddings !== false)
-                  .map(([name, _]) => name)
-              : []
-          }
-          onMethodSelect={(method) => {
-            setSelectedMethod(method);
-            // Reset mode for new method (if it has embeddings)
-            const methodData = benchmarkData?.[selectedDataset]?.[selectedCriterion]?.[method];
-            if (methodData && methodData.modes.length > 0) {
-              setSelectedMode(methodData.modes[0] as VisualizationMode);
+        {/* Leaderboard (hidden in corpus view) */}
+        {!isCorpusView && (
+          <Leaderboard
+            results={results}
+            currentTask={taskName}
+            currentMethod={selectedMethod}
+            methodsWithEmbeddings={
+              benchmarkData && selectedDataset && selectedCriterion
+                ? Object.entries(benchmarkData[selectedDataset]?.[selectedCriterion] || {})
+                    .filter(([_, data]) => data.has_embeddings !== false)
+                    .map(([name, _]) => name)
+                : []
             }
-          }}
-        />
+            onMethodSelect={(method) => {
+              setSelectedMethod(method);
+              // Reset mode for new method (if it has embeddings)
+              const methodData = benchmarkData?.[selectedDataset]?.[selectedCriterion]?.[method];
+              if (methodData && methodData.modes.length > 0) {
+                setSelectedMode(preferredMode(methodData.modes));
+              }
+            }}
+          />
+        )}
 
         {error && <div className="error">{error}</div>}
         {loadingViz && <div className="loading">Loading...</div>}
@@ -1183,6 +1198,58 @@ const App: React.FC = () => {
                           </li>
                         ))}
                       </ol>
+                    </div>
+
+                    <div>
+                      <div className="neighbors-subtitle">
+                        Baseline Top-{topK}
+                        {currentCriterionNeighbors.baselineMethodName
+                          ? ` (${currentCriterionNeighbors.baselineMethodName})`
+                          : ' (no baseline found)'}
+                      </div>
+                      {currentCriterionNeighbors.baselineMethodName ? (
+                        <>
+                          {currentCriterionNeighbors.baselineMetricLabel && (
+                            <div className="neighbors-baseline-metric">
+                              {currentCriterionNeighbors.baselineMetricLabel}
+                            </div>
+                          )}
+                          <ol className="neighbors-list">
+                            {currentCriterionNeighbors.baselineNeighbors.map((neighbor) => (
+                              <li key={`baseline-${neighbor.index}`}>
+                                <div className="neighbor-topline">
+                                  <span>Doc #{neighbor.index}</span>
+                                  <span>{neighbor.score.toFixed(4)}</span>
+                                </div>
+                                <div className="neighbor-content">
+                                  {vizData.thumbnailUrls?.[neighbor.index] && (
+                                    <img
+                                      src={vizData.thumbnailUrls[neighbor.index] || ''}
+                                      alt={`Doc ${neighbor.index}`}
+                                      className="neighbor-thumb"
+                                    />
+                                  )}
+                                  <div className="neighbor-text">
+                                    {(() => {
+                                      const displayText = getDisplayTextForDoc(neighbor.index, neighbor.text);
+                                      return (
+                                        <>
+                                          {displayText.slice(0, 180)}
+                                          {displayText.length > 180 ? '...' : ''}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        </>
+                      ) : (
+                        <div className="neighbors-card-error">
+                          No baseline method found for this criterion.
+                        </div>
+                      )}
                     </div>
 
                     <div>

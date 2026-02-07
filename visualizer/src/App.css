@@ -29,8 +29,14 @@ body {
 .header h1 {
   font-size: 24px;
   font-weight: 600;
-  margin-bottom: 16px;
+  margin-bottom: 4px;
   color: #333;
+}
+
+.header-subtitle {
+  font-size: 15px;
+  color: #666;
+  margin: 0 0 16px 0;
 }
 
 .controls {
@@ -349,7 +355,7 @@ body {
 
 .neighbors-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
 }
 
