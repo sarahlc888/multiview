@@ -6,6 +6,7 @@ visualizing high-dimensional embeddings in 2D space.
 
 from __future__ import annotations
 
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -240,7 +241,17 @@ class UMAPReducer(DimensionalityReducer):
             random_state=self.random_state,
             **self.kwargs,
         )
-        return reducer.fit_transform(embeddings)
+        # This warning is noisy and non-actionable when random_state is fixed.
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    "n_jobs value .* overridden to 1 by setting random_state. "
+                    "Use no seed for parallelism."
+                ),
+                category=UserWarning,
+            )
+            return reducer.fit_transform(embeddings)
 
 
 class SOMReducer(DimensionalityReducer):

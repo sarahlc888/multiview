@@ -27,6 +27,48 @@ interface LeaderboardProps {
   onMethodSelect: (method: string) => void;
 }
 
+function formatTaskLabel(taskName: string): string {
+  const parts = taskName.split('__');
+  if (parts.length < 2) {
+    return taskName;
+  }
+
+  const styleLabels: Record<string, string> = {
+    hn: 'hard_negative',
+    rnd: 'random',
+    pre: 'prelabeled',
+    cat: 'lm_category',
+    tag: 'lm_tags',
+    sdict: 'lm_summary_dict',
+    ssent: 'lm_summary_sentence',
+    lm: 'lm',
+    random: 'random',
+    prelabeled: 'prelabeled',
+    lm_all: 'lm_all',
+    lm_category: 'lm_category',
+    lm_tags: 'lm_tags',
+    lm_summary_dict: 'lm_summary_dict',
+    lm_summary_sentence: 'lm_summary_sentence',
+  };
+
+  const dataset = parts[0];
+  let criterionParts = parts.slice(1);
+  let suffix = '';
+
+  // Detect trailing style/count task suffix: ...__style__N
+  if (parts.length >= 4) {
+    const maybeStyle = parts[parts.length - 2];
+    const maybeCount = parts[parts.length - 1];
+    if (/^\d+$/.test(maybeCount) && styleLabels[maybeStyle]) {
+      criterionParts = parts.slice(1, -2);
+      suffix = ` [${styleLabels[maybeStyle]}, ${maybeCount} triplets]`;
+    }
+  }
+
+  const criterion = criterionParts.join('__') || 'default';
+  return `${dataset} / ${criterion}${suffix}`;
+}
+
 /**
  * Compute 95% confidence interval for binomial proportion using Wilson score interval.
  * More accurate than normal approximation, especially for small sample sizes.
@@ -234,7 +276,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({
       marginBottom: '20px',
     }}>
       <h3 style={{ margin: 0, marginBottom: '16px' }}>
-        📊 Leaderboard: {currentTask.replace('__', ' / ')}
+        📊 Leaderboard: {formatTaskLabel(currentTask)}
       </h3>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>

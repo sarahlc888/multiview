@@ -177,6 +177,8 @@ def evaluate_with_multisummary(
         log_entry = {
             "triplet_idx": i,
             "method_type": "multisummary",
+            "criterion": criterion,
+            "criterion_description": criterion_description,
             "embedding_preset": embedding_preset,
             "summary_preset": summary_preset,
             "num_summaries": num_summaries,

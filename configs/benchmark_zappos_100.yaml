@@ -1,4 +1,4 @@
-run_name: "benchmark_fuzzy_debug2"
+run_name: "benchmark_zappos"
 logging:
   level: DEBUG
   output_file: "outputs/logs/${run_name}.log"

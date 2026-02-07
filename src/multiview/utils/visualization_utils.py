@@ -2,15 +2,53 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
-import sys
+import re
+import shutil
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from multiview.utils.benchmark_loading import load_from_benchmark
+from multiview.visualization import (
+    CorpusVisualizer,
+    DendrogramReducer,
+    PCAReducer,
+    SOMReducer,
+    TSNEReducer,
+    UMAPReducer,
+    create_gsm8k_marker_images,
+    load_annotation_classes,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _decode_data_uri_image(data_uri: str) -> tuple[str, bytes] | None:
+    """Parse a base64 image data URI into (extension, bytes)."""
+    match = re.match(r"^data:image/([a-zA-Z0-9.+-]+);base64,(.+)$", data_uri)
+    if not match:
+        return None
+    mime_subtype = match.group(1).lower()
+    ext = mime_subtype.split("+", 1)[0]
+    if ext == "jpeg":
+        ext = "jpg"
+    try:
+        image_bytes = base64.b64decode(match.group(2))
+    except Exception:
+        return None
+    return ext, image_bytes
+
+
+def _safe_path_exists(path_str: str) -> bool:
+    """Return False for invalid/oversized pseudo-paths instead of raising OSError."""
+    try:
+        return Path(path_str).exists()
+    except OSError:
+        return False
 
 
 def visualize_benchmark_task(
@@ -19,8 +57,10 @@ def visualize_benchmark_task(
     method_name: str,
     reducer: str = "tsne",
     output_dir: str | Path | None = None,
+    output_benchmark_run: str | None = None,
     use_thumbnails: bool = False,
     quiet: bool = False,
+    preloaded_data: tuple[list[Any], list[str], str, np.ndarray, str] | None = None,
 ) -> bool:
     """Visualize a single task/method combination from a benchmark run."""
 
@@ -34,6 +74,7 @@ def visualize_benchmark_task(
     args.method = method_name
     args.reducer = reducer
     args.output = str(output_dir) if output_dir else None
+    args.output_benchmark_run = output_benchmark_run
     args.export_format = "web"
     args.force_refresh = False
     args.color_by_benchmark_annotations = False
@@ -53,6 +94,7 @@ def visualize_benchmark_task(
     args.pseudologit_classes = None
     args.input_jsonl = None
     args.dataset = None
+    args.preloaded_data = preloaded_data
 
     # Reducer parameters
     args.random_state = 42
@@ -84,146 +126,574 @@ def visualize_benchmark_task(
     args.quiet = quiet
 
     try:
-        run_embedding_mode(args)
+        _run_benchmark_embedding_mode(args)
         return True
     except Exception as e:
         logger.error(f"Failed to visualize {task_name}/{method_name}: {e}")
         return False
 
 
-def run_embedding_mode(args: Any) -> None:
-    """Run embedding visualization mode using shared helpers from the CLI module."""
-    quiet = getattr(args, "quiet", False)
-    if not quiet:
-        logger.debug(f"CORPUS VISUALIZATION: {args.reducer.upper()}")
+def _infer_preferred_view(output_benchmark_run: str | None) -> str | None:
+    """Infer preferred source view from output benchmark key/path."""
+    if not output_benchmark_run:
+        return None
+    parts = Path(output_benchmark_run).parts
+    if "triples" in parts:
+        return "triples"
+    if "corpus" in parts:
+        return "corpus"
+    return None
 
-    scripts_dir = Path(__file__).parent.parent.parent.parent / "scripts"
-    if str(scripts_dir) not in sys.path:
-        sys.path.insert(0, str(scripts_dir))
 
-    from analyze_corpus import (
-        create_reducer,
-        export_for_web_viewer,
-        generate_embeddings,
-        load_annotation_classes,
-        load_documents,
-        prepare_markers,
-        print_summary,
-        visualize,
+def _embedding_candidate_files(
+    output_base: Path,
+    task_name: str,
+    method_name: str,
+    preferred_view: str | None = None,
+) -> list[Path]:
+    """Build ordered embedding candidate paths with view-aware preference."""
+    triples_path = (
+        output_base / "triples" / "embeddings" / task_name / f"{method_name}.npy"
+    )
+    corpus_path = (
+        output_base / "corpus" / "embeddings" / task_name / f"{method_name}.npy"
     )
 
-    # Step 1: Load documents (and possibly embeddings from benchmark)
-    documents, doc_texts, dataset_name, embeddings, loaded_criterion = load_documents(
-        args
+    if preferred_view == "triples":
+        return [triples_path, corpus_path]
+    if preferred_view == "corpus":
+        return [corpus_path, triples_path]
+    # Default to eval artifacts first.
+    return [triples_path, corpus_path]
+
+
+def _doc_to_viewer_text(doc: Any) -> str:
+    """Serialize a document into concise viewer text, preserving image-doc metadata."""
+    if isinstance(doc, str):
+        return doc
+    if isinstance(doc, dict):
+        text = doc.get("text", "")
+        normalized_text = str(text).strip() if text is not None else ""
+        if normalized_text and normalized_text.lower() != "<image>":
+            return normalized_text
+
+        # For image-only docs, surface compact scalar metadata if available.
+        metadata_parts = []
+        ignored_keys = {"text", "image_path", "embedding_viz", "_metadata"}
+        for key, value in doc.items():
+            if key in ignored_keys or value is None:
+                continue
+            if isinstance(value, str | int | float | bool):
+                value_str = str(value).strip()
+                if value_str:
+                    metadata_parts.append(f"{key}: {value_str}")
+
+        if metadata_parts:
+            return " | ".join(metadata_parts)
+        if doc.get("image_path"):
+            return "<image>"
+        return json.dumps(doc, ensure_ascii=False)
+    return str(doc)
+
+
+def _load_from_benchmark(
+    run_name: str,
+    task_name: str,
+    method_name: str,
+    preferred_view: str | None = None,
+) -> tuple[list[Any], list[str], str, np.ndarray, str]:
+    """Load documents and embeddings for benchmark visualization."""
+    (
+        documents,
+        doc_texts,
+        dataset_name,
+        embeddings,
+        criterion,
+        _criterion_description,
+    ) = load_from_benchmark(
+        run_name=run_name,
+        task_name=task_name,
+        method_name=method_name,
+        preferred_view=preferred_view,
+    )
+    return (
+        documents,
+        doc_texts,
+        dataset_name,
+        np.array(embeddings, dtype=np.float32),
+        criterion,
     )
 
-    # Set criterion from loaded data if not already set
-    if loaded_criterion and not args.criterion:
-        args.criterion = loaded_criterion
 
-    # Step 2: Generate embeddings if not already loaded
-    if embeddings is None:
-        if not quiet:
-            logger.debug("Generating fresh embeddings")
-        embeddings = generate_embeddings(
-            doc_texts,
-            args.embedding_preset,
-            args.cache_alias,
-            args.force_refresh,
-            args.criterion,
-            args.in_one_word_context,
-            args.pseudologit_classes,
+def _finite_embedding_row_mask(embeddings: np.ndarray) -> np.ndarray:
+    """Return mask of rows with all-finite values."""
+    emb = np.asarray(embeddings, dtype=np.float32)
+    if emb.ndim != 2 or emb.shape[0] == 0:
+        return np.array([], dtype=bool)
+    return np.isfinite(emb).all(axis=1)
+
+
+def _create_thumbnail_images(
+    documents: list[Any],
+    dataset_name: str,
+    criterion: str | None,
+    output_dir: Path,
+) -> list[str]:
+    """Create/reuse thumbnail images for marker visualization."""
+    if output_dir.exists():
+        existing_images = list(output_dir.glob("marker_*.*")) + list(
+            output_dir.glob("thumb_*.*")
+        )
+        if len(existing_images) == len(documents):
+            return sorted([str(p) for p in existing_images])
+
+    if dataset_name == "gsm8k" and criterion in ["arithmetic", "final_expression"]:
+        return create_gsm8k_marker_images(
+            documents,
+            str(output_dir),
+            show_question=False,
+            figsize=(16, 12),
+            dpi=300,
+            minimal=True,
         )
 
-    # Step 3: Load annotations if needed
+    if dataset_name in ["ut_zappos50k", "met_museum", "example_images"]:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        image_paths = []
+        for idx, doc in enumerate(documents):
+            if not isinstance(doc, dict):
+                image_paths.append(None)
+                continue
+            image_path = doc.get("image_path")
+            if not image_path:
+                image_paths.append(None)
+                continue
+            if isinstance(image_path, str) and image_path.startswith("data:image"):
+                decoded = _decode_data_uri_image(image_path)
+                if decoded is None:
+                    image_paths.append(None)
+                    continue
+                ext, image_bytes = decoded
+                dest_path = output_dir / f"thumb_{idx}.{ext}"
+                if not dest_path.exists():
+                    with open(dest_path, "wb") as f:
+                        f.write(image_bytes)
+                image_paths.append(str(dest_path))
+                continue
+            image_paths.append(image_path)
+        return image_paths
+
+    return []
+
+
+def _prepare_markers(
+    documents: list[Any],
+    dataset_name: str | None,
+    criterion: str | None,
+    args: Any,
+) -> tuple[list[str] | None, list[str] | None]:
+    """Prepare image markers/labels."""
+    image_paths = None
+    labels = None
+    if args.marker_type == "thumbnail" and dataset_name:
+        output_dir = Path(args.output).parent / "_markers"
+        image_paths = _create_thumbnail_images(
+            documents=documents,
+            dataset_name=dataset_name,
+            criterion=criterion,
+            output_dir=output_dir,
+        )
+        if not image_paths:
+            image_paths = None
+    elif args.marker_type == "text" or args.show_text_labels:
+        labels = [str(i) for i in range(len(documents))]
+    return image_paths, labels
+
+
+def _create_reducer(args: Any, n_samples: int | None = None):
+    """Create dimensionality reducer."""
+    if args.reducer == "tsne":
+        return TSNEReducer(
+            perplexity=args.perplexity,
+            max_iter=args.max_iter,
+            random_state=args.random_state,
+        )
+    if args.reducer == "pca":
+        return PCAReducer(
+            n_components=2,
+            whiten=True,
+            random_state=args.random_state,
+        )
+    if args.reducer == "umap":
+        return UMAPReducer(
+            n_neighbors=args.n_neighbors,
+            min_dist=args.min_dist,
+            random_state=args.random_state,
+        )
+    if args.reducer == "som":
+        if args.som_grid_size == "auto" and n_samples is not None:
+            import math
+
+            target_cells = int(n_samples * 1.1)
+            side = int(math.sqrt(target_cells))
+            rows = side
+            cols = math.ceil(target_cells / side)
+        elif args.som_grid_size == "auto":
+            rows, cols = 20, 20
+        else:
+            rows, cols = map(int, args.som_grid_size.split(","))
+        return SOMReducer(
+            grid_size=(rows, cols),
+            learning_rate=args.som_learning_rate,
+            iterations=args.som_iterations,
+            random_state=args.random_state,
+            unique_assignment=args.som_unique_assignment,
+        )
+    if args.reducer == "dendrogram":
+        return DendrogramReducer(
+            method=args.dendrogram_method,
+            metric=args.dendrogram_metric,
+            optimal_ordering=True,
+        )
+    if args.reducer == "heatmap":
+        return None
+    raise ValueError(f"Unknown reducer: {args.reducer}")
+
+
+def _create_som_grid_composite(
+    visualizer: CorpusVisualizer,
+    reducer: SOMReducer,
+    embeddings: np.ndarray,
+    image_paths: list[str],
+    args: Any,
+) -> str:
+    embeddings_arr = np.array(embeddings, dtype=np.float32)
+    if reducer.weights is None:
+        reducer._coords = reducer._build_coords()
+        reducer._initialize_weights(embeddings_arr)
+    reducer._train(embeddings_arr)
+    assignments = reducer.assign_unique_nodes(embeddings_arr)
+
+    bg_hex = args.som_background_color.lstrip("#")
+    if len(bg_hex) == 3:
+        bg_hex = "".join(ch * 2 for ch in bg_hex)
+    background_color = tuple(int(bg_hex[i : i + 2], 16) for i in (0, 2, 4))
+
+    grid_image = visualizer.create_grid_composite(
+        image_paths=image_paths,
+        assignments=assignments,
+        grid_rows=reducer.rows,
+        grid_cols=reducer.cols,
+        tile_size=args.som_tile_size,
+        padding=args.som_padding,
+        background_color=background_color,
+    )
+    output_file = f"{args.output}.{args.format}"
+    grid_image.save(output_file, format=args.format.upper())
+    return output_file
+
+
+def _create_dendrogram_plot(
+    visualizer: CorpusVisualizer,
+    embeddings: np.ndarray,
+    image_paths: list[str],
+    figsize: tuple[float, float],
+    args: Any,
+) -> str:
+    embeddings_arr = np.array(embeddings, dtype=np.float32)
+    visualizer.reducer.fit_transform(embeddings_arr)
+    fig, _ax = visualizer.plot_dendrogram_with_images(
+        image_paths=image_paths,
+        figsize=figsize,
+        title=args.title,
+        image_size=args.dendrogram_image_size,
+        orientation=args.dendrogram_orientation,
+        images_per_row=args.dendrogram_images_per_row,
+        num_clusters=args.dendrogram_num_clusters,
+    )
+    output_file = f"{args.output}.{args.format}"
+    fig.savefig(output_file, dpi=args.dpi, bbox_inches="tight")
+    return output_file
+
+
+def _visualize(
+    embeddings: np.ndarray,
+    documents: list[Any],
+    classes: list[str] | None,
+    image_paths: list[str] | None,
+    labels: list[str] | None,
+    reducer,
+    args: Any,
+) -> tuple[np.ndarray | None, np.ndarray | None, str | None, str | None]:
+    """Create visualization and return layout/artifact paths."""
+    figsize = tuple(map(float, args.figsize.split(",")))
+    visualizer = CorpusVisualizer(reducer=reducer)
+    coords_2d = None
+    linkage_matrix = None
+    dendrogram_image_path = None
+    som_grid_image_path = None
+
+    if args.reducer == "dendrogram":
+        if not image_paths:
+            raise ValueError("Dendrogram visualization requires thumbnail markers.")
+        dendrogram_image_path = _create_dendrogram_plot(
+            visualizer, embeddings, image_paths, figsize, args
+        )
+        if hasattr(visualizer.reducer, "linkage_matrix"):
+            linkage_matrix = visualizer.reducer.linkage_matrix
+        if hasattr(visualizer.reducer, "coords_2d_"):
+            coords_2d = visualizer.reducer.coords_2d_
+    elif args.reducer == "som" and image_paths and isinstance(reducer, SOMReducer):
+        som_grid_image_path = _create_som_grid_composite(
+            visualizer, reducer, embeddings, image_paths, args
+        )
+        if hasattr(reducer, "_coords"):
+            embeddings_arr = np.array(embeddings, dtype=np.float32)
+            assignments = reducer.assign_unique_nodes(embeddings_arr)
+            coords_2d = reducer._coords[assignments]
+    else:
+        coords_2d, _, _ = visualizer.visualize_corpus(
+            embeddings=embeddings,
+            documents=documents,
+            labels=labels,
+            classes=classes,
+            image_paths=image_paths,
+            output_path=args.output,
+            format=args.format,
+            dpi=args.dpi,
+            figsize=figsize,
+            title=args.title,
+            marker_size=args.marker_size,
+            alpha=args.alpha,
+            image_zoom=args.image_zoom,
+            show_text_labels=args.show_text_labels,
+        )
+
+    return coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path
+
+
+def _export_for_web_viewer(
+    documents: list[Any],
+    embeddings: np.ndarray,
+    coords_2d: np.ndarray | None,
+    reducer_name: str,
+    output_dir: Path,
+    dataset_name: str,
+    criterion: str = "default",
+    method: str | None = None,
+    linkage_matrix: np.ndarray | None = None,
+    image_paths: list[str] | None = None,
+    dendrogram_image: str | None = None,
+    som_grid_image: str | None = None,
+    quiet: bool = False,
+) -> None:
+    """Export visualization artifacts for web viewer."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = output_dir / "manifest.json"
+    if manifest_path.exists():
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+    else:
+        manifest = {
+            "version": 1,
+            "dataset": dataset_name,
+            "criterion": criterion,
+            "n_docs": len(documents),
+            "embedding_dim": embeddings.shape[1],
+            "documents_path": "documents.txt",
+            "embeddings_path": "embeddings.npy",
+            "layouts": {},
+        }
+        if method is not None:
+            manifest["method"] = method
+
+    # Always refresh core manifest metadata so reruns can't leave stale values.
+    manifest["version"] = 1
+    manifest["dataset"] = dataset_name
+    manifest["criterion"] = criterion
+    manifest["n_docs"] = len(documents)
+    manifest["embedding_dim"] = int(embeddings.shape[1]) if embeddings.ndim == 2 else 0
+    manifest["documents_path"] = "documents.txt"
+    manifest["embeddings_path"] = "embeddings.npy"
+    manifest.setdefault("layouts", {})
+    if method is not None:
+        manifest["method"] = method
+
+    documents_path = output_dir / "documents.txt"
+    with open(documents_path, "w", encoding="utf-8") as f:
+        for doc in documents:
+            f.write(_doc_to_viewer_text(doc).replace("\n", "\\n") + "\n")
+
+    embeddings_path = output_dir / "embeddings.npy"
+    # Always overwrite embeddings so filtered/rerun outputs are reflected immediately.
+    np.save(embeddings_path, embeddings)
+
+    if coords_2d is not None:
+        layout_path = output_dir / f"layout_{reducer_name}.npy"
+        np.save(layout_path, coords_2d)
+        manifest["layouts"][reducer_name] = f"layout_{reducer_name}.npy"
+    elif reducer_name == "heatmap":
+        manifest["layouts"]["heatmap"] = None
+
+    if linkage_matrix is not None:
+        linkage_path = output_dir / "linkage_matrix.npy"
+        np.save(linkage_path, linkage_matrix)
+        manifest["linkage_matrix"] = "linkage_matrix.npy"
+
+    if dendrogram_image and Path(dendrogram_image).exists():
+        dendrogram_dest = output_dir / "dendrogram.png"
+        shutil.copy2(dendrogram_image, dendrogram_dest)
+        manifest["dendrogram_image"] = "dendrogram.png"
+
+    if som_grid_image and Path(som_grid_image).exists():
+        som_dest = output_dir / "som_grid.png"
+        shutil.copy2(som_grid_image, som_dest)
+        manifest["som_grid_image"] = "som_grid.png"
+
+    if image_paths:
+        thumbnail_refs = []
+        thumbnails_dir = output_dir / "thumbnails"
+        thumbnails_dir.mkdir(exist_ok=True)
+        for i, img_path in enumerate(image_paths):
+            if not img_path:
+                thumbnail_refs.append(None)
+                continue
+            if img_path.startswith("http://") or img_path.startswith("https://"):
+                thumbnail_refs.append(img_path)
+                continue
+            if img_path.startswith("data:image"):
+                decoded = _decode_data_uri_image(img_path)
+                if decoded is None:
+                    thumbnail_refs.append(None)
+                    continue
+                ext, img_bytes = decoded
+                dest_name = f"thumb_{i}.{ext}"
+                dest_path = thumbnails_dir / dest_name
+                with open(dest_path, "wb") as f:
+                    f.write(img_bytes)
+                thumbnail_refs.append(f"thumbnails/{dest_name}")
+                continue
+            if _safe_path_exists(img_path):
+                ext = Path(img_path).suffix
+                dest_name = f"thumb_{i}{ext}"
+                dest_path = thumbnails_dir / dest_name
+                shutil.copy2(img_path, dest_path)
+                thumbnail_refs.append(f"thumbnails/{dest_name}")
+                continue
+            thumbnail_refs.append(None)
+        manifest["thumbnails"] = thumbnail_refs
+
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    if not quiet:
+        logger.debug(f"Manifest: wrote {manifest_path}")
+
+
+def _run_benchmark_embedding_mode(args: Any) -> None:
+    """Run benchmark embedding visualization pipeline."""
+    if not getattr(args, "from_benchmark", None):
+        raise ValueError(
+            "run_embedding_mode in visualization_utils requires benchmark mode"
+        )
+    quiet = getattr(args, "quiet", False)
+    preloaded_data = getattr(args, "preloaded_data", None)
+    if preloaded_data is not None:
+        documents, doc_texts, dataset_name, embeddings, loaded_criterion = (
+            preloaded_data
+        )
+    else:
+        preferred_view = _infer_preferred_view(
+            getattr(args, "output_benchmark_run", None)
+        )
+        documents, doc_texts, dataset_name, embeddings, loaded_criterion = (
+            _load_from_benchmark(
+                args.from_benchmark,
+                args.task,
+                args.method,
+                preferred_view=preferred_view,
+            )
+        )
+    embeddings = np.array(embeddings, dtype=np.float32)
+    finite_mask = _finite_embedding_row_mask(embeddings)
+    if finite_mask.size == 0:
+        raise ValueError("Embeddings are empty or malformed; cannot visualize.")
+    if not finite_mask.any():
+        raise ValueError("All embedding rows contain NaN/Inf; cannot visualize.")
+    if not finite_mask.all():
+        dropped = int((~finite_mask).sum())
+        logger.info(
+            "Dropping %d/%d documents with NaN/Inf embeddings from visualization.",
+            dropped,
+            embeddings.shape[0],
+        )
+        embeddings = embeddings[finite_mask]
+        documents = [doc for i, doc in enumerate(documents) if finite_mask[i]]
+        doc_texts = [text for i, text in enumerate(doc_texts) if finite_mask[i]]
+
     classes = None
     if args.annotations_file:
-        if not quiet:
-            logger.debug(f"Loading annotations from {args.annotations_file}...")
         classes = load_annotation_classes(args.annotations_file, args.color_by)
+        if not finite_mask.all():
+            classes = [
+                c
+                for i, c in enumerate(classes)
+                if i < len(finite_mask) and finite_mask[i]
+            ]
         classes = classes[: len(documents)]
-    elif (
-        hasattr(args, "from_benchmark")
-        and args.from_benchmark
-        and hasattr(args, "color_by_benchmark_annotations")
-        and args.color_by_benchmark_annotations
-    ):
-        # Load annotations from benchmark artifacts
-        output_base = Path("outputs") / args.from_benchmark
-        annotations_file = output_base / "annotations" / f"{args.task}.jsonl"
+    elif getattr(args, "color_by_benchmark_annotations", False):
+        annotations_file = (
+            Path("outputs") / args.from_benchmark / "annotations" / f"{args.task}.jsonl"
+        )
         if annotations_file.exists():
             classes = load_annotation_classes(str(annotations_file), args.color_by)
+            if not finite_mask.all():
+                classes = [
+                    c
+                    for i, c in enumerate(classes)
+                    if i < len(finite_mask) and finite_mask[i]
+                ]
             classes = classes[: len(documents)]
-            if not quiet:
-                logger.debug(
-                    f"Loaded benchmark annotations from {annotations_file} "
-                    f"(color_by={args.color_by})"
-                )
-        elif not quiet:
-            logger.warning(
-                f"Benchmark annotations not found: {annotations_file}. "
-                "Proceeding without color classes."
-            )
 
-    # Step 4: Prepare markers
-    image_paths, labels = prepare_markers(documents, dataset_name, args)
+    image_paths, labels = _prepare_markers(
+        documents, dataset_name, loaded_criterion, args
+    )
+    reducer = _create_reducer(args, n_samples=len(embeddings))
 
-    # Step 5: Create reducer
-    if not quiet:
-        logger.debug(f"Initializing {args.reducer} reducer...")
-    reducer = create_reducer(args, n_samples=len(embeddings))
-
-    # Determine export mode
     export_format = args.export_format or args.format
     should_export_plot = (
         export_format in ["png", "svg", "all"] or not args.export_format
     )
     should_export_web = export_format in ["web", "all"]
 
-    # Step 6: Visualize (if generating plots)
     coords_2d = None
     linkage_matrix = None
     dendrogram_image_path = None
     som_grid_image_path = None
     if should_export_plot:
         coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-            visualize(
+            _visualize(
                 embeddings, documents, classes, image_paths, labels, reducer, args
             )
         )
     else:
-        # For web-only export, still need to compute coordinates
-        # For dendrogram/SOM with images, we also need to generate the matplotlib image for web viewer
         if args.reducer == "dendrogram" and should_export_web:
-            if not quiet:
-                logger.debug("Generating dendrogram matplotlib image for web export...")
             coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-                visualize(
+                _visualize(
                     embeddings, documents, classes, image_paths, labels, reducer, args
                 )
             )
         elif args.reducer == "som" and image_paths and should_export_web:
-            if not quiet:
-                logger.debug("Generating SOM grid composite for web export...")
             coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-                visualize(
+                _visualize(
                     embeddings, documents, classes, image_paths, labels, reducer, args
                 )
             )
-        else:
-            if args.reducer == "heatmap":
-                if not quiet:
-                    logger.debug("Heatmap mode - skipping dimensionality reduction")
-                coords_2d = None
-            else:
-                if not quiet:
-                    logger.debug(f"Reducing {len(embeddings)} embeddings to 2D...")
-                embeddings_arr = np.array(embeddings, dtype=np.float32)
-                coords_2d = reducer.fit_transform(embeddings_arr)
-                if args.reducer == "dendrogram" and hasattr(reducer, "linkage_matrix"):
-                    linkage_matrix = reducer.linkage_matrix
+        elif args.reducer != "heatmap":
+            embeddings_arr = np.array(embeddings, dtype=np.float32)
+            coords_2d = reducer.fit_transform(embeddings_arr)
+            if args.reducer == "dendrogram" and hasattr(reducer, "linkage_matrix"):
+                linkage_matrix = reducer.linkage_matrix
 
-    # Step 7: Export for web viewer if requested
     if should_export_web:
         if coords_2d is None and args.reducer != "heatmap":
             logger.error("No 2D coordinates available for web export")
@@ -231,35 +701,21 @@ def run_embedding_mode(args: Any) -> None:
             criterion = loaded_criterion or args.criterion or "default"
             if not dataset_name:
                 dataset_name = Path(args.output).stem
-
-            web_output_dir = Path(args.output)
-            method = getattr(args, "method", None)
-            export_for_web_viewer(
+            _export_for_web_viewer(
                 documents=doc_texts,
                 embeddings=embeddings,
                 coords_2d=coords_2d,
                 reducer_name=args.reducer,
-                output_dir=web_output_dir,
+                output_dir=Path(args.output),
                 dataset_name=dataset_name,
                 criterion=criterion,
-                method=method,
+                method=getattr(args, "method", None),
                 linkage_matrix=linkage_matrix,
                 image_paths=image_paths,
                 dendrogram_image=dendrogram_image_path,
                 som_grid_image=som_grid_image_path,
                 quiet=quiet,
             )
-
-    # Step 8: Print summary
-    if should_export_plot:
-        output_dir = (
-            Path(args.output).parent / f"{Path(args.output).stem}_markers"
-            if image_paths
-            else None
-        )
-        print_summary(args, image_paths, output_dir)
-    elif should_export_web and not quiet:
-        logger.debug(f"Output: {args.output}/")
 
 
 def find_tasks_and_methods(benchmark_run: str) -> dict[str, list[str]]:
@@ -345,29 +801,9 @@ def is_embedding_method(method_name: str) -> bool:
     return not any(pattern in method_lower for pattern in non_embedding_patterns)
 
 
-def has_embeddings(benchmark_run: str, task_name: str, method_name: str) -> bool:
-    """Check if embeddings exist for a task/method combination.
-
-    Args:
-        benchmark_run: Benchmark run name
-        task_name: Task name
-        method_name: Method name
-
-    Returns:
-        True if embeddings file exists
-    """
-    embeddings_file = (
-        Path("outputs")
-        / benchmark_run
-        / "embeddings"
-        / task_name
-        / f"{method_name}.npy"
-    )
-    return embeddings_file.exists()
-
-
 def copy_triplet_logs_for_method(
     benchmark_run: str,
+    output_benchmark_run: str,
     task_name: str,
     method_name: str,
     output_base: Path,
@@ -375,7 +811,8 @@ def copy_triplet_logs_for_method(
     """Copy triplet files (triplets.json and triplet_logs.jsonl) to visualization directory.
 
     Args:
-        benchmark_run: Benchmark run name
+        benchmark_run: Benchmark run name to read source artifacts from
+        output_benchmark_run: Benchmark run name to write visualization artifacts under
         task_name: Task name
         method_name: Method name
         output_base: Base output directory
@@ -385,12 +822,43 @@ def copy_triplet_logs_for_method(
     """
     import shutil
 
-    output_dir = output_base / benchmark_run / task_name / method_name
+    output_dir = output_base / output_benchmark_run / task_name / method_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     success = False
 
-    # Copy triplet_logs.jsonl (per-method evaluation results with margin/correctness)
+    preferred_view = _infer_preferred_view(output_benchmark_run)
+    output_base_src = Path("outputs") / benchmark_run
+    candidate_files = _embedding_candidate_files(
+        output_base=output_base_src,
+        task_name=task_name,
+        method_name=method_name,
+        preferred_view=preferred_view,
+    )
+    embedding_file = next((p for p in candidate_files if p.exists()), None)
+    id_map: dict[int, int] | None = None
+    if embedding_file is not None:
+        emb = np.load(embedding_file)
+        mask = _finite_embedding_row_mask(emb)
+        if mask.size > 0 and not mask.all() and mask.any():
+            kept_ids = np.where(mask)[0].tolist()
+            id_map = {old_id: new_id for new_id, old_id in enumerate(kept_ids)}
+
+    def _remap_triplet_ids(entry: dict[str, Any]) -> dict[str, Any] | None:
+        if id_map is None:
+            return entry
+        a = entry.get("anchor_id")
+        p = entry.get("positive_id")
+        n = entry.get("negative_id")
+        if a not in id_map or p not in id_map or n not in id_map:
+            return None
+        out = dict(entry)
+        out["anchor_id"] = id_map[a]
+        out["positive_id"] = id_map[p]
+        out["negative_id"] = id_map[n]
+        return out
+
+    # Copy or filter triplet_logs.jsonl (per-method evaluation results with margin/correctness)
     logs_source = (
         Path("outputs")
         / benchmark_run
@@ -401,17 +869,46 @@ def copy_triplet_logs_for_method(
 
     if logs_source.exists():
         logs_dest = output_dir / "triplet_logs.jsonl"
-        shutil.copy2(logs_source, logs_dest)
+        if id_map is None:
+            shutil.copy2(logs_source, logs_dest)
+        else:
+            kept_lines: list[str] = []
+            with open(logs_source) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except Exception:
+                        continue
+                    remapped = _remap_triplet_ids(entry)
+                    if remapped is not None:
+                        kept_lines.append(json.dumps(remapped))
+            with open(logs_dest, "w") as f:
+                for line in kept_lines:
+                    f.write(line + "\n")
         success = True
 
-    # Copy triplets.json (shared across all methods for a task)
+    # Copy or filter triplets.json (shared across all methods for a task)
     triplets_source = (
         Path("outputs") / benchmark_run / "triplets" / task_name / "triplets.json"
     )
 
     if triplets_source.exists():
         triplets_dest = output_dir / "triplets.json"
-        shutil.copy2(triplets_source, triplets_dest)
+        if id_map is None:
+            shutil.copy2(triplets_source, triplets_dest)
+        else:
+            with open(triplets_source) as f:
+                triplets = json.load(f)
+            filtered_triplets = []
+            for triplet in triplets:
+                remapped = _remap_triplet_ids(triplet)
+                if remapped is not None:
+                    filtered_triplets.append(remapped)
+            with open(triplets_dest, "w") as f:
+                json.dump(filtered_triplets, f, indent=2)
         success = True
 
     return success
@@ -437,17 +934,20 @@ def is_similarity_matrix_method(method_name: str) -> bool:
 
 def run_visualization(
     benchmark_run: str,
+    output_benchmark_run: str,
     task_name: str,
     method_name: str,
     reducer: str,
     output_base: Path,
     use_thumbnails: bool = False,
     quiet: bool = False,
+    preloaded_data: tuple[list[Any], list[str], str, np.ndarray, str] | None = None,
 ) -> bool | None:
     """Run visualization for a single task/method/reducer combination.
 
     Args:
-        benchmark_run: Benchmark run name
+        benchmark_run: Benchmark run name to read source artifacts from
+        output_benchmark_run: Benchmark run name to write visualization artifacts under
         task_name: Task name
         method_name: Method name
         reducer: Reducer name
@@ -465,22 +965,15 @@ def run_visualization(
             # Silently skip non-heatmap reducers for similarity matrix methods
             return None
 
-    # Check if embeddings exist first
-    if not has_embeddings(benchmark_run, task_name, method_name):
-        # Don't log as warning for methods that don't produce embeddings
-        if not is_embedding_method(method_name):
-            # Silently skip methods that don't produce embeddings
-            return None
-        else:
-            # Warn about missing embeddings for methods that should have them
-            if not quiet:
-                logger.warning(
-                    f"Skipping {task_name}/{method_name}/{reducer} - no embeddings found"
-                )
-            return None
+    # Skip methods that are known not to produce embeddings and are not handled
+    # by the similarity-matrix heatmap path.
+    if not is_embedding_method(method_name) and not is_similarity_matrix_method(
+        method_name
+    ):
+        return None
 
     # Construct output path: outputs/viz/{benchmark}/{task}/{method}/
-    output_dir = output_base / benchmark_run / task_name / method_name
+    output_dir = output_base / output_benchmark_run / task_name / method_name
 
     # Only log per-item details if not quiet
     # (Summary logs at end are still shown)
@@ -496,8 +989,10 @@ def run_visualization(
             method_name=method_name,
             reducer=reducer,
             output_dir=output_dir,
+            output_benchmark_run=output_benchmark_run,
             use_thumbnails=use_thumbnails_for_task,
             quiet=quiet,
+            preloaded_data=preloaded_data,
         )
 
         if success:
@@ -512,7 +1007,10 @@ def run_visualization(
 
 
 def create_visualization_index(
-    output_base: Path, benchmark_run: str, task_methods: dict
+    output_base: Path,
+    benchmark_run: str,
+    task_methods: dict,
+    output_benchmark_run: str | None = None,
 ) -> Path:
     """Create/update index.json for web viewer.
 
@@ -520,12 +1018,15 @@ def create_visualization_index(
 
     Args:
         output_base: Base output directory (e.g., outputs/viz/)
-        benchmark_run: Benchmark run name
+        benchmark_run: Benchmark run name to read source artifacts from
         task_methods: Dict of task -> methods
+        output_benchmark_run: Benchmark run name to write in index/output paths.
+            Defaults to benchmark_run.
 
     Returns:
         Path to created/updated index.json
     """
+    output_run = output_benchmark_run or benchmark_run
     index_path = output_base / "index.json"
 
     # Load existing index if it exists
@@ -535,7 +1036,7 @@ def create_visualization_index(
     else:
         existing_index = {}
 
-    benchmark_dir = output_base / benchmark_run
+    benchmark_dir = output_base / output_run
 
     # Build index for this benchmark run
     # Structure: index[benchmark_run][dataset][criterion][method] = {modes: [...], path: "..."}
@@ -591,7 +1092,7 @@ def create_visualization_index(
 
             benchmark_index[dataset][criterion][method_name] = {
                 "modes": modes,
-                "path": f"{benchmark_run}/{task_name}/{method_name}",
+                "path": f"{output_run}/{task_name}/{method_name}",
             }
 
     # Copy results.json if it exists
@@ -604,7 +1105,7 @@ def create_visualization_index(
         logger.info(f"Copied results to: {dest}")
 
     # Merge into existing index
-    existing_index[benchmark_run] = benchmark_index
+    existing_index[output_run] = benchmark_index
 
     # Save merged index
     with open(index_path, "w") as f:
@@ -619,6 +1120,7 @@ def generate_visualizations_for_benchmark(
     benchmark_run: str,
     reducers: list[str] | None = None,
     output_base: str | Path = "outputs/viz",
+    output_benchmark_run: str | None = None,
     use_thumbnails: bool = True,
     include_triplets: bool = True,
     task_filter: list[str] | None = None,
@@ -628,15 +1130,16 @@ def generate_visualizations_for_benchmark(
     """Generate all visualizations for a benchmark run.
 
     Args:
-        benchmark_run: Benchmark run name
+        benchmark_run: Benchmark run name to read source artifacts from
         reducers: List of reducers to use (default: ['tsne', 'umap', 'pca', 'som', 'dendrogram'])
         output_base: Base output directory
+        output_benchmark_run: Benchmark run name to write visualization artifacts under.
+            Defaults to benchmark_run.
         use_thumbnails: Whether to use thumbnail markers
         include_triplets: Whether to copy triplet artifacts into viz outputs
         task_filter: Optional list of task names to include
         method_filter: Optional list of method names to include
         quiet: Suppress verbose output
-
     Returns:
         Tuple of (success_count, fail_count)
     """
@@ -645,11 +1148,12 @@ def generate_visualizations_for_benchmark(
 
     output_base = Path(output_base)
     output_base.mkdir(parents=True, exist_ok=True)
+    output_run = output_benchmark_run or benchmark_run
 
     # Clear existing visualizations for this benchmark run
     # outputs/viz is derived from outputs/, so safe to delete stale artifacts
     # BUT preserve *_markers directories (expensive to regenerate thumbnails)
-    benchmark_viz_dir = output_base / benchmark_run
+    benchmark_viz_dir = output_base / output_run
     if benchmark_viz_dir.exists():
         import shutil
 
@@ -715,6 +1219,8 @@ def generate_visualizations_for_benchmark(
         logger.info("GENERATING VISUALIZATIONS")
         logger.info("=" * 60)
         logger.info(f"Benchmark: {benchmark_run}")
+        if output_run != benchmark_run:
+            logger.info(f"Output benchmark key: {output_run}")
         logger.info(f"Tasks: {len(task_methods)}")
         for task, methods in task_methods.items():
             logger.info(f"  {task}: {len(methods)} methods")
@@ -734,19 +1240,43 @@ def generate_visualizations_for_benchmark(
     combo_num = 0
     for task_name, methods in task_methods.items():
         for method_name in methods:
+            preloaded_data: tuple[list[Any], list[str], str, np.ndarray, str] | None = (
+                None
+            )
+            # Embedding methods share the same docs/embeddings across reducers.
+            if is_embedding_method(method_name):
+                try:
+                    preferred_view = _infer_preferred_view(output_run)
+                    preloaded_data = _load_from_benchmark(
+                        benchmark_run,
+                        task_name,
+                        method_name,
+                        preferred_view=preferred_view,
+                    )
+                except Exception as e:
+                    if not quiet:
+                        logger.warning(
+                            f"Preload failed for {task_name}/{method_name}: {e}. "
+                            "Falling back to per-reducer loading."
+                        )
+
             for reducer in reducers:
                 combo_num += 1
                 if not quiet:
-                    logger.info(f"\n[{combo_num}/{total}] Processing...")
+                    logger.info(
+                        f"[{combo_num}/{total}] task={task_name} method={method_name} reducer={reducer}"
+                    )
 
                 result = run_visualization(
                     benchmark_run=benchmark_run,
+                    output_benchmark_run=output_run,
                     task_name=task_name,
                     method_name=method_name,
                     reducer=reducer,
                     output_base=output_base,
                     use_thumbnails=use_thumbnails,
                     quiet=quiet,
+                    preloaded_data=preloaded_data,
                 )
 
                 if result is True:
@@ -760,6 +1290,7 @@ def generate_visualizations_for_benchmark(
             if include_triplets:
                 copy_triplet_logs_for_method(
                     benchmark_run=benchmark_run,
+                    output_benchmark_run=output_run,
                     task_name=task_name,
                     method_name=method_name,
                     output_base=output_base,
@@ -767,8 +1298,13 @@ def generate_visualizations_for_benchmark(
 
     # Create index for web viewer
     if not quiet:
-        logger.info("\nCreating web viewer index...")
-    create_visualization_index(output_base, benchmark_run, task_methods)
+        logger.info("Creating web viewer index...")
+    create_visualization_index(
+        output_base=output_base,
+        benchmark_run=benchmark_run,
+        task_methods=task_methods,
+        output_benchmark_run=output_run,
+    )
 
     # Print summary
     if not quiet:
@@ -781,7 +1317,7 @@ def generate_visualizations_for_benchmark(
         logger.info(f"Skipped: {skip_count} (methods without embeddings)")
         if fail_count > 0:
             logger.info(f"Failed: {fail_count}")
-        logger.info(f"Output: {output_base / benchmark_run}")
+        logger.info(f"Output: {output_base / output_run}")
         logger.info("")
 
     return success_count, fail_count

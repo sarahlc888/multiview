@@ -3,6 +3,27 @@
 Standard embedding models prioritize general notions of semantic similarity. This benchmark evaluates embedding models on **criteria-specific** semantic similarity.
 
 See [WRITEUP.md](writeup/WRITEUP.md) for more information.
+
+## Example triplet
+- Document set: machine-generated haikus from TODO
+- Criteria: `**poem_composition**<br/>The relationship between the haiku's parts. What is the composition of the poem? Does the haiku have a 'turn'? Does the last line make a general pronouncement or a question?`
+- Anchor
+    ```
+    weeds choke the garden / yet bloom with defiant grace / beauty in the low
+    ```
+- Positive
+    ```
+    starry night's vastness / infinite and dark and deep / human soul's smallness
+    ```
+- Negative
+    ```
+    tailor's voice is low / as he speaks to the fabric / coaxing it to form
+    ```
+
+See [TASKS_TABLE.md](TASKS_TABLE.md) for example triplets for all tasks.
+
+
+
 ## Benchmark format
 
 Given a set of documents and a freetext criteria, we create triplets `(anchor, positive, negative)` for which the anchor document is more similar to the positive than negative, in the context of the criteria.
@@ -10,12 +31,6 @@ Given a set of documents and a freetext criteria, we create triplets `(anchor, p
 Our evaluation metric is accuracy rate over triplets.
 
 For each document set, we create triplets for at least two different criteria.
-## Example triplet
-| Document Set | Criteria | Anchor | Positive | Negative |
-|--------------|------------------------|----------------|------------------|------------------|
-| haiku | **poem_composition**<br/>The relationship between the haiku's parts. What is the composition of the poem? Does the haiku have a 'turn'? Does the last line make a general pronouncement or a question? | weeds choke the garden / yet bloom with defiant grace / beauty in the low | starry night's vastness / infinite and dark and deep / human soul's smallness | tailor's voice is low / as he speaks to the fabric / coaxing it to form | [0][0][0][8][42] n=50 | ✗ | ✗ | ✗ | [Results](outputs/benchmark_fuzzy_debug/results/task_reports/haiku__poem_composition.md) | [Triplets](outputs/benchmark_fuzzy_debug/triplets/haiku__poem_composition__tag__50/triplets.json) |
-
-See [TASKS_TABLE.md](TASKS_TABLE.md) for example triplets for all tasks.
 
 ## Usage
 1. Set up

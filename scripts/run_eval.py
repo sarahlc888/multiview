@@ -31,7 +31,7 @@ def main(cfg: DictConfig):
     # Setup output directories
     results_dir = output_base / "results"
     method_logs_dir = output_base / "method_logs"
-    embeddings_dir = output_base / "embeddings"
+    embeddings_dir = output_base / "triples" / "embeddings"
     results_dir.mkdir(parents=True, exist_ok=True)
     method_logs_dir.mkdir(parents=True, exist_ok=True)
     embeddings_dir.mkdir(parents=True, exist_ok=True)
@@ -302,6 +302,7 @@ def main(cfg: DictConfig):
                 benchmark_run=cfg.run_name,
                 reducers=reducers,
                 output_base=output_base,
+                output_benchmark_run=f"{cfg.run_name}/triples",
                 use_thumbnails=use_thumbnails,
                 task_filter=evaluated_task_names,
                 method_filter=evaluated_method_names

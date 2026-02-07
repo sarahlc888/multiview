@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class _TaskLike(Protocol):
+    config: dict | Any
     documents: list[str] | None
     document_annotations: list[dict] | None
     triplets: list[tuple[int, int, int]] | None
@@ -823,6 +824,7 @@ def _extract_triplet_generation_config(task_or_config: _TaskLike | dict) -> dict
     Fields that don't affect triplet generation (e.g., evaluation method configs)
     are excluded.
     """
+    is_task_object = not isinstance(task_or_config, dict)
     if isinstance(task_or_config, dict):
         config = task_or_config
     else:
@@ -867,6 +869,16 @@ def _extract_triplet_generation_config(task_or_config: _TaskLike | dict) -> dict
     ]
 
     for field in optional_fields:
+        # For Task objects, prefer resolved attributes (e.g., criterion_description
+        # inherited from dataset metadata even when omitted from YAML config).
+        if is_task_object and hasattr(task_or_config, field):
+            value = getattr(task_or_config, field)
+            if value is not None:
+                if isinstance(value, DictConfig):
+                    value = OmegaConf.to_container(value, resolve=True)
+                triplet_config[field] = value
+                continue
+
         if field in config:
             value = config[field]
             # Convert any nested DictConfig objects to regular dicts

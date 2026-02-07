@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 
+from multiview.eval.generation_utils import validate_criterion_description
 from multiview.eval.similarity import cosine_similarity
 from multiview.inference.inference import run_inference
 from multiview.utils.bm25_utils import compute_bm25_matrix
@@ -216,6 +217,8 @@ def evaluate_with_document_rewrite(
         log_entry = {
             "triplet_idx": i,
             "method_type": "document_rewrite",
+            "criterion": criterion,
+            "criterion_description": criterion_description,
             "embedding_preset": embedding_preset,
             "summary_preset": summary_preset,
             "anchor_id": anchor_id,
@@ -290,6 +293,12 @@ def _generate_summaries(
     Returns:
         List of summary strings (one per document)
     """
+    criterion_description = validate_criterion_description(
+        criterion=criterion,
+        criterion_description=criterion_description,
+        context=f"summary preset '{summary_preset}'",
+    )
+
     # Prepare inputs for batch inference (with optional image channels)
     texts: list[str] = []
     images: list[str | None] = []

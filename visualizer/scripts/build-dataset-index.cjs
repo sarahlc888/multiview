@@ -22,67 +22,80 @@ function scanDirectory() {
     return index;
   }
 
-  // New structure: outputs/viz/{benchmark}/{task}/{method}/manifest.json
-  // Index structure: index[benchmark][dataset][criterion][method]
+  // Supports:
+  //   - outputs/viz/{benchmark}/{task}/{method}/manifest.json
+  //   - outputs/viz/{benchmark}/{namespace}/{task}/{method}/manifest.json
+  // Index structure: index[benchmarkKey][dataset][criterion][method]
+  // where benchmarkKey may include namespace (e.g. "benchmark_fuzzy_debug2/corpus").
+  const manifestPaths = [];
 
-  const benchmarks = fs.readdirSync(VIZ_DIR).filter(name => {
-    // Skip special directories that aren't benchmarks
-    if (name === 'assets' || name.startsWith('.')) {
-      return false;
+  function collectManifests(dir) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === 'assets') {
+          continue;
+        }
+        collectManifests(fullPath);
+      } else if (entry.isFile() && entry.name === 'manifest.json') {
+        manifestPaths.push(fullPath);
+      }
     }
-    const fullPath = path.join(VIZ_DIR, name);
-    return fs.statSync(fullPath).isDirectory();
-  });
+  }
 
-  for (const benchmark of benchmarks) {
-    const benchmarkPath = path.join(VIZ_DIR, benchmark);
-    const tasks = fs.readdirSync(benchmarkPath).filter(name => {
-      const fullPath = path.join(benchmarkPath, name);
-      return fs.statSync(fullPath).isDirectory() && !name.endsWith('.json');
-    });
+  collectManifests(VIZ_DIR);
+
+  for (const manifestPath of manifestPaths) {
+    const methodPath = path.dirname(manifestPath);
+    const relPath = path.relative(VIZ_DIR, manifestPath);
+    const segments = relPath.split(path.sep);
+
+    // Need at least {benchmark}/{task}/{method}/manifest.json
+    if (segments.length < 4) {
+      continue;
+    }
+
+    const method = segments[segments.length - 2];
+    const task = segments[segments.length - 3];
+    const benchmark = segments.slice(0, segments.length - 3).join('/');
+    const basePath = `${benchmark}/${task}/${method}`;
 
     if (!index[benchmark]) {
       index[benchmark] = {};
     }
 
-    for (const task of tasks) {
-      const taskPath = path.join(benchmarkPath, task);
-      const methods = fs.readdirSync(taskPath).filter(name => {
-        const fullPath = path.join(taskPath, name);
-        return fs.statSync(fullPath).isDirectory();
-      });
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      const modesSet = new Set(Object.keys(manifest.layouts || {}));
+      // Match python index builder behavior for non-layout modes.
+      modesSet.add('heatmap');
+      modesSet.add('graph');
+      if (manifest.dendrogram_image) modesSet.add('dendrogram');
+      if (manifest.som_grid_image) modesSet.add('som');
+      const modes = Array.from(modesSet).sort();
 
-      for (const method of methods) {
-        const methodPath = path.join(taskPath, method);
-        const manifestPath = path.join(methodPath, 'manifest.json');
+      const dataset = manifest.dataset;
+      const criterion = manifest.criterion;
 
-        if (!fs.existsSync(manifestPath)) {
-          continue;
-        }
-
-        try {
-          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-          const modes = Object.keys(manifest.layouts || {});
-          const dataset = manifest.dataset;
-          const criterion = manifest.criterion;
-
-          if (!index[benchmark][dataset]) {
-            index[benchmark][dataset] = {};
-          }
-          if (!index[benchmark][dataset][criterion]) {
-            index[benchmark][dataset][criterion] = {};
-          }
-
-          index[benchmark][dataset][criterion][method] = {
-            modes: modes,
-            path: `${benchmark}/${task}/${method}`,
-          };
-
-          console.log(`✓ Found ${benchmark}/${dataset}/${criterion}/${method}: ${modes.join(', ')}`);
-        } catch (err) {
-          console.error(`Error reading manifest in ${methodPath}:`, err.message);
-        }
+      if (!index[benchmark][dataset]) {
+        index[benchmark][dataset] = {};
       }
+      if (!index[benchmark][dataset][criterion]) {
+        index[benchmark][dataset][criterion] = {};
+      }
+
+      index[benchmark][dataset][criterion][method] = {
+        modes: modes,
+        path: basePath,
+      };
+
+      console.log(`✓ Found ${benchmark}/${dataset}/${criterion}/${method}: ${modes.join(', ')}`);
+    } catch (err) {
+      console.error(`Error reading manifest in ${methodPath}:`, err.message);
     }
   }
 

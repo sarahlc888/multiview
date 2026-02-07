@@ -9,6 +9,22 @@ from multiview.inference.inference import run_inference
 logger = logging.getLogger(__name__)
 
 
+def validate_criterion_description(
+    *,
+    criterion: str,
+    criterion_description: str | None,
+    context: str,
+) -> str:
+    """Ensure criterion_description is present and non-empty."""
+    description = (criterion_description or "").strip()
+    if not description:
+        raise ValueError(
+            f"Missing criterion_description for criterion '{criterion}' in {context}. "
+            "Provide a non-empty criterion description."
+        )
+    return description
+
+
 def generate_text_variations_from_documents(
     documents: list[str | dict],
     criterion: str,
@@ -40,6 +56,12 @@ def generate_text_variations_from_documents(
     Returns:
         List of all text variation strings (len = num_documents × k)
     """
+    criterion_description = validate_criterion_description(
+        criterion=criterion,
+        criterion_description=criterion_description,
+        context=f"generation preset '{generation_preset}'",
+    )
+
     # Prepare inputs for batch inference (with optional image channels)
     doc_texts: list[str] = []
     doc_images: list[str | None] = []
@@ -58,7 +80,7 @@ def generate_text_variations_from_documents(
     # Each document gets k variations generated
     inputs = {
         "criterion": [criterion] * len(documents),
-        "criterion_description": [criterion_description or ""] * len(documents),
+        "criterion_description": [criterion_description] * len(documents),
         "document": doc_texts,
         "num_expansions": [num_variations] * len(documents),
     }

@@ -196,6 +196,8 @@ def evaluate_with_query_relevance_vectors(
             {
                 "triplet_idx": i,
                 "method_type": "query_relevance_vectors",
+                "criterion": criterion,
+                "criterion_description": criterion_description,
                 "expansion_preset": expansion_preset,
                 "embedding_preset": embedding_preset,
                 "num_expansions": num_expansions,

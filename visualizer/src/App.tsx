@@ -202,6 +202,107 @@ function rankNeighborsForDoc(
   };
 }
 
+function isImagePlaceholder(text: string | undefined): boolean {
+  if (!text) return true;
+  const normalized = text.trim().toLowerCase();
+  return !normalized || normalized === '<image>';
+}
+
+function getImageOnlyFallbackText(docIndex: number): string {
+  return `Image-only document #${docIndex}`;
+}
+
+function getTextFromTripletDoc(doc: unknown): string | null {
+  if (typeof doc === 'string') {
+    return isImagePlaceholder(doc) ? null : doc;
+  }
+
+  if (!isObject(doc)) {
+    return null;
+  }
+
+  const textValue = doc.text;
+  if (typeof textValue === 'string' && !isImagePlaceholder(textValue)) {
+    return textValue;
+  }
+
+  const ignoredKeys = new Set(['text', 'image_path', 'embedding_viz', '_metadata']);
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(doc)) {
+    if (ignoredKeys.has(key) || value === null || value === undefined) {
+      continue;
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        parts.push(`${key}: ${trimmed}`);
+      }
+    } else if (typeof value === 'number' || typeof value === 'boolean') {
+      parts.push(`${key}: ${String(value)}`);
+    }
+  }
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return parts.join(' | ');
+}
+
+function getBenchmarkRoots(index: DatasetIndex): string[] {
+  const roots = new Set<string>();
+  for (const key of Object.keys(index)) {
+    const [root] = key.split('/');
+    if (root) {
+      roots.add(root);
+    }
+  }
+  return Array.from(roots).sort();
+}
+
+function getViewKinds(index: DatasetIndex, benchmarkRoot: string): string[] {
+  const kinds = new Set<string>();
+  if (index[benchmarkRoot]) {
+    kinds.add('triples');
+  }
+  for (const key of Object.keys(index)) {
+    if (!key.startsWith(`${benchmarkRoot}/`)) {
+      continue;
+    }
+    const parts = key.split('/');
+    if (parts.length >= 2 && parts[1]) {
+      kinds.add(parts[1]);
+    }
+  }
+  return Array.from(kinds).sort((a, b) => {
+    const preferredOrder = ['triples', 'corpus'];
+    const ai = preferredOrder.indexOf(a);
+    const bi = preferredOrder.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+}
+
+function resolveBenchmarkKey(
+  index: DatasetIndex,
+  benchmarkRoot: string,
+  viewKind: string
+): string {
+  const namespaced = `${benchmarkRoot}/${viewKind}`;
+  if (index[namespaced]) {
+    return namespaced;
+  }
+  if (viewKind === 'triples' && index[benchmarkRoot]) {
+    return benchmarkRoot;
+  }
+  const fallback = Object.keys(index).find(
+    (key) => key === benchmarkRoot || key.startsWith(`${benchmarkRoot}/`)
+  );
+  return fallback || '';
+}
+
 const App: React.FC = () => {
   const [index, setIndex] = useState<DatasetIndex | null>(null);
   const [loading, setLoading] = useState(true);
@@ -209,6 +310,7 @@ const App: React.FC = () => {
 
   // Selection state
   const [selectedBenchmark, setSelectedBenchmark] = useState<string>('');
+  const [selectedViewKind, setSelectedViewKind] = useState<string>('triples');
   const [selectedDataset, setSelectedDataset] = useState<string>('');
   const [selectedCriterion, setSelectedCriterion] = useState<string>('');
   const [selectedMethod, setSelectedMethod] = useState<string>('');
@@ -231,7 +333,39 @@ const App: React.FC = () => {
   const [neighborsError, setNeighborsError] = useState<string | null>(null);
 
   const isPseudologitSelected = selectedMethod.toLowerCase().includes('pseudologit');
+  const isCorpusView = selectedViewKind === 'corpus';
+  const benchmarkRoots = React.useMemo(
+    () => (index ? getBenchmarkRoots(index) : []),
+    [index]
+  );
+  const availableViewKinds = React.useMemo(
+    () => (index && selectedBenchmark ? getViewKinds(index, selectedBenchmark) : []),
+    [index, selectedBenchmark]
+  );
+  const activeBenchmarkKey = React.useMemo(
+    () =>
+      index && selectedBenchmark
+        ? resolveBenchmarkKey(index, selectedBenchmark, selectedViewKind)
+        : '',
+    [index, selectedBenchmark, selectedViewKind]
+  );
+
+  useEffect(() => {
+    if (!selectedBenchmark || availableViewKinds.length === 0) {
+      return;
+    }
+    if (!availableViewKinds.includes(selectedViewKind)) {
+      const preferredView = availableViewKinds.includes('triples')
+        ? 'triples'
+        : availableViewKinds[0];
+      setSelectedViewKind(preferredView);
+    }
+  }, [selectedBenchmark, availableViewKinds, selectedViewKind]);
+
   const isDocumentRewriteSelected = React.useMemo(() => {
+    if (isCorpusView) {
+      return false;
+    }
     if (selectedMethod.toLowerCase().includes('document_rewrite')) {
       return true;
     }
@@ -244,7 +378,7 @@ const App: React.FC = () => {
       typeof triplet.positive_summary === 'string' ||
       typeof triplet.negative_summary === 'string'
     );
-  }, [selectedMethod, vizData?.triplets]);
+  }, [isCorpusView, selectedMethod, vizData?.triplets]);
 
   const documentRewriteSummaryById = React.useMemo(() => {
     const summaryById = new Map<number, string>();
@@ -267,18 +401,68 @@ const App: React.FC = () => {
     return summaryById;
   }, [isDocumentRewriteSelected, vizData?.triplets]);
 
-  const getDisplayTextForDoc = (docIndex: number, fallbackText: string): string => {
-    if (isDocumentRewriteSelected) {
-      const summary = documentRewriteSummaryById.get(docIndex);
-      if (summary) {
-        return summary;
-      }
+  const tripletSourceSnippetById = React.useMemo(() => {
+    const sourceById = new Map<number, string>();
+    if (!vizData?.triplets?.length) {
+      return sourceById;
     }
-    return fallbackText;
+
+    const assign = (docId: number, doc: unknown) => {
+      if (sourceById.has(docId)) {
+        return;
+      }
+      const text = getTextFromTripletDoc(doc);
+      if (text && text.trim()) {
+        sourceById.set(docId, text);
+      }
+    };
+
+    for (const triplet of vizData.triplets) {
+      assign(triplet.anchor_id, triplet.anchor);
+      assign(triplet.positive_id, triplet.positive);
+      assign(triplet.negative_id, triplet.negative);
+    }
+
+    return sourceById;
+  }, [vizData?.triplets]);
+
+  const displayDocuments = React.useMemo(() => {
+    if (!vizData) {
+      return [] as string[];
+    }
+
+    return vizData.documents.map((docText, docIdx) => {
+      if (!isImagePlaceholder(docText)) {
+        return docText;
+      }
+
+      const rewriteSummary = documentRewriteSummaryById.get(docIdx);
+      if (rewriteSummary && rewriteSummary.trim()) {
+        return rewriteSummary;
+      }
+
+      const sourceSnippet = tripletSourceSnippetById.get(docIdx);
+      if (sourceSnippet && sourceSnippet.trim()) {
+        return sourceSnippet;
+      }
+
+      return getImageOnlyFallbackText(docIdx);
+    });
+  }, [vizData, documentRewriteSummaryById, tripletSourceSnippetById]);
+
+  const getDisplayTextForDoc = (docIndex: number, fallbackText: string): string => {
+    const resolvedText = displayDocuments[docIndex];
+    if (resolvedText && resolvedText.trim() && !isImagePlaceholder(resolvedText)) {
+      return resolvedText;
+    }
+    if (fallbackText && fallbackText.trim() && !isImagePlaceholder(fallbackText)) {
+      return fallbackText;
+    }
+    return getImageOnlyFallbackText(docIndex);
   };
 
   const selectedTaxonomySections = React.useMemo(() => {
-    if (!isPseudologitSelected || !vizData?.triplets?.length) {
+    if (isCorpusView || !isPseudologitSelected || !vizData?.triplets?.length) {
       return [] as TaxonomySection[];
     }
 
@@ -290,19 +474,19 @@ const App: React.FC = () => {
     }
 
     return [] as TaxonomySection[];
-  }, [isPseudologitSelected, vizData?.triplets]);
+  }, [isCorpusView, isPseudologitSelected, vizData?.triplets]);
 
   useEffect(() => {
     setSelectedDocumentIndex(null);
     setCurrentCriterionNeighbors(null);
     setNeighborsError(null);
-  }, [selectedBenchmark, selectedDataset, selectedCriterion, selectedMethod]);
+  }, [selectedBenchmark, selectedViewKind, selectedDataset, selectedCriterion, selectedMethod]);
 
   useEffect(() => {
     if (
       selectedDocumentIndex === null ||
       !index ||
-      !selectedBenchmark ||
+      !activeBenchmarkKey ||
       !selectedDataset ||
       !selectedCriterion ||
       !selectedMethod
@@ -314,7 +498,7 @@ const App: React.FC = () => {
     }
 
     const methodsForCriterion =
-      index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion];
+      index[activeBenchmarkKey]?.[selectedDataset]?.[selectedCriterion];
     if (!methodsForCriterion) {
       setCurrentCriterionNeighbors(null);
       setLoadingNeighbors(false);
@@ -418,7 +602,7 @@ const App: React.FC = () => {
   }, [
     selectedDocumentIndex,
     index,
-    selectedBenchmark,
+    activeBenchmarkKey,
     selectedDataset,
     selectedCriterion,
     selectedMethod,
@@ -432,28 +616,33 @@ const App: React.FC = () => {
         setIndex(idx);
 
         // Auto-select first available benchmark/dataset/criterion/method/mode
-        const benchmarks = Object.keys(idx);
-        if (benchmarks.length > 0) {
-          const firstBenchmark = benchmarks[0];
-          const datasets = Object.keys(idx[firstBenchmark]);
+        const roots = getBenchmarkRoots(idx);
+        if (roots.length > 0) {
+          const firstBenchmark = roots[0];
+          const views = getViewKinds(idx, firstBenchmark);
+          const firstView = views.includes('triples') ? 'triples' : (views[0] || 'triples');
+          const firstBenchmarkKey = resolveBenchmarkKey(idx, firstBenchmark, firstView);
+          const benchmarkData = firstBenchmarkKey ? idx[firstBenchmarkKey] : undefined;
+          const datasets = benchmarkData ? Object.keys(benchmarkData) : [];
           if (datasets.length > 0) {
             const firstDataset = datasets[0];
-            const criteria = Object.keys(idx[firstBenchmark][firstDataset]);
+            const criteria = Object.keys(benchmarkData![firstDataset]);
             if (criteria.length > 0) {
               const firstCriterion = criteria[0];
-              const methods = Object.keys(idx[firstBenchmark][firstDataset][firstCriterion]);
+              const methods = Object.keys(benchmarkData![firstDataset][firstCriterion]);
               if (methods.length > 0) {
                 const firstMethod = methods[0];
-                const modes = idx[firstBenchmark][firstDataset][firstCriterion][firstMethod].modes;
+                const modes = benchmarkData![firstDataset][firstCriterion][firstMethod].modes;
                 if (modes.length > 0) {
                   setSelectedBenchmark(firstBenchmark);
+                  setSelectedViewKind(firstView);
                   setSelectedDataset(firstDataset);
                   setSelectedCriterion(firstCriterion);
                   setSelectedMethod(firstMethod);
                   setSelectedMode(modes[0] as VisualizationMode);
 
                   // Load results for this benchmark
-                  loadBenchmarkResults(firstBenchmark).then(setResults);
+                  loadBenchmarkResults(firstBenchmarkKey).then(setResults);
                 }
               }
             }
@@ -470,20 +659,20 @@ const App: React.FC = () => {
 
   // Load results when benchmark changes
   useEffect(() => {
-    if (selectedBenchmark) {
-      loadBenchmarkResults(selectedBenchmark).then(setResults);
+    if (activeBenchmarkKey) {
+      loadBenchmarkResults(activeBenchmarkKey).then(setResults);
     }
-  }, [selectedBenchmark]);
+  }, [activeBenchmarkKey]);
 
   // Load visualization data when selection changes
   useEffect(() => {
-    if (!index || !selectedBenchmark || !selectedDataset || !selectedCriterion || !selectedMethod || !selectedMode) {
+    if (!index || !activeBenchmarkKey || !selectedDataset || !selectedCriterion || !selectedMethod || !selectedMode) {
       setVizData(null);
       setTripletLogs(null);
       return;
     }
 
-    const benchmarkData = index[selectedBenchmark];
+    const benchmarkData = index[activeBenchmarkKey];
     if (!benchmarkData || !benchmarkData[selectedDataset]) {
       setVizData(null);
       setTripletLogs(null);
@@ -505,6 +694,12 @@ const App: React.FC = () => {
 
     // Check if method has embeddings
     if (methodData.has_embeddings === false) {
+      if (isCorpusView) {
+        setTripletLogs(null);
+        setVizData(null);
+        setLoadingViz(false);
+        return;
+      }
       // Load triplet logs for methods without embeddings
       loadTripletLogs(methodData.path)
         .then((logs) => {
@@ -523,7 +718,14 @@ const App: React.FC = () => {
       setTripletLogs(null);
       loadVisualizationData(methodData.path, selectedMode)
         .then((data) => {
-          setVizData(data);
+          setVizData(
+            isCorpusView
+              ? {
+                  ...data,
+                  triplets: undefined,
+                }
+              : data
+          );
           setLoadingViz(false);
         })
         .catch((err) => {
@@ -532,7 +734,7 @@ const App: React.FC = () => {
           setVizData(null);
         });
     }
-  }, [index, selectedBenchmark, selectedDataset, selectedCriterion, selectedMethod, selectedMode]);
+  }, [index, activeBenchmarkKey, selectedDataset, selectedCriterion, selectedMethod, selectedMode, isCorpusView]);
 
   if (loading) {
     return (
@@ -557,38 +759,40 @@ const App: React.FC = () => {
     );
   }
 
-  const benchmarks = Object.keys(index);
-  const datasets = selectedBenchmark && index[selectedBenchmark]
-    ? Object.keys(index[selectedBenchmark])
+  const benchmarkData = activeBenchmarkKey ? index[activeBenchmarkKey] : undefined;
+  const datasets = benchmarkData
+    ? Object.keys(benchmarkData)
     : [];
-  const criteria = selectedBenchmark && selectedDataset && index[selectedBenchmark]?.[selectedDataset]
-    ? Object.keys(index[selectedBenchmark][selectedDataset])
+  const criteria = selectedDataset && benchmarkData?.[selectedDataset]
+    ? Object.keys(benchmarkData[selectedDataset])
     : [];
-  const methods = selectedBenchmark && selectedDataset && selectedCriterion && index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion]
-    ? Object.keys(index[selectedBenchmark][selectedDataset][selectedCriterion])
+  const methods = selectedDataset && selectedCriterion && benchmarkData?.[selectedDataset]?.[selectedCriterion]
+    ? Object.keys(benchmarkData[selectedDataset][selectedCriterion])
     : [];
-  const modes = selectedBenchmark && selectedDataset && selectedCriterion && selectedMethod && index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion]?.[selectedMethod]
-    ? index[selectedBenchmark][selectedDataset][selectedCriterion][selectedMethod].modes
+  const modes = selectedDataset && selectedCriterion && selectedMethod && benchmarkData?.[selectedDataset]?.[selectedCriterion]?.[selectedMethod]
+    ? benchmarkData[selectedDataset][selectedCriterion][selectedMethod].modes
     : [];
 
   // Get task name for leaderboard - extract from ANY method's path in this dataset/criterion
   // (Even if selected method doesn't have embeddings, we want to show the leaderboard)
   // Path format: "benchmark_fuzzy_debug2/gsm8k__final_expression__tag__5/method_name"
   const taskName = (() => {
-    if (!selectedBenchmark || !selectedDataset || !selectedCriterion) return '';
+    if (!benchmarkData || !selectedDataset || !selectedCriterion) return '';
 
-    const criterionMethods = index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion];
+    const criterionMethods = benchmarkData[selectedDataset]?.[selectedCriterion];
     if (!criterionMethods) return '';
 
     // Get task name from first available method
     const firstMethod = Object.values(criterionMethods)[0];
-    return firstMethod?.path ? firstMethod.path.split('/')[1] : '';
+    if (!firstMethod?.path) return '';
+    const pathParts = firstMethod.path.split('/');
+    return pathParts.length >= 2 ? pathParts[pathParts.length - 2] : '';
   })();
 
   return (
     <div className="app">
       <header className="header">
-        <h1>🔬 Multiview Visualizer</h1>
+        <h1>🔬 View X by Y</h1>
         <div className="controls">
           <div className="control-group">
             <label>Experiment:</label>
@@ -596,21 +800,28 @@ const App: React.FC = () => {
               value={selectedBenchmark}
               onChange={(e) => {
                 const newBenchmark = e.target.value;
+                const newViews = getViewKinds(index, newBenchmark);
+                const newView = newViews.includes(selectedViewKind)
+                  ? selectedViewKind
+                  : (newViews.includes('triples') ? 'triples' : (newViews[0] || 'triples'));
+                const benchmarkKey = resolveBenchmarkKey(index, newBenchmark, newView);
+                const benchmarkSelectionData = benchmarkKey ? index[benchmarkKey] : undefined;
                 setSelectedBenchmark(newBenchmark);
+                setSelectedViewKind(newView);
                 // Reset downstream selections
-                const newDatasets = Object.keys(index[newBenchmark]);
+                const newDatasets = benchmarkSelectionData ? Object.keys(benchmarkSelectionData) : [];
                 if (newDatasets.length > 0) {
                   const newDataset = newDatasets[0];
                   setSelectedDataset(newDataset);
-                  const newCriteria = Object.keys(index[newBenchmark][newDataset]);
+                  const newCriteria = Object.keys(benchmarkSelectionData![newDataset]);
                   if (newCriteria.length > 0) {
                     const newCriterion = newCriteria[0];
                     setSelectedCriterion(newCriterion);
-                    const newMethods = Object.keys(index[newBenchmark][newDataset][newCriterion]);
+                    const newMethods = Object.keys(benchmarkSelectionData![newDataset][newCriterion]);
                     if (newMethods.length > 0) {
                       const newMethod = newMethods[0];
                       setSelectedMethod(newMethod);
-                      const newModes = index[newBenchmark][newDataset][newCriterion][newMethod].modes;
+                      const newModes = benchmarkSelectionData![newDataset][newCriterion][newMethod].modes;
                       if (newModes.length > 0) {
                         setSelectedMode(newModes[0] as VisualizationMode);
                       }
@@ -619,9 +830,48 @@ const App: React.FC = () => {
                 }
               }}
             >
-              {benchmarks.map((benchmark) => (
+              {benchmarkRoots.map((benchmark) => (
                 <option key={benchmark} value={benchmark}>
                   {benchmark}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="control-group">
+            <label>View:</label>
+            <select
+              value={selectedViewKind}
+              onChange={(e) => {
+                const newView = e.target.value;
+                const benchmarkKey = resolveBenchmarkKey(index, selectedBenchmark, newView);
+                const benchmarkSelectionData = benchmarkKey ? index[benchmarkKey] : undefined;
+                setSelectedViewKind(newView);
+                // Reset downstream selections
+                const newDatasets = benchmarkSelectionData ? Object.keys(benchmarkSelectionData) : [];
+                if (newDatasets.length > 0) {
+                  const newDataset = newDatasets[0];
+                  setSelectedDataset(newDataset);
+                  const newCriteria = Object.keys(benchmarkSelectionData![newDataset]);
+                  if (newCriteria.length > 0) {
+                    const newCriterion = newCriteria[0];
+                    setSelectedCriterion(newCriterion);
+                    const newMethods = Object.keys(benchmarkSelectionData![newDataset][newCriterion]);
+                    if (newMethods.length > 0) {
+                      const newMethod = newMethods[0];
+                      setSelectedMethod(newMethod);
+                      const newModes = benchmarkSelectionData![newDataset][newCriterion][newMethod].modes;
+                      if (newModes.length > 0) {
+                        setSelectedMode(newModes[0] as VisualizationMode);
+                      }
+                    }
+                  }
+                }
+              }}
+            >
+              {availableViewKinds.map((view) => (
+                <option key={view} value={view}>
+                  {view}
                 </option>
               ))}
             </select>
@@ -634,15 +884,15 @@ const App: React.FC = () => {
               onChange={(e) => {
                 setSelectedDataset(e.target.value);
                 // Reset downstream selections
-                const newCriteria = Object.keys(index[selectedBenchmark][e.target.value]);
+                const newCriteria = benchmarkData ? Object.keys(benchmarkData[e.target.value]) : [];
                 if (newCriteria.length > 0) {
                   const newCriterion = newCriteria[0];
                   setSelectedCriterion(newCriterion);
-                  const newMethods = Object.keys(index[selectedBenchmark][e.target.value][newCriterion]);
+                  const newMethods = benchmarkData ? Object.keys(benchmarkData[e.target.value][newCriterion]) : [];
                   if (newMethods.length > 0) {
                     const newMethod = newMethods[0];
                     setSelectedMethod(newMethod);
-                    const newModes = index[selectedBenchmark][e.target.value][newCriterion][newMethod].modes;
+                    const newModes = benchmarkData ? benchmarkData[e.target.value][newCriterion][newMethod].modes : [];
                     if (newModes.length > 0) {
                       setSelectedMode(newModes[0] as VisualizationMode);
                     }
@@ -665,11 +915,11 @@ const App: React.FC = () => {
               onChange={(e) => {
                 setSelectedCriterion(e.target.value);
                 // Reset downstream selections
-                const newMethods = Object.keys(index[selectedBenchmark][selectedDataset][e.target.value]);
+                const newMethods = benchmarkData ? Object.keys(benchmarkData[selectedDataset][e.target.value]) : [];
                 if (newMethods.length > 0) {
                   const newMethod = newMethods[0];
                   setSelectedMethod(newMethod);
-                  const newModes = index[selectedBenchmark][selectedDataset][e.target.value][newMethod].modes;
+                  const newModes = benchmarkData ? benchmarkData[selectedDataset][e.target.value][newMethod].modes : [];
                   if (newModes.length > 0) {
                     setSelectedMode(newModes[0] as VisualizationMode);
                   }
@@ -691,7 +941,7 @@ const App: React.FC = () => {
               onChange={(e) => {
                 setSelectedMethod(e.target.value);
                 // Reset mode
-                const newModes = index[selectedBenchmark][selectedDataset][selectedCriterion][e.target.value].modes;
+                const newModes = benchmarkData ? benchmarkData[selectedDataset][selectedCriterion][e.target.value].modes : [];
                 if (newModes.length > 0) {
                   setSelectedMode(newModes[0] as VisualizationMode);
                 }
@@ -771,8 +1021,8 @@ const App: React.FC = () => {
           currentTask={taskName}
           currentMethod={selectedMethod}
           methodsWithEmbeddings={
-            selectedBenchmark && selectedDataset && selectedCriterion
-              ? Object.entries(index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion] || {})
+            benchmarkData && selectedDataset && selectedCriterion
+              ? Object.entries(benchmarkData[selectedDataset]?.[selectedCriterion] || {})
                   .filter(([_, data]) => data.has_embeddings !== false)
                   .map(([name, _]) => name)
               : []
@@ -780,7 +1030,7 @@ const App: React.FC = () => {
           onMethodSelect={(method) => {
             setSelectedMethod(method);
             // Reset mode for new method (if it has embeddings)
-            const methodData = index[selectedBenchmark]?.[selectedDataset]?.[selectedCriterion]?.[method];
+            const methodData = benchmarkData?.[selectedDataset]?.[selectedCriterion]?.[method];
             if (methodData && methodData.modes.length > 0) {
               setSelectedMode(methodData.modes[0] as VisualizationMode);
             }
@@ -804,14 +1054,14 @@ const App: React.FC = () => {
             </span>
           </div>
         )}
-        {tripletLogs && !loadingViz && (
+        {!isCorpusView && tripletLogs && !loadingViz && (
           <div className="visualization">
             <TripletList tripletLogs={tripletLogs} />
           </div>
         )}
         {vizData && !loadingViz && (
           <div className="visualization">
-            {isPseudologitSelected && (
+            {!isCorpusView && isPseudologitSelected && (
               <div className="taxonomy-panel">
                 <h3>Taxonomy (selected pseudologit method)</h3>
                 {selectedTaxonomySections.length > 0 ? (
@@ -833,11 +1083,11 @@ const App: React.FC = () => {
             <div className="viz-info">
               <span>{vizData.documents.length} documents</span>
               <span>{vizData.manifest.embedding_dim}D embeddings</span>
-              {vizData.triplets && <span>{vizData.triplets.length} triplets</span>}
+              {!isCorpusView && vizData.triplets && <span>{vizData.triplets.length} triplets</span>}
             </div>
             <ModeRenderer
               mode={selectedMode}
-              data={vizData}
+              data={{ ...vizData, documents: displayDocuments }}
               displayMode={displayMode}
               width={1000}
               height={700}

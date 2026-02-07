@@ -7,6 +7,7 @@ techniques.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,16 @@ try:
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
+
+logger = logging.getLogger(__name__)
+
+
+def _safe_local_path_exists(path_str: str) -> bool:
+    """Return False instead of raising for invalid or oversized pseudo-paths."""
+    try:
+        return Path(path_str).exists()
+    except OSError:
+        return False
 
 
 class CorpusVisualizer:
@@ -138,7 +149,7 @@ class CorpusVisualizer:
                     break
 
                 img_path = image_paths[idx]
-                if not img_path or not Path(img_path).exists():
+                if not img_path or not _safe_local_path_exists(img_path):
                     # Plot a small point as fallback
                     ax.scatter(
                         [x_val],
@@ -173,7 +184,7 @@ class CorpusVisualizer:
                     images_drawn += 1
 
                 except Exception as e:
-                    print(f"Warning: Failed to load image {img_path}: {e}")
+                    logger.warning(f"Failed to load image {img_path}: {e}")
                     # Plot a small point as fallback
                     ax.scatter(
                         [x_val],
@@ -293,7 +304,7 @@ class CorpusVisualizer:
 
         # Place each image at its assigned grid position
         for img_path, node_idx in zip(image_paths, assignments, strict=False):
-            if not img_path or not Path(img_path).exists():
+            if not img_path or not _safe_local_path_exists(img_path):
                 continue
 
             # Calculate grid position
@@ -324,7 +335,7 @@ class CorpusVisualizer:
                     canvas.paste(tile, (x, y))
 
             except Exception as e:
-                print(f"Warning: Failed to load image {img_path}: {e}")
+                logger.warning(f"Failed to load image {img_path}: {e}")
                 continue
 
         return canvas
@@ -417,8 +428,11 @@ class CorpusVisualizer:
         else:
             color_threshold = 0
 
-        print(
-            f"Dendrogram: {n_samples} samples, {num_clusters} clusters, color_threshold={color_threshold:.4f}"
+        logger.debug(
+            "Dendrogram params: samples=%s clusters=%s color_threshold=%.4f",
+            n_samples,
+            num_clusters,
+            color_threshold,
         )
 
         # Plot dendrogram structure with cluster coloring
@@ -523,8 +537,12 @@ class CorpusVisualizer:
         effective_zoom = min(image_size * max_zoom, max_zoom * 1.2)
         effective_zoom = max(effective_zoom, 0.1)
 
-        print(
-            f"Dendrogram: {n_leaves} leaves in {n_rows} rows ({images_per_row} per row), zoom={effective_zoom:.3f}"
+        logger.debug(
+            "Dendrogram layout: leaves=%s rows=%s per_row=%s zoom=%.3f",
+            n_leaves,
+            n_rows,
+            images_per_row,
+            effective_zoom,
         )
 
         # Generate colors based on cluster assignments
@@ -551,7 +569,7 @@ class CorpusVisualizer:
                     colormap(i / max(n_clusters - 1, 1))
                 )
 
-            print(f"Using {n_clusters} cluster colors")
+            logger.debug(f"Dendrogram colors: using {n_clusters} cluster colors")
         else:
             cluster_colors = None
 
@@ -621,7 +639,7 @@ class CorpusVisualizer:
                     continue
 
                 img_path = image_paths[original_idx]
-                if not img_path or not Path(img_path).exists():
+                if not img_path or not _safe_local_path_exists(img_path):
                     continue
 
                 # Calculate grid position
@@ -664,7 +682,7 @@ class CorpusVisualizer:
                     ax.add_artist(ab)
 
                 except Exception as e:
-                    print(f"Warning: Failed to load image {img_path}: {e}")
+                    logger.warning(f"Failed to load image {img_path}: {e}")
                     continue
 
         else:  # left or right orientation - similar grid logic
@@ -745,7 +763,7 @@ class CorpusVisualizer:
                     continue
 
                 img_path = image_paths[original_idx]
-                if not img_path or not Path(img_path).exists():
+                if not img_path or not _safe_local_path_exists(img_path):
                     continue
 
                 grid_col = idx // images_per_col
@@ -789,7 +807,7 @@ class CorpusVisualizer:
                     ax.add_artist(ab)
 
                 except Exception as e:
-                    print(f"Warning: Failed to load image {img_path}: {e}")
+                    logger.warning(f"Failed to load image {img_path}: {e}")
                     continue
 
     def visualize_corpus(
@@ -823,18 +841,18 @@ class CorpusVisualizer:
             Tuple of (coords_2d, fig, ax)
         """
         # Step 1: Reduce embeddings to 2D
-        print(f"Reducing {len(embeddings)} embeddings to 2D...")
+        logger.debug(f"Projecting {len(embeddings)} embeddings to 2D")
         coords_2d = self.reduce_embeddings(embeddings)
 
         # Step 2: Generate colors from classes if needed
         legend_labels = None
         if classes and not colors:
-            print("Generating colors from class labels...")
+            logger.debug("Generating colors from class labels")
             colors, legend_labels = generate_class_colors(classes)
             plot_kwargs["legend_labels"] = legend_labels
 
         # Step 3: Create plot
-        print("Creating visualization...")
+        logger.debug("Rendering scatter visualization")
         fig, ax = self.plot_2d_scatter(
             coords_2d,
             labels=labels,
@@ -846,8 +864,8 @@ class CorpusVisualizer:
         # Step 4: Save if output_path provided
         if output_path:
             output_file = f"{output_path}.{format}"
-            print(f"Saving to {output_file}...")
+            logger.debug(f"Writing visualization: {output_file}")
             fig.savefig(output_file, dpi=dpi, bbox_inches="tight")
-            print(f"Saved visualization: {output_file}")
+            logger.debug(f"Visualization saved: {output_file}")
 
         return coords_2d, fig, ax

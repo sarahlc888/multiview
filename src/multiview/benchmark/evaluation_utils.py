@@ -536,7 +536,6 @@ def evaluate_method(
         preset_overrides = _prepare_instruction_overrides(
             method_config, criterion_metadata
         )
-        criterion_description = criterion_metadata.get("description")
 
         raw = evaluate_with_embeddings(
             documents=task.documents,
@@ -546,7 +545,7 @@ def evaluate_method(
             run_name=task.run_name,
             preset_overrides=preset_overrides,
             criterion=task.criterion_name,
-            criterion_description=criterion_description,
+            criterion_description=task.criterion_description,
         )
         return finalize_method_results(raw, display_name)
 

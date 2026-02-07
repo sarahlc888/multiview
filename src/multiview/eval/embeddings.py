@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from multiview.eval.generation_utils import validate_criterion_description
 from multiview.eval.similarity import compute_similarity
 from multiview.inference.inference import run_inference
 from multiview.inference.presets import get_preset
@@ -24,6 +25,19 @@ TEXT_ONLY_EMBEDDING_PROVIDERS = {
     "hf_local_colbert",
     "hf_local_hidden_state",
 }
+
+
+def _is_image_only_document(text: str, image: str | None) -> bool:
+    """Return True when a document has no usable text for text embeddings."""
+    normalized = text.strip().lower()
+    is_placeholder = normalized == "<image>"
+    return bool(image) and (not normalized or is_placeholder)
+
+
+def _has_no_usable_text(text: str) -> bool:
+    """Return True when text is empty or only the image placeholder marker."""
+    normalized = text.strip().lower()
+    return not normalized or normalized == "<image>"
 
 
 def evaluate_with_embeddings(
@@ -62,8 +76,12 @@ def evaluate_with_embeddings(
     logger.info(f"Using preset: {embedding_preset}")
     logger.info(f"Computing embeddings for {len(documents)} documents")
 
-    # Normalize docs into text and image channels so packed prompts can include
-    # image signatures for multimodal datasets (avoids false prompt dedup).
+    preset_config = get_preset(embedding_preset)
+    is_text_only_provider = preset_config.provider in TEXT_ONLY_EMBEDDING_PROVIDERS
+
+    # Normalize docs into text/image channels.
+    # For multimodal providers, image-only docs are represented as "<image>".
+    # For text-only providers, image-only docs are rejected early.
     texts: list[str] = []
     images: list[str | None] = []
     for doc in documents:
@@ -73,28 +91,44 @@ def evaluate_with_embeddings(
         else:
             text = doc
             image = None
-        if image and not text:
-            text = "<image>"
         texts.append(text)
         images.append(image)
+
+    if is_text_only_provider:
+        image_only_indices = [
+            i
+            for i, (text, image) in enumerate(zip(texts, images, strict=False))
+            if _has_no_usable_text(text)
+        ]
+        if image_only_indices:
+            preview = image_only_indices[:10]
+            raise ValueError(
+                f"Embedding preset '{embedding_preset}' uses text-only provider "
+                f"'{preset_config.provider}' and cannot embed image-only documents. "
+                f"Found {len(image_only_indices)} image-only document(s), "
+                f"sample indices: {preview}."
+            )
+    else:
+        for i, (text, image) in enumerate(zip(texts, images, strict=False)):
+            if _is_image_only_document(text, image):
+                texts[i] = "<image>"
 
     inference_kwargs = {"verbose": False}
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
 
-    # Build inputs - include criterion and description if provided (needed for instruction-tuned embeddings)
-    preset_config = get_preset(embedding_preset)
+    # Build inputs - include criterion and required description for criterion-aware prompts.
     inputs = {"document": texts}
-    if any(img is not None for img in images) and (
-        preset_config.provider not in TEXT_ONLY_EMBEDDING_PROVIDERS
-    ):
+    if any(img is not None for img in images) and not is_text_only_provider:
         inputs["images"] = images
     if criterion is not None:
+        criterion_description = validate_criterion_description(
+            criterion=criterion,
+            criterion_description=criterion_description,
+            context=f"embedding preset '{embedding_preset}'",
+        )
         inputs["criterion"] = criterion
-    # Always add criterion_description if criterion is present (even if empty)
-    # This ensures instruction templates can always reference {criterion_description}
-    if criterion is not None:
-        inputs["criterion_description"] = criterion_description or ""
+        inputs["criterion_description"] = criterion_description
 
     embeddings = run_inference(
         inputs=inputs,
