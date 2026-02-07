@@ -165,6 +165,11 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
   const [ordering, setOrdering] = useState<HeatmapOrdering>('structured');
   const hasTriplets = triplets && triplets.length > 0;
 
+  // Refs for values needed by D3 event handlers (avoids stale closures)
+  const tripletsRef = useRef(triplets);
+  tripletsRef.current = triplets;
+
+  // Main rendering effect - only re-runs when data or layout changes
   useEffect(() => {
     if (!svgRef.current) return;
 
@@ -193,11 +198,6 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
       .attr('font-size', '14px')
       .attr('fill', '#666')
       .text(`Loading ${metricName}...`);
-
-    // Get current triplet if available
-    const currentTriplet = hasTriplets && showTriplets && triplets.length > 0
-      ? triplets[selectedTripletIndex]
-      : null;
 
     // Compute or extract similarity matrix asynchronously to avoid blocking UI
     setTimeout(() => {
@@ -267,34 +267,8 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
         const colorScale = d3.scaleSequential(d3.interpolateViridis)
           .domain([minVal, maxVal]);
 
-        // Helper to check cell highlight type based on triplet hover
-        const getCellHighlightType = (i: number, j: number): 'positive' | 'negative' | null => {
-          if (!currentTriplet || !hoveredTripletRole) return null;
-
-          const anchorIdx = currentTriplet.anchor_id;
-          const posIdx = currentTriplet.positive_id;
-          const negIdx = currentTriplet.negative_id;
-
-          const origI = order[i];
-          const origJ = order[j];
-
-          // Check both (i,j) and (j,i) for symmetry
-          const matchesAnchPos = (origI === anchorIdx && origJ === posIdx) || (origI === posIdx && origJ === anchorIdx);
-          const matchesAnchNeg = (origI === anchorIdx && origJ === negIdx) || (origI === negIdx && origJ === anchorIdx);
-
-          if (hoveredTripletRole === 'anchor') {
-            if (matchesAnchPos) return 'positive';
-            if (matchesAnchNeg) return 'negative';
-          } else if (hoveredTripletRole === 'positive') {
-            if (matchesAnchPos) return 'positive';
-          } else if (hoveredTripletRole === 'negative') {
-            if (matchesAnchNeg) return 'negative';
-          }
-          return null;
-        };
-
         // Create cells
-        const cells = g.selectAll('.cell')
+        g.selectAll('.cell')
           .data(Array.from({ length: nDocs * nDocs }, (_, idx) => {
             const displayI = Math.floor(idx / nDocs);
             const displayJ = idx % nDocs;
@@ -315,20 +289,13 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
           .attr('width', cellSize)
           .attr('height', cellSize)
           .attr('fill', (d) => colorScale(d.similarity))
-          .attr('stroke', (d) => {
-            const highlightType = getCellHighlightType(d.i, d.j);
-            if (highlightType === 'positive') return '#00aa00';
-            if (highlightType === 'negative') return '#cc0000';
-            return 'none';
-          })
-          .attr('stroke-width', (d) => getCellHighlightType(d.i, d.j) ? 3 : 0)
-          .attr('opacity', (d) => {
-            if (!hoveredTripletRole) return 1;
-            return getCellHighlightType(d.i, d.j) ? 1 : 0.3;
-          })
+          .attr('stroke', 'none')
+          .attr('stroke-width', 0)
+          .attr('opacity', 1)
           .style('cursor', 'pointer')
           .on('mouseenter', function (event, d) {
-            if (!getCellHighlightType(d.i, d.j)) {
+            // Only show hover stroke if not currently highlighted by triplet
+            if (!d3.select(this).classed('triplet-highlighted')) {
               d3.select(this)
                 .attr('stroke', '#fff')
                 .attr('stroke-width', 2);
@@ -345,11 +312,35 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
             });
           })
           .on('mouseleave', function (event, d) {
-            if (!getCellHighlightType(d.i, d.j)) {
+            if (!d3.select(this).classed('triplet-highlighted')) {
               d3.select(this)
-                .attr('stroke', 'none');
+                .attr('stroke', 'none')
+                .attr('stroke-width', 0);
             }
             setTooltip(null);
+          })
+          .on('click', function (event, d) {
+            const t = tripletsRef.current;
+            if (!t || t.length === 0) return;
+
+            // Find a triplet involving both documents in this cell
+            let idx = t.findIndex(tr =>
+              (tr.anchor_id === d.origI && (tr.positive_id === d.origJ || tr.negative_id === d.origJ)) ||
+              (tr.anchor_id === d.origJ && (tr.positive_id === d.origI || tr.negative_id === d.origI))
+            );
+
+            // If no exact pair match, find any triplet involving either document
+            if (idx < 0) {
+              idx = t.findIndex(tr =>
+                tr.anchor_id === d.origI || tr.positive_id === d.origI || tr.negative_id === d.origI ||
+                tr.anchor_id === d.origJ || tr.positive_id === d.origJ || tr.negative_id === d.origJ
+              );
+            }
+
+            if (idx >= 0) {
+              setSelectedTripletIndex(idx);
+              setShowTriplets(true);
+            }
           });
 
         // Add title
@@ -446,7 +437,63 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
       }
     }, 100);
 
-  }, [embeddings, documents, width, height, maxDocs, triplets, selectedTripletIndex, showTriplets, hoveredTripletRole, manifest, ordering]);
+  }, [embeddings, documents, width, height, maxDocs, manifest, ordering]);
+
+  // Highlight effect - lightweight update of cell visuals for triplet interactions
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const svg = d3.select(svgRef.current);
+
+    const currentTriplet = hasTriplets && showTriplets && triplets && triplets.length > 0
+      ? triplets[selectedTripletIndex]
+      : null;
+
+    svg.selectAll('.cell').each(function () {
+      const el = d3.select(this);
+      const d = el.datum() as { origI: number; origJ: number } | undefined;
+      if (!d) return;
+
+      let highlightType: 'positive' | 'negative' | null = null;
+
+      if (currentTriplet) {
+        const anchorIdx = currentTriplet.anchor_id;
+        const posIdx = currentTriplet.positive_id;
+        const negIdx = currentTriplet.negative_id;
+
+        const matchesAnchPos = (d.origI === anchorIdx && d.origJ === posIdx) || (d.origI === posIdx && d.origJ === anchorIdx);
+        const matchesAnchNeg = (d.origI === anchorIdx && d.origJ === negIdx) || (d.origI === negIdx && d.origJ === anchorIdx);
+
+        if (hoveredTripletRole) {
+          // Hovering a role: only highlight that role's cells
+          if (hoveredTripletRole === 'anchor') {
+            if (matchesAnchPos) highlightType = 'positive';
+            if (matchesAnchNeg) highlightType = 'negative';
+          } else if (hoveredTripletRole === 'positive') {
+            if (matchesAnchPos) highlightType = 'positive';
+          } else if (hoveredTripletRole === 'negative') {
+            if (matchesAnchNeg) highlightType = 'negative';
+          }
+        } else {
+          // No hover: always show both triplet pairs
+          if (matchesAnchPos) highlightType = 'positive';
+          if (matchesAnchNeg) highlightType = 'negative';
+        }
+      }
+
+      const isHighlighted = highlightType !== null;
+      el.classed('triplet-highlighted', isHighlighted);
+
+      if (isHighlighted) {
+        el.attr('stroke', highlightType === 'positive' ? '#00aa00' : '#cc0000')
+          .attr('stroke-width', 3)
+          .attr('opacity', 1);
+      } else {
+        el.attr('stroke', 'none')
+          .attr('stroke-width', 0)
+          .attr('opacity', hoveredTripletRole ? 0.3 : 1);
+      }
+    });
+  }, [hoveredTripletRole, selectedTripletIndex, showTriplets, triplets, hasTriplets]);
 
   // Get current triplet for display
   const currentTriplet = hasTriplets && showTriplets && triplets.length > 0

@@ -958,24 +958,7 @@ const App: React.FC = () => {
           <div className="control-group">
             <label>Mode:</label>
             <div className="mode-buttons">
-              {modes.map((mode) => (
-                <button
-                  key={mode}
-                  className={selectedMode === mode ? 'active' : ''}
-                  onClick={() => setSelectedMode(mode as VisualizationMode)}
-                >
-                  {mode.toUpperCase()}
-                </button>
-              ))}
               {/* Show GRAPH and HEATMAP if not already in modes */}
-              {!modes.includes('graph') && (
-                <button
-                  className={selectedMode === 'graph' ? 'active' : ''}
-                  onClick={() => setSelectedMode('graph')}
-                >
-                  GRAPH
-                </button>
-              )}
               {!modes.includes('heatmap') && (
                 <button
                   className={selectedMode === 'heatmap' ? 'active' : ''}
@@ -984,6 +967,23 @@ const App: React.FC = () => {
                   HEATMAP
                 </button>
               )}
+              {!modes.includes('graph') && (
+                <button
+                  className={selectedMode === 'graph' ? 'active' : ''}
+                  onClick={() => setSelectedMode('graph')}
+                >
+                  GRAPH
+                </button>
+              )}
+              {[...modes].reverse().map((mode) => (
+                <button
+                  key={mode}
+                  className={selectedMode === mode ? 'active' : ''}
+                  onClick={() => setSelectedMode(mode as VisualizationMode)}
+                >
+                  {mode.toUpperCase()}
+                </button>
+              ))}
             </div>
           </div>
 
