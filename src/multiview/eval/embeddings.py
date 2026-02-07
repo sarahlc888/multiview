@@ -11,12 +11,23 @@ from typing import Any
 
 from multiview.eval.similarity import compute_similarity
 from multiview.inference.inference import run_inference
+from multiview.inference.presets import get_preset
 
 logger = logging.getLogger(__name__)
 
+# Providers in this project that only support text embeddings in the current codepath.
+TEXT_ONLY_EMBEDDING_PROVIDERS = {
+    "openai_embedding",
+    "hf_embedding",
+    "voyage_embedding",
+    "gemini_embedding",
+    "hf_local_colbert",
+    "hf_local_hidden_state",
+}
+
 
 def evaluate_with_embeddings(
-    documents: list[str],
+    documents: list[str | dict],
     triplet_ids: list[tuple[int, int, int]],
     embedding_preset: str = "openai_embedding_small",
     cache_alias: str | None = None,
@@ -28,7 +39,7 @@ def evaluate_with_embeddings(
     """Evaluate triplets using embedding-based cosine similarity.
 
     Args:
-        documents: List of document texts
+        documents: List of documents (text strings or dicts with optional image_path)
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         embedding_preset: Inference preset to use
         cache_alias: Optional cache identifier
@@ -51,12 +62,33 @@ def evaluate_with_embeddings(
     logger.info(f"Using preset: {embedding_preset}")
     logger.info(f"Computing embeddings for {len(documents)} documents")
 
+    # Normalize docs into text and image channels so packed prompts can include
+    # image signatures for multimodal datasets (avoids false prompt dedup).
+    texts: list[str] = []
+    images: list[str | None] = []
+    for doc in documents:
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            image = doc.get("image_path")
+        else:
+            text = doc
+            image = None
+        if image and not text:
+            text = "<image>"
+        texts.append(text)
+        images.append(image)
+
     inference_kwargs = {"verbose": False}
     if preset_overrides:
         inference_kwargs.update(preset_overrides)
 
     # Build inputs - include criterion and description if provided (needed for instruction-tuned embeddings)
-    inputs = {"document": documents}
+    preset_config = get_preset(embedding_preset)
+    inputs = {"document": texts}
+    if any(img is not None for img in images) and (
+        preset_config.provider not in TEXT_ONLY_EMBEDDING_PROVIDERS
+    ):
+        inputs["images"] = images
     if criterion is not None:
         inputs["criterion"] = criterion
     # Always add criterion_description if criterion is present (even if empty)
@@ -103,9 +135,9 @@ def evaluate_with_embeddings(
                 "anchor_id": anchor_id,
                 "positive_id": positive_id,
                 "negative_id": negative_id,
-                "anchor": documents[anchor_id],
-                "positive": documents[positive_id],
-                "negative": documents[negative_id],
+                "anchor": texts[anchor_id],
+                "positive": texts[positive_id],
+                "negative": texts[negative_id],
                 "positive_score": pos_score,
                 "negative_score": neg_score,
                 "outcome": outcome,

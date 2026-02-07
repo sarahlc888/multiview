@@ -263,11 +263,15 @@ def _hf_single_chat_completion(
     """
     # Build content array
     # Support both single image (str) and multiple images (list)
-    images_to_process = [image] if isinstance(image, str) else (image if image else [])
+    from multiview.inference.vlm_utils import (
+        interleave_prompt_with_images,
+        normalize_image_item,
+        prepare_image_for_openai,
+    )
+
+    images_to_process = normalize_image_item(image)
 
     # Convert images to base64 data URIs for HuggingFace models
-    # Import VLM utilities for image handling
-    from multiview.inference.vlm_utils import prepare_image_for_openai
 
     try:
         # Convert all valid images to base64 data URIs
@@ -294,38 +298,14 @@ def _hf_single_chat_completion(
             )
             images_to_process = []
 
-        # Build content array with text and images
-        # If prompt contains <image> markers, interleave images at those locations
-        # Otherwise, put all images at the start
-        content = []
-
-        if image_data_uris and "<image>" in prompt:
-            # Split text by <image> markers and interleave with images
-            text_parts = prompt.split("<image>")
-
-            # Interleave text and images
-            for i, text_part in enumerate(text_parts):
-                if text_part:  # Add non-empty text
-                    content.append({"type": "text", "text": text_part})
-                if i < len(image_data_uris):  # Add image if available
-                    content.append(
-                        {"type": "image_url", "image_url": {"url": image_data_uris[i]}}
-                    )
-
-            # If there are more images than markers, add remaining images at end
-            if len(image_data_uris) > len(text_parts) - 1:
-                for remaining_img in image_data_uris[len(text_parts) - 1 :]:
-                    content.append(
-                        {"type": "image_url", "image_url": {"url": remaining_img}}
-                    )
-        elif image_data_uris:
-            # Default: all images at start, then text
-            for img_uri in image_data_uris:
-                content.append({"type": "image_url", "image_url": {"url": img_uri}})
-            content.append({"type": "text", "text": prompt})
-        else:
-            # Text-only
-            content.append({"type": "text", "text": prompt})
+        content = interleave_prompt_with_images(
+            prompt=prompt,
+            image_parts=[
+                {"type": "image_url", "image_url": {"url": img_uri}}
+                for img_uri in image_data_uris
+            ],
+            text_builder=lambda text: {"type": "text", "text": text},
+        )
 
     except Exception as e:
         logger.warning(f"Failed to process images, falling back to text-only: {e}")

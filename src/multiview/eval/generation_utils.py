@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 def generate_text_variations_from_documents(
-    documents: list[str],
+    documents: list[str | dict],
     criterion: str,
     criterion_description: str | None,
     num_variations: int,
@@ -28,7 +28,7 @@ def generate_text_variations_from_documents(
     - Any other criterion-focused text generation task
 
     Args:
-        documents: List of documents to generate variations from
+        documents: List of documents (strings or dicts with optional image_path)
         criterion: Criterion name
         criterion_description: Optional criterion description
         num_variations: Number of variations to generate per document (k)
@@ -40,14 +40,30 @@ def generate_text_variations_from_documents(
     Returns:
         List of all text variation strings (len = num_documents × k)
     """
-    # Prepare inputs for batch inference
+    # Prepare inputs for batch inference (with optional image channels)
+    doc_texts: list[str] = []
+    doc_images: list[str | None] = []
+    for doc in documents:
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            image = doc.get("image_path")
+        else:
+            text = doc
+            image = None
+        if image and not text:
+            text = "<image>"
+        doc_texts.append(text)
+        doc_images.append(image)
+
     # Each document gets k variations generated
     inputs = {
         "criterion": [criterion] * len(documents),
         "criterion_description": [criterion_description or ""] * len(documents),
-        "document": documents,
+        "document": doc_texts,
         "num_expansions": [num_variations] * len(documents),
     }
+    if any(img is not None for img in doc_images):
+        inputs["images"] = doc_images
 
     # Use cache alias with suffix
     generation_cache_alias = f"{cache_alias}_{cache_suffix}" if cache_alias else None

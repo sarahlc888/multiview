@@ -271,3 +271,41 @@ class TestPromptDeduplicationIntegration:
         assert len(remap_idxs) == 3
         # First and last should map to same deduped index
         assert remap_idxs[0] == remap_idxs[2]
+
+    def test_image_sources_are_included_in_packed_prompt_signature(self):
+        """Packed prompts should include image signatures to avoid false dedup."""
+        inputs = {
+            "documents": ["Analyze image", "Analyze image"],
+            "images": ["/tmp/image_a.png", "/tmp/image_b.png"],
+        }
+        config = InferenceConfig(
+            provider="gemini",
+            model_name="gemini-2.5-flash-lite",
+            prompt_template="{document}",
+            parser="text",
+        )
+
+        pc = format_prompts(inputs, config)
+
+        assert "<image_signatures>" in pc.packed_prompts[0]
+        assert "<image_signatures>" in pc.packed_prompts[1]
+        assert "str:" in pc.packed_prompts[0]
+        assert "str:" in pc.packed_prompts[1]
+        assert pc.packed_prompts[0] != pc.packed_prompts[1]
+
+    def test_data_uri_image_signature_is_hashed_bytes(self):
+        """Data URI payloads should be hashed by decoded bytes in packed prompts."""
+        data_uri = "data:image/png;base64,aGVsbG8="
+        inputs = {
+            "documents": ["Analyze image"],
+            "images": [data_uri],
+        }
+        config = InferenceConfig(
+            provider="gemini",
+            model_name="gemini-2.5-flash-lite",
+            prompt_template="{document}",
+            parser="text",
+        )
+
+        pc = format_prompts(inputs, config)
+        assert "<image_signatures>bytes:" in pc.packed_prompts[0]

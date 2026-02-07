@@ -14,6 +14,7 @@ interface ScatterPlotProps {
   displayMode?: 'points' | 'thumbnails';
   width?: number;
   height?: number;
+  onSelectDocument?: (index: number | null) => void;
 }
 
 export const ScatterPlot: React.FC<ScatterPlotProps> = ({
@@ -24,6 +25,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
   displayMode = 'thumbnails',
   width = 800,
   height = 600,
+  onSelectDocument,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -152,7 +154,9 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
         })
         .on('click', function (event, d) {
           const index = points.indexOf(d);
-          setSelectedPointIndex(index === selectedPointIndex ? null : index);
+          const nextIndex = index === selectedPointIndex ? null : index;
+          setSelectedPointIndex(nextIndex);
+          onSelectDocument?.(nextIndex);
           setSelectedTripletIndex(0); // Reset to first triplet
         });
     } else {
@@ -199,7 +203,9 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
         })
         .on('click', function (event, d) {
           const index = points.indexOf(d);
-          setSelectedPointIndex(index === selectedPointIndex ? null : index);
+          const nextIndex = index === selectedPointIndex ? null : index;
+          setSelectedPointIndex(nextIndex);
+          onSelectDocument?.(nextIndex);
           setSelectedTripletIndex(0); // Reset to first triplet
         });
     }

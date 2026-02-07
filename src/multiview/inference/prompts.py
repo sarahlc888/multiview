@@ -11,9 +11,11 @@ Ported from old repo with simplifications.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import logging
 import re
+from typing import Any
 
 from multiview.inference.presets import InferenceConfig
 from multiview.utils.prompt_utils import read_or_return
@@ -23,6 +25,33 @@ logger = logging.getLogger(__name__)
 
 _ESCAPED_LBRACE = "\x00\x00"
 _ESCAPED_RBRACE = "\x01\x01"
+
+
+def _is_document_like_input_key(key: str) -> bool:
+    """Return True for inputs that may contain document/query dict objects."""
+    return key in {"document", "documents", "query"} or key.startswith(
+        ("document_", "query_")
+    )
+
+
+def _normalize_doc_like_value(value: Any) -> tuple[Any, Any | None]:
+    """Normalize doc-like input item to text while extracting optional image payload."""
+    if isinstance(value, dict):
+        text = value.get("text", "")
+        image = value.get("image_path")
+        if image and not text:
+            text = "<image>"
+        return text, image
+    return value, None
+
+
+def _normalize_image_item(image_item: Any) -> list[Any]:
+    """Normalize a single images[i] item to a list of payloads."""
+    if image_item is None:
+        return []
+    if isinstance(image_item, list):
+        return [img for img in image_item if img is not None]
+    return [image_item]
 
 
 def _safe_format_template(template: str, kwargs: dict) -> str:
@@ -53,6 +82,12 @@ def _hash_bytes(payload: bytes) -> str:
     return f"bytes:{len(payload)}:{digest}"
 
 
+def _hash_str(payload: str) -> str:
+    """Hash a string payload for deterministic signatures."""
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"str:{len(payload)}:{digest}"
+
+
 def _build_image_signature(image_payload) -> str:
     """Build a signature string for an image payload.
 
@@ -61,7 +96,13 @@ def _build_image_signature(image_payload) -> str:
     if image_payload is None:
         return "none"
     if isinstance(image_payload, str):
-        return image_payload
+        if image_payload.startswith("data:") and ";base64," in image_payload:
+            try:
+                base64_data = image_payload.split(";base64,", 1)[1]
+                return _hash_bytes(base64.b64decode(base64_data))
+            except Exception:
+                pass
+        return _hash_str(image_payload)
     if isinstance(image_payload, bytes):
         return _hash_bytes(image_payload)
     if isinstance(image_payload, dict):
@@ -306,6 +347,39 @@ def format_prompts(
             assert (
                 len(values) == n_items
             ), f"Input {key} has length {len(values)}, expected {n_items}"
+
+    # Auto-normalize document/query dict inputs:
+    # - Replace dict objects with their text content for template formatting/providers
+    # - Extract image payloads and merge into inputs["images"] for packed prompt signatures
+    existing_images = [
+        _normalize_image_item(img)
+        for img in broadcasted_inputs.get("images", [None] * n_items)
+    ]
+    extracted_images = [[] for _ in range(n_items)]
+
+    for key, values in list(broadcasted_inputs.items()):
+        if key == "images" or not _is_document_like_input_key(key):
+            continue
+
+        if not any(isinstance(v, dict) for v in values):
+            continue
+
+        normalized_values = []
+        for i, value in enumerate(values):
+            normalized_value, image = _normalize_doc_like_value(value)
+            normalized_values.append(normalized_value)
+            if image is not None:
+                extracted_images[i].append(image)
+
+        broadcasted_inputs[key] = normalized_values
+
+    merged_images = []
+    for i in range(n_items):
+        merged = existing_images[i] + extracted_images[i]
+        merged_images.append(merged if merged else None)
+
+    if any(item is not None for item in merged_images):
+        broadcasted_inputs["images"] = merged_images
 
     # Input key aliasing convention:
     # Users pass plural keys (documents, criteria, etc.) which is more natural,

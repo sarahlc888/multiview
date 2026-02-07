@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate_with_reranker(
-    documents: list[str],
+    documents: list[str | dict],
     triplet_ids: list[tuple[int, int, int]],
     reranker_preset: str = "qwen3_reranker_8b",
     cache_alias: str | None = None,
@@ -33,7 +33,7 @@ def evaluate_with_reranker(
     - Triplet is correct if positive score > negative score
 
     Args:
-        documents: List of document texts
+        documents: List of documents (text strings or dicts with optional image_path)
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         reranker_preset: Inference preset to use (e.g., "qwen3_reranker_8b")
         cache_alias: Optional cache identifier
@@ -59,8 +59,8 @@ def evaluate_with_reranker(
 
     # Prepare inputs for all query-document pairs
     # For each triplet, we need two scores: (anchor, positive) and (anchor, negative)
-    queries = []
-    docs = []
+    queries: list[str | dict] = []
+    docs: list[str | dict] = []
 
     for anchor_id, positive_id, negative_id in triplet_ids:
         # Add (anchor, positive) pair

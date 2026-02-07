@@ -14,6 +14,7 @@ interface SOMGridViewProps {
   displayMode?: 'points' | 'thumbnails';
   width?: number;
   height?: number;
+  onSelectDocument?: (index: number | null) => void;
 }
 
 export const SOMGridView: React.FC<SOMGridViewProps> = ({
@@ -24,6 +25,7 @@ export const SOMGridView: React.FC<SOMGridViewProps> = ({
   displayMode = 'thumbnails',
   width = 800,
   height = 600,
+  onSelectDocument,
 }) => {
   const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
   const [selectedTripletIndex, setSelectedTripletIndex] = useState<number>(0);
@@ -225,7 +227,9 @@ export const SOMGridView: React.FC<SOMGridViewProps> = ({
                   }}
                   onClick={() => {
                     if (hasDocument) {
-                      setSelectedPointIndex(cellIndex === selectedPointIndex ? null : cellIndex);
+                      const nextIndex = cellIndex === selectedPointIndex ? null : cellIndex!;
+                      setSelectedPointIndex(nextIndex);
+                      onSelectDocument?.(nextIndex);
                     }
                   }}
                   onMouseEnter={() => {

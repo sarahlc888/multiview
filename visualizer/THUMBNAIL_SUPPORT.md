@@ -22,7 +22,7 @@ The ScatterPlot component:
 
 ```bash
 # GSM8K computational graphs
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
@@ -38,7 +38,7 @@ uv run python scripts/visualize_corpus.py \
 ```bash
 # Export multiple reducers with thumbnails
 for reducer in tsne som; do
-  uv run python scripts/visualize_corpus.py \
+  uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset hf_qwen3_embedding_8b \
     --criterion arithmetic \
@@ -60,7 +60,7 @@ Currently, thumbnails are automatically generated for:
 
 To add thumbnail support for other datasets:
 
-1. Extend `create_thumbnail_images()` in `visualize_corpus.py`
+1. Extend `create_thumbnail_images()` in `analyze_corpus.py`
 2. Add dataset-specific thumbnail generation logic
 3. Return list of image paths
 

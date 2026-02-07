@@ -116,7 +116,7 @@ With Friday's increase in borrowings, during one week Krystian borrows 200 + 16 
     print("     sudo apt-get install graphviz  # Linux")
     print()
     print("  3. Visualize problems:")
-    print("     python scripts/visualize_corpus.py \\")
+    print("     python scripts/analyze_corpus.py \\")
     print("       --mode gsm8k_graphs \\")
     print("       --input outputs/.../documents.jsonl \\")
     print("       --output viz/gsm8k \\")

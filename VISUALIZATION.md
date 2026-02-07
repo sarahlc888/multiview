@@ -20,13 +20,13 @@ Visualize **evaluation results** with triplets - automatic with `run_eval.py`:
 - Fully automatic, no manual steps needed
 
 ### 2. Manual Corpus Exploration
-Visualize **unlabeled corpora** for investigation - use `visualize_corpus.py`:
+Visualize **unlabeled corpora** for investigation - use `analyze_corpus.py`:
 - Investigate structure of a new corpus before creating benchmarks
 - No triplets needed
 - Generates fresh embeddings
 - Manual exploration tool
 
-**For benchmark results, visualizations are automatic.** Only use `visualize_corpus.py` when investigating new unlabeled corpora.
+**For benchmark results, visualizations are automatic.** Only use `analyze_corpus.py` when investigating new unlabeled corpora.
 
 ---
 
@@ -193,13 +193,13 @@ uv run python scripts/run_eval.py --config-name my_benchmark
 
 ## Part 2: Manual Corpus Exploration
 
-Use `visualize_corpus.py` for manual exploration of unlabeled corpora.
+Use `analyze_corpus.py` for manual exploration of unlabeled corpora.
 
 ### Quick Start
 
 ```bash
 # Single export (with circles)
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
@@ -209,7 +209,7 @@ uv run python scripts/visualize_corpus.py \
   --max-docs 100
 
 # With thumbnails (for GSM8K computational graphs)
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
@@ -220,7 +220,7 @@ uv run python scripts/visualize_corpus.py \
   --max-docs 100
 
 # Export additional modes to the same location (they will merge)
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
@@ -235,7 +235,7 @@ uv run python scripts/visualize_corpus.py \
 ```bash
 # 1. Export multiple modes for one dataset/criterion using multiple commands
 for reducer in tsne som umap pca; do
-  uv run python scripts/visualize_corpus.py \
+  uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset hf_qwen3_embedding_8b \
     --criterion arithmetic \
@@ -276,7 +276,7 @@ This shows how problems cluster by their category (e.g., addition vs. multiplica
 **GPU-based visualization:**
 
 ```bash
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset inoneword_hf_qwen3_4b \
     --criterion arithmetic \
@@ -295,7 +295,7 @@ This will:
 **With computational graph thumbnails:**
 
 ```bash
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset inoneword_hf_qwen3_4b \
     --criterion arithmetic \
@@ -319,7 +319,7 @@ To compare in-one-word vs standard embeddings:
 
 ```bash
 # Standard embeddings
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset hf_qwen3_embedding_8b \
     --export-format web \
@@ -327,7 +327,7 @@ uv run python scripts/visualize_corpus.py \
     --max-docs 100
 
 # In-one-word embeddings
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
     --dataset gsm8k \
     --embedding-preset inoneword_hf_qwen3_4b \
     --criterion arithmetic \
@@ -513,7 +513,7 @@ viz/
 ### Key Files
 
 **Python (data export):**
-- `scripts/visualize_corpus.py` - Manual corpus visualization
+- `scripts/analyze_corpus.py` - Manual corpus visualization
 - `scripts/run_eval.py` - Automatic benchmark visualization
 
 **JavaScript (viewer):**

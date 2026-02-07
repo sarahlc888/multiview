@@ -56,12 +56,20 @@ export interface VisualizationData {
 
 export interface TripletData {
   triplet_id: number;
+  triplet_idx?: number;
+  method_type?: string;
   anchor_id: number;
   positive_id: number;
   negative_id: number;
   anchor: any;
   positive: any;
   negative: any;
+  anchor_summary?: string;
+  positive_summary?: string;
+  negative_summary?: string;
+  anchor_summaries?: string[];
+  positive_summaries?: string[];
+  negative_summaries?: string[];
   quality_assessment?: QualityAssessment;
   quality_assessment_with_annotations?: QualityAssessment;
   quality_assessment_without_annotations?: QualityAssessment;

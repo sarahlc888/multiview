@@ -23,7 +23,7 @@ Usage examples:
     # ============================================================
 
     # Basic t-SNE visualization of a raw corpus
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --dataset gsm8k \\
         --embedding-preset hf_qwen3_embedding_8b \\
         --reducer tsne \\
@@ -31,14 +31,14 @@ Usage examples:
         --max-docs 500
 
     # Visualize from custom JSONL file
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --input-jsonl outputs/my_documents.jsonl \\
         --embedding-preset hf_qwen3_embedding_8b \\
         --reducer tsne \\
         --output outputs/viz/my_viz
 
     # In-one-word embeddings
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --dataset gsm8k \\
         --embedding-preset inoneword_hf_qwen3_4b \\
         --criterion arithmetic \\
@@ -48,7 +48,7 @@ Usage examples:
         --max-docs 100
 
     # Thumbnails as markers
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --dataset gsm8k \\
         --reducer tsne \\
         --marker-type thumbnail \\
@@ -57,7 +57,7 @@ Usage examples:
         --max-docs 100
 
     # Dendrogram with image thumbnails (hierarchical clustering)
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --dataset gsm8k \\
         --embedding-preset hf_qwen3_embedding_8b \\
         --reducer dendrogram \\
@@ -68,7 +68,7 @@ Usage examples:
         --figsize 24,12
 
     # Dendrogram with grid layout and cluster coloring
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --dataset gsm8k \\
         --embedding-preset hf_qwen3_embedding_8b \\
         --reducer dendrogram \\
@@ -87,7 +87,7 @@ Usage examples:
     # Visualize benchmark results (after run_eval.py)
     # Better: Enable auto_visualize in your benchmark config
     # This mode is mainly for one-off custom visualizations
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --from-benchmark benchmark_debug \\
         --task gsm8k__arithmetic \\
         --method qwen3_8b_with_instructions \\
@@ -100,7 +100,7 @@ Usage examples:
     # ============================================================
 
     # Generate computational graph visualizations
-    python scripts/visualize_corpus.py \\
+    python scripts/analyze_corpus.py \\
         --mode gsm8k_graphs \\
         --input documents.jsonl \\
         --output outputs/viz/gsm8k \\
@@ -135,7 +135,6 @@ from multiview.visualization import (  # noqa: E402
     TSNEReducer,
     UMAPReducer,
     create_gsm8k_marker_images,
-    load_annotation_classes,
 )
 from multiview.visualization.gsm8k_graph import (  # noqa: E402
     GSM8KComputationalGraph,
@@ -327,7 +326,20 @@ def load_from_benchmark(
         )
 
     documents = load_docs_artifact(output_dir=str(documents_dir), task_name=task_name)
-    doc_texts = documents  # Already strings
+
+    def _to_text(doc: Any) -> str:
+        if isinstance(doc, str):
+            return doc
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            if text:
+                return str(text)
+            if doc.get("image_path"):
+                return "<image>"
+            return json.dumps(doc, ensure_ascii=False)
+        return str(doc)
+
+    doc_texts = [_to_text(doc) for doc in documents]
 
     # Try to load embeddings from outputs directory first
     embeddings_dir = output_base / "embeddings" / task_name
@@ -979,7 +991,7 @@ def save_coordinates(coords_2d: np.ndarray, reducer, args: argparse.Namespace):
 
 
 def export_for_web_viewer(
-    documents: list[str],
+    documents: list[Any],
     embeddings: np.ndarray,
     coords_2d: np.ndarray,
     reducer_name: str,
@@ -1006,7 +1018,7 @@ def export_for_web_viewer(
     - thumbnails/*.png: (optional) thumbnail images
 
     Args:
-        documents: List of document texts
+        documents: List of documents (strings or dicts)
         embeddings: Document embeddings array
         coords_2d: 2D coordinates from reducer
         reducer_name: Name of the reducer used
@@ -1043,13 +1055,25 @@ def export_for_web_viewer(
         if method is not None:
             manifest["method"] = method
 
+    def _doc_to_text(doc: Any) -> str:
+        if isinstance(doc, str):
+            return doc
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            if text:
+                return str(text)
+            if doc.get("image_path"):
+                return "<image>"
+            return json.dumps(doc, ensure_ascii=False)
+        return str(doc)
+
     # Save documents as text file (only if not already exists or needs update)
     documents_path = output_dir / "documents.txt"
     if not documents_path.exists():
         with open(documents_path, "w", encoding="utf-8") as f:
             for doc in documents:
                 # Escape newlines within documents
-                doc_escaped = doc.replace("\n", "\\n")
+                doc_escaped = _doc_to_text(doc).replace("\n", "\\n")
                 f.write(doc_escaped + "\n")
 
     # Save embeddings (only if not already exists)
@@ -1390,247 +1414,29 @@ def visualize_benchmark_task(
     use_thumbnails: bool = False,
     quiet: bool = False,
 ) -> bool:
-    """Visualize a single task/method combination from a benchmark run.
+    """Compatibility wrapper for benchmark visualization from script context."""
+    from multiview.utils.visualization_utils import (
+        visualize_benchmark_task as _visualize_benchmark_task,
+    )
 
-    Args:
-        benchmark_run: Benchmark run name
-        task_name: Task name
-        method_name: Method name
-        reducer: Reducer name (tsne, umap, pca, som, dendrogram)
-        output_dir: Output directory for web export
-        use_thumbnails: Whether to use thumbnail markers
-
-    Returns:
-        True if successful, False otherwise
-    """
-
-    # Create a minimal args object with required fields
-    class Args:
-        pass
-
-    args = Args()
-    args.from_benchmark = benchmark_run
-    args.task = task_name
-    args.method = method_name
-    args.reducer = reducer
-    args.output = str(output_dir) if output_dir else None
-    args.export_format = "web"
-    args.force_refresh = False
-    args.color_by_benchmark_annotations = False
-    args.annotations_file = None
-    args.color_by = None
-    args.marker_type = "thumbnail" if use_thumbnails else "dot"
-    args.marker_size = 40
-    args.image_size = 100
-    args.format = "png"  # Default to PNG for image generation
-    args.show = False
-    args.dpi = 300
-    args.figsize = "20,10"  # Default figure size for dendrograms/SOMs
-    args.embedding_preset = None
-    args.cache_alias = None
-    args.criterion = None
-    args.in_one_word_context = None
-    args.pseudologit_classes = None
-    args.input_jsonl = None
-    args.dataset = None
-
-    # Reducer parameters
-    args.random_state = 42
-    args.perplexity = 30.0
-    args.max_iter = 1000
-    args.n_neighbors = 15
-    args.min_dist = 0.1
-    args.som_grid_size = "auto"
-    args.som_learning_rate = 0.5
-    args.som_iterations = 1000
-    args.som_unique_assignment = True
-    args.dendrogram_method = "average"
-    args.dendrogram_metric = "euclidean"
-    args.dendrogram_orientation = "top"
-    args.dendrogram_image_size = 0.8
-    args.dendrogram_images_per_row = None
-    args.dendrogram_num_clusters = None
-
-    # Visualization parameters
-    args.alpha = 0.7
-    args.image_zoom = 0.5
-    args.show_text_labels = False
-    args.title = None  # No title for web viewer images
-    args.som_tile_size = 200
-    args.som_padding = 10
-    args.som_background_color = "000000"
-    args.save_coords = False
-    args.save_docs_jsonl = False
-    args.quiet = quiet
-
-    try:
-        run_embedding_mode(args)
-        return True
-    except Exception as e:
-        logger.error(f"Failed to visualize {task_name}/{method_name}: {e}")
-        return False
+    return _visualize_benchmark_task(
+        benchmark_run=benchmark_run,
+        task_name=task_name,
+        method_name=method_name,
+        reducer=reducer,
+        output_dir=output_dir,
+        use_thumbnails=use_thumbnails,
+        quiet=quiet,
+    )
 
 
 def run_embedding_mode(args: argparse.Namespace):
-    """Run embedding visualization mode.
-
-    Loads documents, generates embeddings, applies dimensionality
-    reduction, and creates visualization.
-    """
-    quiet = getattr(args, "quiet", False)
-    if not quiet:
-        logger.debug(f"CORPUS VISUALIZATION: {args.reducer.upper()}")
-
-    # Step 1: Load documents (and possibly embeddings from benchmark)
-    documents, doc_texts, dataset_name, embeddings, loaded_criterion = load_documents(
-        args
+    """Compatibility wrapper. Implementation lives in multiview.utils.visualization_utils."""
+    from multiview.utils.visualization_utils import (
+        run_embedding_mode as _run_embedding_mode,
     )
 
-    # Set criterion from loaded data if not already set
-    if loaded_criterion and not args.criterion:
-        args.criterion = loaded_criterion
-
-    # Step 2: Generate embeddings if not already loaded
-    if embeddings is None:
-        if not quiet:
-            logger.debug("Generating fresh embeddings")
-        embeddings = generate_embeddings(
-            doc_texts,
-            args.embedding_preset,
-            args.cache_alias,
-            args.force_refresh,
-            args.criterion,
-            args.in_one_word_context,
-            args.pseudologit_classes,
-        )
-
-    # Step 3: Load annotations if needed
-    classes = None
-    if args.annotations_file:
-        if not quiet:
-            logger.debug(f"Loading annotations from {args.annotations_file}...")
-        classes = load_annotation_classes(args.annotations_file, args.color_by)
-        classes = classes[: len(documents)]
-    elif (
-        hasattr(args, "from_benchmark")
-        and args.from_benchmark
-        and hasattr(args, "color_by_benchmark_annotations")
-        and args.color_by_benchmark_annotations
-    ):
-        # Load annotations from benchmark artifacts
-        output_base = Path("outputs") / args.from_benchmark
-        annotations_file = output_base / "annotations" / f"{args.task}.jsonl"
-        if annotations_file.exists():
-            classes = load_annotation_classes(str(annotations_file), args.color_by)
-            classes = classes[: len(documents)]
-        else:
-            if not quiet:
-                logger.debug(f"No annotations found at {annotations_file}")
-
-    # Step 4: Prepare markers
-    image_paths, labels = prepare_markers(documents, dataset_name, args)
-
-    # Step 5: Create reducer
-    if not quiet:
-        logger.debug(f"Initializing {args.reducer} reducer...")
-    reducer = create_reducer(args, n_samples=len(embeddings))
-
-    # Determine export mode
-    export_format = args.export_format or args.format
-    should_export_plot = (
-        export_format in ["png", "svg", "all"] or not args.export_format
-    )
-    should_export_web = export_format in ["web", "all"]
-
-    # Step 6: Visualize (if generating plots)
-    coords_2d = None
-    linkage_matrix = None
-    dendrogram_image_path = None
-    som_grid_image_path = None
-    if should_export_plot:
-        coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-            visualize(
-                embeddings, documents, classes, image_paths, labels, reducer, args
-            )
-        )
-    else:
-        # For web-only export, still need to compute coordinates
-        # For dendrogram/SOM with images, we also need to generate the matplotlib image for web viewer
-        if args.reducer == "dendrogram" and should_export_web:
-            # Generate dendrogram image for web viewer
-            if not quiet:
-                logger.debug("Generating dendrogram matplotlib image for web export...")
-            coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-                visualize(
-                    embeddings, documents, classes, image_paths, labels, reducer, args
-                )
-            )
-        elif args.reducer == "som" and image_paths and should_export_web:
-            # Generate SOM grid composite for web viewer
-            if not quiet:
-                logger.debug("Generating SOM grid composite for web export...")
-            coords_2d, linkage_matrix, dendrogram_image_path, som_grid_image_path = (
-                visualize(
-                    embeddings, documents, classes, image_paths, labels, reducer, args
-                )
-            )
-        else:
-            # Skip dimensionality reduction for heatmap (works directly from embeddings)
-            if args.reducer == "heatmap":
-                if not quiet:
-                    logger.debug("Heatmap mode - skipping dimensionality reduction")
-                coords_2d = None  # Heatmap doesn't need 2D coords
-            else:
-                if not quiet:
-                    logger.debug(f"Reducing {len(embeddings)} embeddings to 2D...")
-                embeddings_arr = np.array(embeddings, dtype=np.float32)
-                coords_2d = reducer.fit_transform(embeddings_arr)
-                # Get linkage matrix if dendrogram
-                if args.reducer == "dendrogram" and hasattr(reducer, "linkage_matrix"):
-                    linkage_matrix = reducer.linkage_matrix
-
-    # Step 7: Export for web viewer if requested
-    if should_export_web:
-        # Heatmap doesn't need coords_2d (uses embeddings/similarity matrix directly)
-        if coords_2d is None and args.reducer != "heatmap":
-            logger.error("No 2D coordinates available for web export")
-        else:
-            # Determine output directory
-            # Format: outputs/viz/{dataset}/{criterion}/{reducer}/
-            # Use loaded_criterion from benchmark if available, otherwise use args.criterion
-            criterion = loaded_criterion or args.criterion or "default"
-            if not dataset_name:
-                dataset_name = Path(args.output).stem
-
-            web_output_dir = Path(args.output)
-            method = getattr(args, "method", None)
-            export_for_web_viewer(
-                documents=doc_texts,
-                embeddings=embeddings,
-                coords_2d=coords_2d,
-                reducer_name=args.reducer,
-                output_dir=web_output_dir,
-                dataset_name=dataset_name,
-                criterion=criterion,
-                method=method,
-                linkage_matrix=linkage_matrix,
-                image_paths=image_paths,
-                dendrogram_image=dendrogram_image_path,
-                som_grid_image=som_grid_image_path,
-                quiet=quiet,
-            )
-
-    # Step 8: Print summary
-    if should_export_plot:
-        output_dir = (
-            Path(args.output).parent / f"{Path(args.output).stem}_markers"
-            if image_paths
-            else None
-        )
-        print_summary(args, image_paths, output_dir)
-    elif should_export_web:
-        if not quiet:
-            logger.debug(f"Output: {args.output}/")
+    _run_embedding_mode(args)
 
 
 def create_argument_parser() -> argparse.ArgumentParser:

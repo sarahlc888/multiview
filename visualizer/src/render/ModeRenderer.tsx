@@ -16,6 +16,7 @@ interface ModeRendererProps {
   displayMode?: 'points' | 'thumbnails';
   width?: number;
   height?: number;
+  onSelectDocument?: (index: number | null) => void;
 }
 
 export const ModeRenderer: React.FC<ModeRendererProps> = ({
@@ -24,6 +25,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
   displayMode = 'thumbnails',
   width = 800,
   height = 600,
+  onSelectDocument,
 }) => {
   switch (mode) {
     case 'tsne':
@@ -38,6 +40,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
           displayMode={displayMode}
           width={width}
           height={height}
+          onSelectDocument={onSelectDocument}
         />
       );
 
@@ -51,6 +54,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
           displayMode={displayMode}
           width={width}
           height={height}
+          onSelectDocument={onSelectDocument}
         />
       );
 

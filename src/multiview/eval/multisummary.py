@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate_with_multisummary(
-    documents: list[str],
+    documents: list[str | dict],
     triplet_ids: list[tuple[int, int, int]],
     criterion: str,
     criterion_description: str,
@@ -51,7 +51,7 @@ def evaluate_with_multisummary(
     - Symmetric: treats anchor and target symmetrically
 
     Args:
-        documents: List of document texts
+        documents: List of documents (text strings or dicts with optional image_path)
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         criterion: Criterion name (e.g., "arithmetic")
         criterion_description: Detailed description of criterion (required)
@@ -103,6 +103,15 @@ def evaluate_with_multisummary(
         f"Evaluating {len(triplet_ids)} triplets with multisummary (k={num_summaries})"
     )
     logger.info(f"Generating {num_summaries} summaries for {len(documents)} documents")
+
+    def _extract_text(doc: str | dict) -> str:
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            image = doc.get("image_path")
+            if image and not text:
+                return "<image>"
+            return text
+        return doc
 
     # Step 1: Generate k summaries for each document
     all_summaries_flat = _generate_multisummaries(
@@ -174,9 +183,9 @@ def evaluate_with_multisummary(
             "anchor_id": anchor_id,
             "positive_id": positive_id,
             "negative_id": negative_id,
-            "anchor": documents[anchor_id],
-            "positive": documents[positive_id],
-            "negative": documents[negative_id],
+            "anchor": _extract_text(documents[anchor_id]),
+            "positive": _extract_text(documents[positive_id]),
+            "negative": _extract_text(documents[negative_id]),
             "anchor_summaries": summaries_by_doc[anchor_id],
             "positive_summaries": summaries_by_doc[positive_id],
             "negative_summaries": summaries_by_doc[negative_id],

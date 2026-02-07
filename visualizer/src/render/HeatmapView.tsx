@@ -21,6 +21,8 @@ interface HeatmapViewProps {
   maxDocs?: number;
 }
 
+type HeatmapOrdering = 'structured' | 'original';
+
 function cosineSimilarity(a: Float32Array, b: Float32Array, dim: number, offsetA: number, offsetB: number): number {
   let dotProduct = 0;
   let normA = 0;
@@ -82,6 +84,69 @@ function isPrecomputedSimilarityMatrix(embeddings: Float32Array, nDocs: number):
   return embeddings.length === nDocs * nDocs;
 }
 
+function computeStructuredOrder(
+  matrix: Float32Array,
+  nDocs: number,
+  preferSmallerValues: boolean
+): number[] {
+  if (nDocs <= 1) return [0];
+
+  const score = (i: number, j: number): number => {
+    const value = matrix[i * nDocs + j];
+    return preferSmallerValues ? -value : value;
+  };
+
+  const averageScore = new Array<number>(nDocs).fill(0);
+  for (let i = 0; i < nDocs; i++) {
+    let sum = 0;
+    for (let j = 0; j < nDocs; j++) {
+      if (i === j) continue;
+      sum += score(i, j);
+    }
+    averageScore[i] = sum / Math.max(1, nDocs - 1);
+  }
+
+  let start = 0;
+  for (let i = 1; i < nDocs; i++) {
+    if (averageScore[i] > averageScore[start]) {
+      start = i;
+    }
+  }
+
+  const order: number[] = [start];
+  const visited = new Array<boolean>(nDocs).fill(false);
+  visited[start] = true;
+
+  while (order.length < nDocs) {
+    const current = order[order.length - 1];
+    let bestCandidate = -1;
+    let bestScore = -Infinity;
+
+    for (let candidate = 0; candidate < nDocs; candidate++) {
+      if (visited[candidate]) continue;
+      const candidateScore = score(current, candidate);
+      if (candidateScore > bestScore) {
+        bestScore = candidateScore;
+        bestCandidate = candidate;
+      }
+    }
+
+    if (bestCandidate === -1) {
+      break;
+    }
+    visited[bestCandidate] = true;
+    order.push(bestCandidate);
+  }
+
+  if (order.length < nDocs) {
+    for (let i = 0; i < nDocs; i++) {
+      if (!visited[i]) order.push(i);
+    }
+  }
+
+  return order;
+}
+
 export const HeatmapView: React.FC<HeatmapViewProps> = ({
   embeddings,
   documents,
@@ -97,6 +162,7 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
   const [selectedTripletIndex, setSelectedTripletIndex] = useState<number>(0);
   const [showTriplets, setShowTriplets] = useState<boolean>(true);
   const [hoveredTripletRole, setHoveredTripletRole] = useState<'anchor' | 'positive' | 'negative' | null>(null);
+  const [ordering, setOrdering] = useState<HeatmapOrdering>('structured');
   const hasTriplets = triplets && triplets.length > 0;
 
   useEffect(() => {
@@ -184,6 +250,10 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
         // Cell size
         const cellSize = Math.min(innerWidth / nDocs, innerHeight / nDocs);
 
+        const order = ordering === 'structured'
+          ? computeStructuredOrder(similarityMatrix, nDocs, usePseudologit)
+          : Array.from({ length: nDocs }, (_, i) => i);
+
         // Compute min/max for color scale from actual data
         let minVal = Infinity;
         let maxVal = -Infinity;
@@ -205,9 +275,12 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
           const posIdx = currentTriplet.positive_id;
           const negIdx = currentTriplet.negative_id;
 
+          const origI = order[i];
+          const origJ = order[j];
+
           // Check both (i,j) and (j,i) for symmetry
-          const matchesAnchPos = (i === anchorIdx && j === posIdx) || (i === posIdx && j === anchorIdx);
-          const matchesAnchNeg = (i === anchorIdx && j === negIdx) || (i === negIdx && j === anchorIdx);
+          const matchesAnchPos = (origI === anchorIdx && origJ === posIdx) || (origI === posIdx && origJ === anchorIdx);
+          const matchesAnchNeg = (origI === anchorIdx && origJ === negIdx) || (origI === negIdx && origJ === anchorIdx);
 
           if (hoveredTripletRole === 'anchor') {
             if (matchesAnchPos) return 'positive';
@@ -223,12 +296,16 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
         // Create cells
         const cells = g.selectAll('.cell')
           .data(Array.from({ length: nDocs * nDocs }, (_, idx) => {
-            const i = Math.floor(idx / nDocs);
-            const j = idx % nDocs;
+            const displayI = Math.floor(idx / nDocs);
+            const displayJ = idx % nDocs;
+            const origI = order[displayI];
+            const origJ = order[displayJ];
             return {
-              i,
-              j,
-              similarity: similarityMatrix[i * nDocs + j],
+              i: displayI,
+              j: displayJ,
+              origI,
+              origJ,
+              similarity: similarityMatrix[origI * nDocs + origJ],
             };
           }))
           .join('rect')
@@ -257,14 +334,14 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
                 .attr('stroke-width', 2);
             }
 
-            const docI = documents[d.i].length > 100 ? documents[d.i].slice(0, 100) + '...' : documents[d.i];
-            const docJ = documents[d.j].length > 100 ? documents[d.j].slice(0, 100) + '...' : documents[d.j];
+            const docI = documents[d.origI].length > 100 ? documents[d.origI].slice(0, 100) + '...' : documents[d.origI];
+            const docJ = documents[d.origJ].length > 100 ? documents[d.origJ].slice(0, 100) + '...' : documents[d.origJ];
 
             const metricLabel = usePseudologit ? 'Distance' : 'Similarity';
             setTooltip({
               x: event.pageX,
               y: event.pageY,
-              text: `Doc ${d.i} ↔ Doc ${d.j}\n${metricLabel}: ${d.similarity.toFixed(3)}\n\n[${d.i}]: ${docI}\n\n[${d.j}]: ${docJ}`,
+              text: `Doc ${d.origI} ↔ Doc ${d.origJ}\n${metricLabel}: ${d.similarity.toFixed(3)}\n\n[${d.origI}]: ${docI}\n\n[${d.origJ}]: ${docJ}`,
             });
           })
           .on('mouseleave', function (event, d) {
@@ -277,12 +354,13 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
 
         // Add title
         let titleText: string;
+        const orderingLabel = ordering === 'structured' ? 'structured order' : 'original order';
         if (isPrecomputed) {
-          titleText = `Pairwise Similarity Matrix (${nDocs} documents)`;
+          titleText = `Pairwise Similarity Matrix (${nDocs} documents, ${orderingLabel})`;
         } else if (usePseudologit) {
-          titleText = `L1 Distance Matrix (${nDocs} documents)`;
+          titleText = `L1 Distance Matrix (${nDocs} documents, ${orderingLabel})`;
         } else {
-          titleText = `Cosine Similarity Matrix (${nDocs} documents)`;
+          titleText = `Cosine Similarity Matrix (${nDocs} documents, ${orderingLabel})`;
         }
 
         svg.append('text')
@@ -368,7 +446,7 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
       }
     }, 100);
 
-  }, [embeddings, documents, width, height, maxDocs, triplets, selectedTripletIndex, showTriplets, hoveredTripletRole, manifest]);
+  }, [embeddings, documents, width, height, maxDocs, triplets, selectedTripletIndex, showTriplets, hoveredTripletRole, manifest, ordering]);
 
   // Get current triplet for display
   const currentTriplet = hasTriplets && showTriplets && triplets.length > 0
@@ -385,6 +463,37 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
   return (
     <div style={{ display: 'flex', gap: '20px' }}>
       <div style={{ position: 'relative' }}>
+        <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <label style={{ fontSize: '13px', color: '#555', fontWeight: 600 }}>Order:</label>
+          <button
+            onClick={() => setOrdering('structured')}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              border: '1px solid #ccc',
+              background: ordering === 'structured' ? '#4a90e2' : '#fff',
+              color: ordering === 'structured' ? '#fff' : '#444',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            Structured
+          </button>
+          <button
+            onClick={() => setOrdering('original')}
+            style={{
+              padding: '4px 10px',
+              borderRadius: '4px',
+              border: '1px solid #ccc',
+              background: ordering === 'original' ? '#4a90e2' : '#fff',
+              color: ordering === 'original' ? '#fff' : '#444',
+              cursor: 'pointer',
+              fontSize: '12px',
+            }}
+          >
+            Original
+          </button>
+        </div>
         <svg
           ref={svgRef}
           width={width}

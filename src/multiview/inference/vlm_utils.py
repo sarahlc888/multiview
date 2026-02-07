@@ -14,10 +14,12 @@ import base64
 import logging
 import mimetypes
 from pathlib import Path
+from typing import TypeVar
 
 import requests
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 def load_image_from_source(source: str, timeout: int = 10) -> bytes:
@@ -228,3 +230,78 @@ def validate_image_list(images: list[str | None]) -> list[str | None]:
     )
 
     return images
+
+
+def normalize_image_item(image_item) -> list:
+    """Normalize a single image payload item to a flat list without None values."""
+    if image_item is None:
+        return []
+    if isinstance(image_item, list):
+        return [img for img in image_item if img is not None]
+    return [image_item]
+
+
+def has_any_image_payload(images: list | None) -> bool:
+    """Return True if images payload contains at least one non-empty image item."""
+    if not images:
+        return False
+    return any(normalize_image_item(item) for item in images)
+
+
+def ensure_image_placeholders(
+    prompt: str,
+    num_images: int,
+    placeholder: str = "<image>",
+) -> str:
+    """Ensure prompt contains enough placeholders for all provided images."""
+    if num_images <= 0:
+        return prompt
+
+    marker_count = prompt.count(placeholder)
+    if marker_count >= num_images:
+        return prompt
+
+    missing = num_images - marker_count
+
+    # Preserve explicit placeholder locations if the prompt already has some.
+    if marker_count > 0:
+        return prompt + ("\n" + placeholder) * missing
+
+    prefix = (placeholder + "\n") * missing
+    if not prompt:
+        return prefix.rstrip("\n")
+    return prefix + prompt
+
+
+def interleave_prompt_with_images(
+    prompt: str,
+    image_parts: list[T],
+    text_builder,
+    placeholder: str = "<image>",
+) -> list[T]:
+    """Interleave provider-specific image parts at <image> marker locations."""
+    if not image_parts:
+        return [text_builder(prompt)]
+
+    prompt_with_markers = ensure_image_placeholders(
+        prompt=prompt,
+        num_images=len(image_parts),
+        placeholder=placeholder,
+    )
+
+    text_parts = prompt_with_markers.split(placeholder)
+    parts = []
+    img_idx = 0
+
+    for i, text_part in enumerate(text_parts):
+        if text_part:
+            parts.append(text_builder(text_part))
+        if i < len(text_parts) - 1 and img_idx < len(image_parts):
+            parts.append(image_parts[img_idx])
+            img_idx += 1
+
+    while img_idx < len(image_parts):
+        parts.append(image_parts[img_idx])
+        img_idx += 1
+
+    return parts or [text_builder(prompt_with_markers)]

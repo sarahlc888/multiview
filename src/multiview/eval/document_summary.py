@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 def evaluate_with_document_rewrite(
-    documents: list[str],
+    documents: list[str | dict],
     triplet_ids: list[tuple[int, int, int]],
     criterion: str,
     criterion_description: str,
@@ -49,7 +49,7 @@ def evaluate_with_document_rewrite(
     5. Evaluates triplet accuracy based on similarity scores
 
     Args:
-        documents: List of document texts
+        documents: List of documents (text strings or dicts with optional image_path)
         triplet_ids: List of (anchor_id, positive_id, negative_id) tuples
         criterion: Criterion name (e.g., "arithmetic")
         criterion_description: Detailed description of criterion (required)
@@ -98,6 +98,15 @@ def evaluate_with_document_rewrite(
     logger.info(
         f"Evaluating {len(triplet_ids)} triplets with document rewrite (preset={embedding_preset})"
     )
+
+    def _extract_text(doc: str | dict) -> str:
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            image = doc.get("image_path")
+            if image and not text:
+                return "<image>"
+            return text
+        return doc
 
     # Step 1: Extract unique document IDs from triplets
     unique_doc_ids = set()
@@ -212,9 +221,9 @@ def evaluate_with_document_rewrite(
             "anchor_id": anchor_id,
             "positive_id": positive_id,
             "negative_id": negative_id,
-            "anchor": documents[anchor_id],
-            "positive": documents[positive_id],
-            "negative": documents[negative_id],
+            "anchor": _extract_text(documents[anchor_id]),
+            "positive": _extract_text(documents[positive_id]),
+            "negative": _extract_text(documents[negative_id]),
             "anchor_summary": doc_id_to_summary[anchor_id],
             "positive_summary": doc_id_to_summary[positive_id],
             "negative_summary": doc_id_to_summary[negative_id],
@@ -261,7 +270,7 @@ def evaluate_with_document_rewrite(
 
 
 def _generate_summaries(
-    documents: list[str],
+    documents: list[str | dict],
     criterion: str,
     criterion_description: str,
     summary_preset: str,
@@ -271,7 +280,7 @@ def _generate_summaries(
     """Generate criterion-aware summaries for documents.
 
     Args:
-        documents: List of document texts
+        documents: List of documents (text strings or dicts with optional image_path)
         criterion: Criterion name
         criterion_description: Criterion description (required)
         summary_preset: Inference preset for summary generation
@@ -281,12 +290,28 @@ def _generate_summaries(
     Returns:
         List of summary strings (one per document)
     """
-    # Prepare inputs for batch inference
+    # Prepare inputs for batch inference (with optional image channels)
+    texts: list[str] = []
+    images: list[str | None] = []
+    for doc in documents:
+        if isinstance(doc, dict):
+            text = doc.get("text", "")
+            image = doc.get("image_path")
+        else:
+            text = doc
+            image = None
+        if image and not text:
+            text = "<image>"
+        texts.append(text)
+        images.append(image)
+
     inputs = {
         "criterion": criterion,
         "criterion_description": criterion_description,
-        "document": documents,
+        "document": texts,
     }
+    if any(img is not None for img in images):
+        inputs["images"] = images
 
     # Use cache alias with _summary suffix to distinguish from other caches
     summary_cache_alias = f"{cache_alias}_summary" if cache_alias else None
@@ -316,14 +341,14 @@ def _generate_summaries(
                 logger.warning(
                     f"Empty summary for document {i}, using original document"
                 )
-                summaries.append(documents[i])
+                summaries.append(texts[i])
         else:
             # Fallback to original document if result is malformed
             logger.warning(
                 f"Malformed summary result for document {i}: {result}. "
                 f"Using original document."
             )
-            summaries.append(documents[i])
+            summaries.append(texts[i])
 
     return summaries
 

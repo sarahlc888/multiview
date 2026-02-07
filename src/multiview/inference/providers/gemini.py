@@ -86,7 +86,10 @@ def _gemini_single_completion(
     # Build contents with optional image(s)
     if image:
         # Import VLM utilities for image handling
-        from multiview.inference.vlm_utils import prepare_image_for_gemini
+        from multiview.inference.vlm_utils import (
+            interleave_prompt_with_images,
+            prepare_image_for_gemini,
+        )
 
         # Support both single image (str) and multiple images (list)
         images_to_process = [image] if isinstance(image, str) else image
@@ -116,28 +119,12 @@ def _gemini_single_completion(
                     f"No valid images to process. Failed: {len(failed_images)}/{len(images_to_process)}"
                 )
 
-            # Build multimodal contents
-            # If prompt contains <image> markers, interleave images at those locations
-            # Otherwise, put all images at the start
-            if "<image>" in prompt:
-                # Split text by <image> markers and interleave with images
-                text_parts = prompt.split("<image>")
-                parts = []
-
-                # Interleave text and images
-                for i, text_part in enumerate(text_parts):
-                    if text_part:  # Add non-empty text
-                        parts.append({"text": text_part})
-                    if i < len(image_parts):  # Add image if available
-                        parts.append(image_parts[i])
-
-                # If there are more images than markers, add remaining images at end
-                if len(image_parts) > len(text_parts) - 1:
-                    for remaining_img in image_parts[len(text_parts) - 1 :]:
-                        parts.append(remaining_img)
-            else:
-                # Default: all images at start, then text
-                parts = image_parts + [{"text": prompt}]
+            # Interleave images at <image> markers, auto-inserting markers when missing.
+            parts = interleave_prompt_with_images(
+                prompt=prompt,
+                image_parts=image_parts,
+                text_builder=lambda text: {"text": text},
+            )
 
             if prefill:
                 contents = [
@@ -419,6 +406,23 @@ def gemini_embedding_completions(
             - task_type: Optional task type string (e.g., "RETRIEVAL_DOCUMENT")
             - title: Optional title when task_type is RETRIEVAL_DOCUMENT
     """
+    images = kwargs.pop("images", None)
+    if images:
+        from multiview.inference.vlm_utils import has_any_image_payload
+
+        if has_any_image_payload(images):
+            raise ValueError(
+                "Gemini embedding provider in this codepath is text-only and does "
+                "not support image payloads. Use a multimodal embedding provider/path "
+                "instead."
+            )
+
+    api_key = GEMINI_API_KEY
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set"
+        )
+
     try:
         from google import genai
         from google.genai import types
@@ -426,12 +430,6 @@ def gemini_embedding_completions(
         raise ImportError(
             "google-genai package required. Install with: pip install google-genai"
         ) from None
-
-    api_key = GEMINI_API_KEY
-    if not api_key:
-        raise ValueError(
-            "GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set"
-        )
 
     client = genai.Client(api_key=api_key)
 

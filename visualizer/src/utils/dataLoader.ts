@@ -100,6 +100,7 @@ export async function loadVisualizationData(
       if (log) {
         return {
           ...triplet,
+          ...log,
           positive_score: log.positive_score,
           negative_score: log.negative_score,
           margin: log.positive_score - log.negative_score,
@@ -122,6 +123,23 @@ export async function loadVisualizationData(
     manifest,
     triplets: enrichedTriplets,
   };
+}
+
+export async function loadEmbeddingsData(basePath: string): Promise<{
+  manifest: MultiviewManifest;
+  documents: string[];
+  embeddings: Float32Array;
+}> {
+  const manifest = await loadManifest(basePath);
+  const documentsUrl = `/${basePath}/${manifest.documents_path}`;
+  const embeddingsUrl = `/${basePath}/${manifest.embeddings_path}`;
+
+  const [documents, embeddings] = await Promise.all([
+    loadDocuments(documentsUrl),
+    loadNpy(embeddingsUrl),
+  ]);
+
+  return { manifest, documents, embeddings };
 }
 
 export async function loadDatasetIndex(): Promise<DatasetIndex> {

@@ -17,7 +17,11 @@ import pytest
 from multiview.inference.vlm_utils import (
     detect_mime_type,
     encode_image_base64,
+    ensure_image_placeholders,
+    has_any_image_payload,
+    interleave_prompt_with_images,
     load_image_from_source,
+    normalize_image_item,
     prepare_image_for_gemini,
     validate_image_list,
 )
@@ -213,3 +217,41 @@ class TestImageListValidation:
         """Test that tuple input raises ValueError."""
         with pytest.raises(ValueError, match="Images must be a list"):
             validate_image_list(("image1.jpg", "image2.jpg"))
+
+
+class TestMultimodalPromptHelpers:
+    """Test shared helper logic for image payloads and placeholders."""
+
+    def test_normalize_image_item(self):
+        assert normalize_image_item(None) == []
+        assert normalize_image_item("img1") == ["img1"]
+        assert normalize_image_item(["img1", None, "img2"]) == ["img1", "img2"]
+
+    def test_has_any_image_payload(self):
+        assert not has_any_image_payload(None)
+        assert not has_any_image_payload([])
+        assert not has_any_image_payload([None, []])
+        assert has_any_image_payload(["img1"])
+        assert has_any_image_payload([None, ["img1"]])
+
+    def test_ensure_image_placeholders_adds_missing_when_none_exist(self):
+        updated = ensure_image_placeholders("Describe this.", 2)
+        assert updated.startswith("<image>\n<image>\n")
+        assert updated.endswith("Describe this.")
+
+    def test_ensure_image_placeholders_adds_missing_when_some_exist(self):
+        updated = ensure_image_placeholders("A <image> B", 2)
+        assert updated == "A <image> B\n<image>"
+
+    def test_interleave_prompt_with_images(self):
+        parts = interleave_prompt_with_images(
+            prompt="Before <image> After",
+            image_parts=["IMG1", "IMG2"],
+            text_builder=lambda t: {"text": t},
+        )
+        assert parts == [
+            {"text": "Before "},
+            "IMG1",
+            {"text": " After\n"},
+            "IMG2",
+        ]

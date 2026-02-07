@@ -10,6 +10,7 @@ from typing import Any
 
 from multiview.constants import VOYAGE_API_KEY
 from multiview.inference.cost_tracker import record_usage
+from multiview.inference.vlm_utils import has_any_image_payload
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ def voyage_reranker_completions(
         Queries are automatically grouped by unique values for efficient API calls,
         so passing the same query repeated multiple times is fine.
     """
+    images = kwargs.pop("images", None)
+    if has_any_image_payload(images):
+        raise ValueError(
+            "Voyage reranker does not support image inputs. "
+            "Use a multimodal-capable provider or remove images from payloads."
+        )
+
     client = _get_voyage_client()
 
     # Use prompts directly as documents (they are already non-packed/raw)
@@ -156,6 +164,14 @@ def voyage_embedding_completions(
         Dict with "completions" key containing list of completion dicts.
         Each completion dict has "vector" key with the embedding.
     """
+    images = kwargs.pop("images", None)
+    if has_any_image_payload(images):
+        raise ValueError(
+            "Voyage embedding provider in this codepath is text-only and does not "
+            "support image payloads. Use a multimodal embedding provider/path "
+            "instead."
+        )
+
     client = _get_voyage_client()
 
     # Handle embedding instructions by prepending them to prompts

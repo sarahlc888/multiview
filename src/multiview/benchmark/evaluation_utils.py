@@ -539,7 +539,7 @@ def evaluate_method(
         criterion_description = criterion_metadata.get("description")
 
         raw = evaluate_with_embeddings(
-            documents=document_texts,
+            documents=task.documents,
             triplet_ids=task.triplets,
             embedding_preset=preset,
             cache_alias=cache_alias,
@@ -567,7 +567,7 @@ def evaluate_method(
             preset_overrides["instruction"] = instruction
 
         raw = evaluate_with_reranker(
-            documents=document_texts,
+            documents=task.documents,
             triplet_ids=task.triplets,
             reranker_preset=preset,
             cache_alias=cache_alias,
@@ -597,7 +597,7 @@ def evaluate_method(
         preset_overrides = method_config.get("preset_overrides")
 
         raw = evaluate_with_document_rewrite(
-            documents=document_texts,
+            documents=task.documents,
             triplet_ids=task.triplets,
             criterion=task.criterion_name,
             criterion_description=task.criterion_description,
@@ -622,7 +622,7 @@ def evaluate_method(
         preset_overrides = method_config.get("preset_overrides")
 
         raw = evaluate_with_multisummary(
-            documents=document_texts,
+            documents=task.documents,
             triplet_ids=task.triplets,
             criterion=task.criterion_name,
             criterion_description=task.criterion_description,

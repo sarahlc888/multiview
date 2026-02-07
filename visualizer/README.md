@@ -8,7 +8,7 @@ Interactive web viewer for multiview corpus visualizations.
 
 ```bash
 # Single export (circles)
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
@@ -18,7 +18,7 @@ uv run python scripts/visualize_corpus.py \
   --max-docs 100
 
 # With thumbnails (images instead of circles)
-uv run python scripts/visualize_corpus.py \
+uv run python scripts/analyze_corpus.py \
   --dataset gsm8k \
   --embedding-preset hf_qwen3_embedding_8b \
   --criterion arithmetic \
