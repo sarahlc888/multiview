@@ -98,6 +98,7 @@ def setup_logging(level: str = "INFO", output_file: str | None = None) -> None:
         "PIL",
         "PIL.PngImagePlugin",
         "voyageai",
+        "voyage",
     ]:
         logging.getLogger(package).setLevel(logging.ERROR)
 

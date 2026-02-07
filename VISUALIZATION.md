@@ -427,6 +427,11 @@ Choose from multiple pre-computed layouts:
   - Charge force
   - Collision radius
 
+**Heatmap Mode:**
+- `N × D` embeddings: computes cosine similarity in browser
+- `N × N` similarity matrices (e.g., BM25): uses matrix directly
+- No precomputed layout required
+
 **Dendrogram View:**
 - Hierarchical clustering tree
 - Shows clustering relationships
@@ -509,6 +514,13 @@ viz/
   ]
 }
 ```
+
+### BM25 / Matrix Methods
+
+Some methods (e.g., BM25) produce `N × N` similarity matrices instead of `N × D` embeddings:
+- The matrix is persisted as a visualization artifact
+- Only **heatmap** and **graph** modes are available — scatter reducers (PCA, t-SNE, UMAP, SOM) are skipped since they require dense embeddings
+- The UI automatically exposes only valid modes for each method
 
 ### Key Files
 

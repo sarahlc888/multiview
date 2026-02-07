@@ -301,21 +301,40 @@ def voyage_multimodal_embedding_completions(
         multimodal_inputs.append(parts)
 
     try:
-        response = client.multimodal_embed(
-            inputs=multimodal_inputs,
-            model=model_name,
-            **kwargs,
-        )
+        # Batch inputs to avoid massive single requests
+        MULTIMODAL_BATCH_SIZE = 20
+        all_embeddings = []
+        total_tokens = 0
 
-        # Record usage if available
-        if hasattr(response, "total_tokens") and response.total_tokens:
+        for batch_start in range(0, len(multimodal_inputs), MULTIMODAL_BATCH_SIZE):
+            batch = multimodal_inputs[batch_start : batch_start + MULTIMODAL_BATCH_SIZE]
+            batch_num = batch_start // MULTIMODAL_BATCH_SIZE + 1
+            total_batches = (
+                len(multimodal_inputs) + MULTIMODAL_BATCH_SIZE - 1
+            ) // MULTIMODAL_BATCH_SIZE
+            logger.info(
+                f"Voyage multimodal embed batch {batch_num}/{total_batches} "
+                f"({len(batch)} inputs)"
+            )
+
+            response = client.multimodal_embed(
+                inputs=batch,
+                model=model_name,
+                **kwargs,
+            )
+            all_embeddings.extend(response.embeddings)
+            if hasattr(response, "total_tokens") and response.total_tokens:
+                total_tokens += response.total_tokens
+
+        # Record aggregated usage
+        if total_tokens:
             record_usage(
                 model_name=model_name,
-                input_tokens=response.total_tokens,
+                input_tokens=total_tokens,
                 output_tokens=0,
             )
 
-        completions = [{"vector": emb} for emb in response.embeddings]
+        completions = [{"vector": emb} for emb in all_embeddings]
 
         n_with_images = sum(
             1 for inp in multimodal_inputs if any(not isinstance(p, str) for p in inp)

@@ -403,6 +403,15 @@ bills:
   subtopic:
     description: "The specific subtopic or category within the broader policy domain. This provides a more granular classification of the bill's focus area, such as 'Elementary & Secondary' within Education or 'Natural Gas & Oil' within Energy."
 
+# Met Museum: Metropolitan Museum of Art collection images
+met_museum:
+  subject_matter:
+    description: "Literal subject matter and objects depicted in the artwork. What is shown in the image — figures, animals, landscapes, objects, scenes, symbols, etc."
+  visual_composition:
+    description: "Visual composition of the artwork. How the image is structured — use of space, color palette, lighting, perspective, symmetry, density, focal points, foreground/background relationships, etc."
+  period_or_movement:
+    description: "The historical period or artistic movement the artwork belongs to. When and in what cultural/artistic context was it created — Ancient, Medieval, Renaissance, Baroque, Impressionist, Modern, Contemporary, etc."
+
 # Moral Fables
 moralfables: {}
 

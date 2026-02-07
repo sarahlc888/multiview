@@ -354,11 +354,15 @@ def _regenerate_full_document_rewrite_embeddings(
         [doc_id_to_embedding[i] for i in range(len(documents))], dtype=np.float32
     )
 
-    if np.isnan(full_embeddings).any() or np.isinf(full_embeddings).any():
+    nan_mask = np.isnan(full_embeddings).any(axis=1) | np.isinf(full_embeddings).any(
+        axis=1
+    )
+    n_bad = int(nan_mask.sum())
+    if n_bad > 0:
         logger.warning(
-            "Regenerated full embeddings still contain NaN/Inf; falling back to filtered rows"
+            f"Regenerated full embeddings contain {n_bad}/{len(full_embeddings)} "
+            "rows with NaN/Inf (failed summaries); keeping array with NaN rows"
         )
-        return None
 
     return full_embeddings
 
