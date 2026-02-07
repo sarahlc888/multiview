@@ -716,6 +716,8 @@ def can_use_cached_triplets(
 
         # Check if cached config exists
         cached_config = load_triplet_config(output_dir=output_dir, task_name=task_name)
+        logger.debug(f"{cached_config=}")
+        logger.debug(f"{current_config=}")
         if cached_config is None:
             return False
 
@@ -823,12 +825,14 @@ def _extract_triplet_generation_config(task_or_config: _TaskLike | dict) -> dict
     These fields determine whether cached triplets can be reused.
     Fields that don't affect triplet generation (e.g., evaluation method configs)
     are excluded.
+
+    Accepts either a Task object or a plain config dict; in both cases only
+    the config *dict* is inspected so that save and compare paths produce
+    identical results.
     """
-    is_task_object = not isinstance(task_or_config, dict)
     if isinstance(task_or_config, dict):
         config = task_or_config
     else:
-        # Extract from Task object
         config = task_or_config.config
 
     # Convert DictConfig to regular dict to ensure JSON serialization works
@@ -853,7 +857,6 @@ def _extract_triplet_generation_config(task_or_config: _TaskLike | dict) -> dict
         "prelabeled_selection",
         "max_num_candidates",
         "split",
-        "config",  # docset-specific config (e.g., subset for nytclustering)
         "num_synthetic_docs",
         "seed",
         # LM annotation hints (affect annotations which affect triplet quality)
@@ -869,19 +872,8 @@ def _extract_triplet_generation_config(task_or_config: _TaskLike | dict) -> dict
     ]
 
     for field in optional_fields:
-        # For Task objects, prefer resolved attributes (e.g., criterion_description
-        # inherited from dataset metadata even when omitted from YAML config).
-        if is_task_object and hasattr(task_or_config, field):
-            value = getattr(task_or_config, field)
-            if value is not None:
-                if isinstance(value, DictConfig):
-                    value = OmegaConf.to_container(value, resolve=True)
-                triplet_config[field] = value
-                continue
-
         if field in config:
             value = config[field]
-            # Convert any nested DictConfig objects to regular dicts
             if isinstance(value, DictConfig):
                 value = OmegaConf.to_container(value, resolve=True)
             triplet_config[field] = value
@@ -950,6 +942,8 @@ def triplet_config_matches(
     # Extract just the triplet-relevant fields
     c1 = _extract_triplet_generation_config(config1)
     c2 = _extract_triplet_generation_config(config2)
+    logger.debug(f"{(c1)=}")
+    logger.debug(f"{(c2)=}")
 
     # Remove ignored fields
     if ignore_fields:

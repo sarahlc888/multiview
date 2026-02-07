@@ -45,7 +45,7 @@ def main(cfg: DictConfig):
         logger.error(f"✗ Evaluation artifacts not found in {output_base}")
         logger.error("")
         logger.error("To generate evaluation artifacts, run:")
-        logger.error(f"  python scripts/create_eval.py run_name={cfg.run_name}")
+        logger.error(f"  python scripts/create_eval.py --config-name {cfg.run_name}")
         logger.error("")
         raise FileNotFoundError(
             "Missing evaluation artifacts. Run create_eval.py first."
@@ -76,7 +76,9 @@ def main(cfg: DictConfig):
             logger.error(f"✗ No cached triplets found for {task_name}")
             logger.error("")
             logger.error("To generate evaluation artifacts, run:")
-            logger.error(f"  python scripts/create_eval.py run_name={cfg.run_name}")
+            logger.error(
+                f"  python scripts/create_eval.py --config-name {cfg.run_name}"
+            )
             logger.error("")
             raise FileNotFoundError(
                 f"Missing cached triplets for {task_name}. Run create_eval.py first."

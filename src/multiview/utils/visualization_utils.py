@@ -245,7 +245,16 @@ def _create_thumbnail_images(
             output_dir.glob("thumb_*.*")
         )
         if len(existing_images) == len(documents):
-            return sorted([str(p) for p in existing_images])
+
+            def _thumb_sort_key(p: Path) -> int:
+                m = re.search(r"(\d+)", p.stem)
+                return int(m.group(1)) if m else 0
+
+            return [str(p) for p in sorted(existing_images, key=_thumb_sort_key)]
+        # Cache miss — clear stale thumbnails so they don't cause
+        # incorrect cache hits on future runs.
+        for stale in existing_images:
+            stale.unlink(missing_ok=True)
 
     if dataset_name == "gsm8k" and criterion in ["arithmetic", "final_expression"]:
         return create_gsm8k_marker_images(
@@ -1195,13 +1204,21 @@ def generate_visualizations_for_benchmark(
     if not quiet:
         logger.info(f"Scanning benchmark run: {benchmark_run}")
 
-    task_methods = find_tasks_and_methods(benchmark_run)
+    try:
+        task_methods = find_tasks_and_methods(benchmark_run)
+    except FileNotFoundError:
+        task_methods = {}
 
-    if not task_methods:
+    if not task_methods and task_filter and method_filter:
+        # No eval outputs on disk — build task/method map from caller-supplied
+        # filters (e.g. analyze_corpus.py derives these from the Hydra config).
+        logger.info("No method_logs on disk; using config-derived task/method list")
+        task_methods = {task: list(method_filter) for task in task_filter}
+    elif not task_methods:
         logger.warning(f"No tasks found in {benchmark_run}")
         return 0, 0
 
-    # Apply filters
+    # Apply filters (only needed when task_methods came from disk discovery)
     if task_filter:
         task_filter_set = set(task_filter)
         task_methods = {k: v for k, v in task_methods.items() if k in task_filter_set}

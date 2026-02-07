@@ -45,7 +45,7 @@ def load_image_from_source(source: str, timeout: int = 10) -> bytes:
 
     # Check if source is a data URI (e.g., from HuggingFace streaming)
     if source.startswith("data:"):
-        logger.debug("Loading image from data URI")
+        # logger.debug("Loading image from data URI")
         try:
             # Parse data URI: data:image/jpeg;base64,<base64_data>
             if ";base64," in source:
@@ -106,7 +106,6 @@ def detect_mime_type(image_bytes: bytes, source_path: str | None = None) -> str:
     if source_path:
         mime_type, _ = mimetypes.guess_type(source_path)
         if mime_type and mime_type.startswith("image/"):
-            logger.debug(f"Detected MIME type from path: {mime_type}")
             return mime_type
 
     # Try to detect from magic bytes
@@ -162,11 +161,6 @@ def prepare_image_for_gemini(
     # Encode to base64
     base64_data = encode_image_base64(image_bytes)
 
-    logger.debug(
-        f"Prepared image: {len(image_bytes)} bytes, {mime_type}, "
-        f"{len(base64_data)} base64 chars"
-    )
-
     return {"inline_data": {"mime_type": mime_type, "data": base64_data}}
 
 
@@ -198,10 +192,10 @@ def prepare_image_for_openai(image_source: str, timeout: int = 10) -> str:
     # Encode to base64
     base64_data = encode_image_base64(image_bytes)
 
-    logger.debug(
-        f"Prepared image for OpenAI: {len(image_bytes)} bytes, {mime_type}, "
-        f"{len(base64_data)} base64 chars"
-    )
+    # logger.debug(
+    #     f"Prepared image for OpenAI: {len(image_bytes)} bytes, {mime_type}, "
+    #     f"{len(base64_data)} base64 chars"
+    # )
 
     return f"data:{mime_type};base64,{base64_data}"
 

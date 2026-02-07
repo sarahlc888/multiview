@@ -17,7 +17,7 @@ visualization:
 # Task configuration
 tasks:
   defaults:
-    max_docs: 20
+    max_docs: 15
     max_triplets: 5
     # max_docs: 200
     # max_triplets: 50
