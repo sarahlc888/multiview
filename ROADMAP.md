@@ -1,108 +1,88 @@
-# Multiview Benchmark Roadmap
+# Roadmap
 
-## 🎯
+## North Star
 
-- [x] Generate 256 triplets for (GSM8K, arithmetic_operations) criterion and evaluate with 4 methods to compare model performance.
+Build a reliable benchmark for criteria-specific semantic similarity, then train and validate embedding models that measurably improve triplet accuracy on held-out tasks.
 
-- [x] Scale to 10 different docset-criteria combinations for a comprehensive benchmark suite.
+## Current Status Snapshot
 
-- [ ]
-Use triplet data for downstream tasks like fine-tuning better embedding models.
+### Completed
 
----
-# Medium term
+- [x] Generated 256 triplets for `gsm8k/arithmetic_operations` and evaluated 4 methods.
+- [x] Scaled to 10 docset-criteria combinations.
+- [x] Implemented schema comparison framework (`configs/benchmark_schema_comparison.yaml`) with multi-trial support and trial statistics.
+- [x] Shipped core embedding visualizer flows (2D reducers, leaderboard modes, triplet interaction; see `visualizer/NEW_FEATURES.md`).
 
-## ✅ Schema Comparison Feature (IMPLEMENTED)
+## Immediate Milestone (Next 7-10 Days): No-Nonsense Viz Ship
 
-**Goal**: Compare in_one_word and pseudologit methods with different schema configurations
+Goal: Ship the coolest core capability ASAP from `npm run dev`: x-by-y style embedding + visualization for multiple views, with minimal polish work.
 
-**Status**: ✅ Implemented (see `SCHEMA_COMPARISON.md` for usage guide)
+Top priority (explicit):
+- [ ] vibe code the viz dashboard and stop working on fluff
+- [ ] ship a version that uses zero shot methods ONLY to embed multiple different views of the Met dataset
 
-**Implementation**:
-- Config: `configs/benchmark_schema_comparison.yaml`
-- Evaluation methods support 4 schema modes:
-  1. **No schema**: Generic categorization prompt
-  2. **Oracle schema**: Schema from annotations (lm_all)
-  3. **Proposed schema**: Dynamically generated fresh schema with `num_trials` support
-  4. **Custom schema**: Manually specified categories/classes file (supports per-task dict format)
-- Statistics: `compute_trial_statistics()` utility for mean/std across trials
+### Scope (must ship)
 
-**Supported Methods**:
-- ✅ In one word (no schema)
-- ✅ In one word using oracle schema (whatever was actually proposed by lm_tag)
-- ✅ In one word proposed schema over N trials (oracle schema is withheld)
-- ✅ Pseudologit with oracle schema (whatever was actually proposed by lm_tag)
-- ✅ Pseudologit proposed schema over N trials (oracle schema is withheld)
+- [ ] Build API document-rewriter path using Gemini:
+  - Input: source document text
+  - Output: summary constrained to <=1 sentence
+  - Use rewritten sentence as embedding input (document rewriter setting)
+- [ ] Prototype on `ut_zappos50k` first (toy/easy path), not Met.
+- [ ] Zero-shot methods only for this ship (no fine-tuning work in milestone).
+- [ ] Enable fast view toggling in dashboard:
+  - Self-organizing map (SOM)
+  - Dendrogram
+  - Existing 2D view(s) already supported
+- [ ] Render item as thumbnail (preferred) or point fallback.
+- [ ] On hover, show associated text (rewritten sentence and/or source snippet).
 
-**Running Schema Comparison**:
-```bash
-# Single run with automatic multi-trial execution
-# The config includes num_trials: 10 for proposed schema methods
-uv run python -m multiview.benchmark.run configs/benchmark_schema_comparison.yaml
+### De-scope (do not spend time here)
 
-# Results will include separate rows for each trial:
-# - inoneword_proposed_trial1, inoneword_proposed_trial2, ..., inoneword_proposed_trial10
-# - pseudologit_proposed_trial1, pseudologit_proposed_trial2, ..., pseudologit_proposed_trial10
+- [ ] No training infrastructure changes.
+- [ ] No long-form reporting or writeup polish.
+- [ ] No advanced feature work beyond required toggles and hover behavior.
 
-# Compute statistics across trials using pandas or compute_trial_statistics()
-```
+### Acceptance checks
 
-**Key Features**:
-- `num_trials` parameter: Automatically runs N trials with unique cache keys
-- Trial differentiation: Each trial gets unique `_trial_idx` in config hash
-- Reproducibility: Trials use same document sample but different LLM generations
+- [ ] `npm run dev` demonstrates end-to-end flow on Zappos with at least 3 distinct criteria/views.
+- [ ] Each item has a Gemini-generated <=1 sentence rewrite stored/available for embedding.
+- [ ] Embeddings in this path are generated from rewritten text only.
+- [ ] User can switch between SOM and dendrogram without leaving the page.
+- [ ] Hover interaction reveals text and image/point context reliably.
 
-See `SCHEMA_COMPARISON.md` for full documentation.
+### Next after ship
 
+- [ ] Port the same zero-shot document-rewriter workflow from Zappos to Met dataset views.
 
-## 📋 LONG TERM: Fine-tuning & Advanced Features
+## Next Milestones (After No-Nonsense Viz Ship)
 
-**Goal**: Use triplet data for fine-tuning embedding models
-**Status**: Infrastructure not yet built
-**ETA**: 5-8 weeks (phased approach)
+### Evidence Milestone: Taxonomy Detail vs Performance
 
-- [ ] **Visualization tools**
-  - [ ] Implement UMAP/t-SNE dimensionality reduction
-  - [ ] Create 2D scatter plot visualization
-  - [ ] Create 3D interactive Plotly widget
-  - [ ] Add per-criterion color coding
-  - [ ] Add hover tooltips with document text
+Key finding to support:
+- [ ] Different taxonomies lead to different performance.
+- [ ] More detailed taxonomies improve pseudologit performance.
 
-- [ ] **Embedding fine-tuning**
-  - [ ] Implement contrastive loss training
-  - [ ] Add hard negative mining during training
-  - [ ] Support multiple backbone models
-  - [ ] Add validation metrics
-  - [ ] Implement early stopping
+Action items:
+- [ ] Run/collect results for multiple pseudologit taxonomy settings (coarse -> medium -> detailed).
+- [ ] Add a bar chart view comparing pseudologit variants by accuracy.
+- [ ] Include a concise evidence note with the chart: taxonomy granularity vs accuracy trend.
 
-- [ ] **Query rewriter optimization (GEPA)**
-  - [ ] Integrate DSPy for prompt optimization
-  - [ ] Implement evolutionary search
-  - [ ] Add triplet accuracy objective
-  - [ ] Configure search parameters
+Exit criteria:
+- [ ] One chart in dashboard/report clearly shows pseudologit performance by taxonomy detail level.
+- [ ] Supporting run metadata/configs are linked for reproducibility.
 
-- [ ] **Training infrastructure**
-  - [ ] Set up training data loaders
-  - [ ] Add distributed training support (multi-GPU)
-  - [ ] Implement checkpointing
-  - [ ] Add WandB/TensorBoard logging
-  - [ ] Create evaluation callback
+### Demo Milestone
 
-- [ ] **Model evaluation**
-  - [ ] Test fine-tuned model on held-out tasks
-  - [ ] Compare to base model performance
-  - [ ] Measure improvement in triplet accuracy
-  - [ ] Check for overfitting/generalization
+- [ ] Build a "semantic filter" demo.
+- [ ] Build an Anthropic interview transcript demo focused on value alignment.
+- [ ] Define and scope one additional demo candidate (currently open question).
 
-- [ ] **Generate analysis report**
-  - [ ] Identify which methods perform best overall
-  - [ ] Identify which criteria are hardest/easiest
-  - [ ] Note any surprising results or failure modes
-  - [ ] Document method rankings across tasks
+Exit criteria:
+- [ ] Each demo has a runnable path and a short script for what it proves.
 
-### Success Criteria
+## Findings to ship
+- If you add more compute for the taxonomy, the downstream embeddings sharpen for vecEOL and pseudologits
 
-- [ ] Fine-tuned model outperforms base model by >5% on held-out tasks
-- [ ] Training pipeline is reproducible
-- [ ] Model can be exported and used in production
-- [ ] Documentation covers full training workflow
+### Open
+
+- [ ] Productionized fine-tuning pipeline for triplet-based training.
