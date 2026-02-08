@@ -44,7 +44,6 @@ SPECIALIZED_PRESETS = {
         prompt_template="{document}",
         parser="vector",
         extra_kwargs={
-            "classes_file": "prompts/custom/gsm8k_classes.json",
             "prompt_template": "prompts/custom/pseudologit_classify.txt",
             "n_samples": 10,
             "temperature": 0.7,
@@ -58,7 +57,6 @@ SPECIALIZED_PRESETS = {
         prompt_template="{document}",
         parser="vector",
         extra_kwargs={
-            "classes_file": "prompts/custom/gsm8k_classes.json",
             "prompt_template": "prompts/custom/pseudologit_classify.txt",
             "n_samples": 50,
             "temperature": 0.7,

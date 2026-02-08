@@ -72,3 +72,78 @@ We also use
 https://en.wikipedia.org/wiki/Self-organizing_map
 inspired by
 https://nry.me/posts/2025-10-09/small-web-screenshots/
+
+
+#
+
+Features
+- Creates tasks from unlabeled corpus, using LM judge
+- Includes complex criteria with realistic applications (going beyond toy/academic benchmark)
+- Emphasizes multiple views of the same corpus
+- Deep semantic similarity
+
+
+## Motivation
+## Tasks
+### Spectrum of complexity
+-
+### Labeled
+Clustering, semantic group-by
+### Label-free
+Fuzzy similarity
+Interpretation
+
+## Future work
+- Moving from benchmark -> training data
+- Moving from benchmark -> RL training environment
+- privileged information
+	- verifiable
+	- as observed by GRACE
+# hide
+
+```
+**LLM as hypernetwork**
+
+Given the first paragraph of a profile of a notable person, one might ask: "What are some other first paragraphs of profiles that use the same strategy for their opening?" Common examples might be ...
+
+To achieve this, we might directly ask this question to an LLM, which could go through steps such as
+- (thinking:) who is this article about
+- (thinking:) what is the strategy used by the opening
+- (thinking:) in-weights recall for other articles?
+- (search:) but more likely some kind of agentic web search, could be keyword and/or semantic
+	- likely uses "query expansion" or "query rewriting" of some kind
+
+This could successfully surface some other examples -- an instance of one-to-many search
+
+**However, we are still missing tools for the more powerful all-to-all search.**
+
+
+**Evaluation**
+some types of queries have labels
+Do kindred pairs get put next to each other
+```
+
+
+```
+right now we limit the viz_met to 64 images by defualt, filtered by relevance. the relevance filter is also borrowed from the triplet
+  data gen pipeline. can we use a similar workflow inspired by the label proposer section to actually classify each of the 64 images
+  into a class?
+Then, we can use these labels to color the points in the scatter plot and output a silhouette score assessing the quality of the
+  embeddings
+```
+
+
+More complex documents and criteria require a greater amount of "interpretation"
+without task specific finetuning
+without any finetuning
+
+
+Classification style tasks
+Sparse matching style tasks
+
+
+
+Semantic bi-text mining
+Semantic deduplication
+Query rewriting
+Sparsity

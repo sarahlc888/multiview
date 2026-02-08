@@ -119,7 +119,7 @@ def _load_classes_file(classes_file: str) -> dict:
 def _build_regex_parser_config(valid_classes: list[str]) -> dict:
     """Build regex parser config for extracting class labels.
 
-    Creates patterns for "$\\boxed{<letter>}$" format.
+    Creates patterns for "$\\boxed{<label>}$" format.
 
     Args:
         valid_classes: List of valid class labels (e.g., ["A", "B", "C", ...])
@@ -127,11 +127,14 @@ def _build_regex_parser_config(valid_classes: list[str]) -> dict:
     Returns:
         Dict with outputs_to_match for regex parser
     """
+    import re
+
     outputs_to_match = {}
     for class_label in valid_classes:
         # Pattern matches "$\boxed{A}$" (LaTeX boxed format)
-        # Need to escape: $ \ { }
-        pattern = rf"\$\\boxed\{{{class_label}\}}\$"
+        # Escape the label in case it contains regex metacharacters
+        escaped_label = re.escape(class_label)
+        pattern = rf"\$\\boxed\{{{escaped_label}\}}\$"
         outputs_to_match[pattern] = class_label
     return {"outputs_to_match": outputs_to_match}
 

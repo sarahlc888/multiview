@@ -1,4 +1,10 @@
 
+## Example commands
+- Generate 256 triples for `gsm8k/arithmetic_operations`
+- Evaluate 4 methods
+```bash
+```
+- 10 docset-criteria combinations
 
 ## Development
 

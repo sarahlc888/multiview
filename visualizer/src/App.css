@@ -26,11 +26,36 @@ body {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+.header-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .header h1 {
   font-size: 24px;
   font-weight: 600;
   margin-bottom: 4px;
   color: #333;
+}
+
+.nav-compare-btn {
+  padding: 6px 16px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  background: white;
+  color: #666;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.nav-compare-btn:hover {
+  background: #f5f5f5;
+  border-color: #4a90e2;
+  color: #4a90e2;
 }
 
 .header-subtitle {

@@ -1,3 +1,108 @@
+# Add more datasets
+- Dickinson
+- role-of-line-in-poem
+Does similar work
+What does it evoke
+What hovers at the edges
+
+- New Yorker Cartoons by why they're funny
+- Quote co-occurence within essays but have to scrape
+- museum exhibitions
+- Paris Review interviews
+- [ ] lines-in-poems dataset
+- [ ] ==add the onion headlines==
+- [ ] GSM8K math
+- [ ] GSM8k set up
+- [ ] Crossword topic
+- [ ] Crossword clue type
+- [ ] Haiku literal images
+- [ ] Haiku evoked meaning
+- [ ] Arxiv CS abstract science topic
+- [ ] Arxiv CS abstract "approach"
+    - a good science abstractions thing -- run the pipeline and see what kind of triplets we get
+- "semantic filter" demo on top of HN
+- Anthropic interview transcript demo focused on value alignment.
+- https://dogwhistles.allen.ai/glossary#judicial_activism
+- [ ] met
+	- [ ] animacy
+	- [ ] form
+	- [ ] content
+
+
+- [ ] put back the MET collection
+	- [ ] artworks by common ancestors ("hidden influence network")
+	- [ ] Paintings based on what is unusual about them
+		- [ ] sparseness
+	- [ ] Portraits based on expression
+	- [ ] Portraits based on number of people in it
+	- [ ] Portraits based on use of color
+
+
+
+- [ ] semantic filter for HN (this should not be that hard)
+	- hacker news by fun-factor
+	- hacker news by personal blog
+	- hacker news by angle of interest
+	```
+	https://news.ycombinator.com/
+
+	Look at the top 100 stories per day
+	Embed everything
+
+	But based on what?
+	If you just embed the headlines, you can probably get various groups
+
+	People are kind of interested in AI stuff
+	People are interested in space, medicine, etc
+
+	But there's also a particular type of vibe WRT hacker news itself - like, why is it on hacker news
+
+	And I feel like this will be cool and higher level "
+
+	we need to be able to toggle between these views
+	```
+
+
+- [ ] Let's make actual graphs out of these scientific abstracts
+	- [ ] prelabeled items should have ground truth labels, in the graph
+		- Basically, we want two types of relations
+			- Do these sentences co-occur in the same abstract?
+			- Do these sentence play the same role within their abstract, as a whole?
+
+- [ ] same thing for Tao Te Ching
+	- https://github.com/nrrb/tao-te-ching/blob/master/Ursula%20K%20Le%20Guin.md
+
+- [ ] "Deep semantic bitext mining"
+	- [ ] ==let's do bitext mining between quotes from 2 authors==
+		- [ ] schopenahur and nietzche
+    this is harder because matches are sparser
+- [ ] the d5 thing
+- more better data
+	- [ ] ==Add scientific abstract thing with an implicit taxonomy before doing vecEOL or rewrite then embed==
+	- [ ] apply some taxonomy to some corpus - mmlu
+	- [ ] similes by vibe
+
+	- [ ] add that fashion mnist dataset or whatever it was... it should be really easy to see if the triplets are good!!
+		- [ ] ==we do get embeddings as a byproduct of a bunch of these, so automatically tsne those up?==
+	- [ ] `goodreads_quotes` - the positive sum thing might be a bit of a stretch.... don't do that one... instead do themes......
+	- [ ] quickly run the aidanbench one
+		- [ ] i feel like the responses are too toy though...? maybe filter for examples where the response is a bit longer??
+		- [ ] it should provide a perfume taxonomy, why isn't it?
+	- "NYCC ""moves"" - What is the angle?"
+		- download data from https://nextml.github.io/caption-contest-data/ -> embed based on overt and covert features (a Dashboard is really necessary to show off the cool facter)
+		- Can we add support for new data
+- [ ] consider the edge case: very sparse matches with =="know it when you see it"==
+
+
+
+
+- [ ] DEMO: get 1 thing of text mining
+	- application: text mining
+- [ ] DEMO: distribution over borges; over shakespeare
+	- shakespeare-anything
+	- borges-anything
+	- a person has a finite set of points of reference
+	- there is such a thing as a set of cultural touchstones http://www.incompleteideas.net/IncIdeas/BitterLesson.html
 
 ## Task categories by complexity
 

@@ -1,11 +1,12 @@
 {
-  "classes": ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+  "classes": ["A", "B", "C", "D", "E"],
   "descriptions": {
-    "A": "add, sub",
-    "B": "add, add, sub",
-    "C": "add, add, sub, mul",
-    "D": "add, add, sub, div",
-    "E": "mul, div"
+    "A": "addition and subtraction only (e.g. answer = a + b, answer = a - b)",
+    "B": "addition and subtraction, multi-step (e.g. answer = a + b - c, answer = a + b + c - d)",
+    "C": "addition, subtraction, and multiplication (e.g. answer = a*b + c, answer = (a + b) * c - d)",
+    "D": "addition, subtraction, and division (e.g. answer = (a + b) / c, answer = a - b/c)",
+    "E": "multiplication and division only (e.g. answer = a * b, answer = a / b, answer = a * b / c)"
   },
+  "taxonomy_context": "Consider the arithmetic operations used in the solution.\n\nA. addition and subtraction only\ne.g. answer = a + b\ne.g. answer = a - b\n\nB. addition and subtraction, multi-step\ne.g. answer = a + b - c\ne.g. answer = a + b + c - d\n\nC. addition, subtraction, and multiplication\ne.g. answer = a*b + c\ne.g. answer = (a + b) * c - d\n\nD. addition, subtraction, and division\ne.g. answer = (a + b) / c\ne.g. answer = a - b/c\n\nE. multiplication and division only\ne.g. answer = a * b\ne.g. answer = a / b\ne.g. answer = a * b / c",
   "instruction": "Instruction: think out loud and explain your reasoning, then choose the SINGLE best letter for the overall structure. For the final judgement, use this format exactly: 'The final answer is $\\boxed{<letter>}$'"
 }

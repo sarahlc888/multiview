@@ -412,6 +412,17 @@ met_museum:
   period_or_movement:
     description: "The historical period or artistic movement the artwork belongs to. When and in what cultural/artistic context was it created — Ancient, Medieval, Renaissance, Baroque, Impressionist, Modern, Contemporary, etc."
 
+# New Yorker Covers: Magazine cover illustrations (1925-2025)
+newyorker_covers:
+  visual_style:
+    description: "The illustration style or artistic technique of the cover (watercolor, line drawing, collage, photorealistic, abstract, digital, gouache, etc.)."
+  subject_matter:
+    description: "What is depicted on the cover — city scenes, portraits, seasonal imagery, political commentary, surreal compositions, domestic life, nature, cultural events, etc."
+  cultural_moment:
+    description: "What cultural era or mood the cover reflects — wartime, postwar optimism, counterculture, digital age, political tension, pandemic, etc. The zeitgeist captured by the illustration."
+  composition:
+    description: "Visual composition of the cover — use of color palette, negative space, framing, figure placement, typography integration, perspective, and overall visual structure."
+
 # Moral Fables
 moralfables: {}
 

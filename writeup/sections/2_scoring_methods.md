@@ -1,12 +1,11 @@
 # Methods for similarity comparison
 
 
-TODO:
-Just do a good job systematizing this
-Per compute level...
-And tune where tuning can be allowed.
 
-add a table
+
+TODO:
+Just do a good job systematizing this per compute level...
+(And tune where tuning can be allowed). In fact, add a table to summarize this
 
 
 We consider a few different classes of methods.

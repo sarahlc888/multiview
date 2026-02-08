@@ -31,6 +31,45 @@ from multiview.inference.presets import is_gpu_available, preset_requires_gpu
 logger = logging.getLogger(__name__)
 
 
+def _make_class_label(i: int) -> str:
+    """Generate a class label for index i. A-Z for 0-25, then A1, B1, ... Z1, A2, etc."""
+    if i < 26:
+        return chr(65 + i)
+    suffix = i // 26
+    return f"{chr(65 + i % 26)}{suffix}"
+
+
+def _schema_to_classes_data(items: list[dict], name_key: str = "name") -> dict:
+    """Convert a list of schema items (categories or tags) into a classes_data dict.
+
+    Args:
+        items: List of dicts with 'name' and 'description' keys.
+        name_key: Key to use for the item name (default: "name").
+
+    Returns:
+        Dict with classes, descriptions, taxonomy_context, and instruction.
+    """
+    classes = [_make_class_label(i) for i in range(len(items))]
+    descriptions = {
+        _make_class_label(i): item["description"] for i, item in enumerate(items)
+    }
+    taxonomy_lines = []
+    for i, item in enumerate(items):
+        label = _make_class_label(i)
+        taxonomy_lines.append(f"{label}. {item[name_key]}\n{item['description']}\n")
+    taxonomy_context = "\n".join(taxonomy_lines)
+    return {
+        "classes": classes,
+        "descriptions": descriptions,
+        "taxonomy_context": taxonomy_context,
+        "instruction": (
+            "Instruction: think out loud and explain your reasoning, then choose "
+            "the SINGLE best label. For the final judgement, use this format exactly: "
+            "'The final answer is $\\boxed{<label>}$'"
+        ),
+    }
+
+
 def build_triplet_dicts(
     documents: list[str],
     triplet_ids: list[tuple[int, int, int]],
@@ -804,50 +843,22 @@ def evaluate_method(
             schema = task.document_annotations[0].get("category_schema")
             if schema:
                 categories = schema.get("categories", [])
-                category_names = [cat["name"] for cat in categories]
-
-                # Convert category names to letters (A, B, C, ...)
-                classes = [chr(65 + i) for i in range(len(categories))]
-                descriptions = {
-                    chr(65 + i): cat["description"] for i, cat in enumerate(categories)
-                }
-
-                # Build taxonomy_context with letter-to-name mapping
-                taxonomy_lines = []
-                for i, cat in enumerate(categories):
-                    letter = chr(65 + i)
-                    taxonomy_lines.append(
-                        f"{letter}. {cat['name']}\n{cat['description']}\n"
-                    )
-                taxonomy_context = "\n".join(taxonomy_lines)
+                classes_data = _schema_to_classes_data(categories)
 
                 logger.info(
-                    f"Using oracle category schema with {len(classes)} classes: {classes} -> {category_names}"
+                    f"Using oracle category schema with {len(categories)} classes: "
+                    f"{classes_data['classes']} -> {[c['name'] for c in categories]}"
                 )
             else:
                 # Fall back to tag schema (from lm_tags)
                 tag_schema = task.document_annotations[0].get("tag_schema")
                 if tag_schema:
                     tags = tag_schema.get("tags", [])
-                    tag_names = [tag["name"] for tag in tags]
-
-                    # Convert tag names to letters (A, B, C, ...)
-                    classes = [chr(65 + i) for i in range(len(tags))]
-                    descriptions = {
-                        chr(65 + i): tag["description"] for i, tag in enumerate(tags)
-                    }
-
-                    # Build taxonomy_context with letter-to-name mapping
-                    taxonomy_lines = []
-                    for i, tag in enumerate(tags):
-                        letter = chr(65 + i)
-                        taxonomy_lines.append(
-                            f"{letter}. {tag['name']}\n{tag['description']}\n"
-                        )
-                    taxonomy_context = "\n".join(taxonomy_lines)
+                    classes_data = _schema_to_classes_data(tags)
 
                     logger.info(
-                        f"Using oracle tag schema with {len(classes)} tags: {classes} -> {tag_names}"
+                        f"Using oracle tag schema with {len(tags)} tags: "
+                        f"{classes_data['classes']} -> {[t['name'] for t in tags]}"
                     )
                 else:
                     logger.error(
@@ -860,23 +871,12 @@ def evaluate_method(
                         "method_name": display_name,
                     }
 
-            # Create temporary classes file with all required fields
-            import json
+            # Write classes_data to a temporary file
             import tempfile
 
             temp_classes_file = tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False
             )
-            classes_data = {
-                "classes": classes,
-                "descriptions": descriptions,
-                "taxonomy_context": taxonomy_context,
-                "instruction": (
-                    "Instruction: think out loud and explain your reasoning, then choose "
-                    "the SINGLE best letter. For the final judgement, use this format exactly: "
-                    "'The final answer is $\\boxed{<letter>}$'"
-                ),
-            }
             json.dump(classes_data, temp_classes_file, indent=2)
             temp_classes_file.close()
             classes_file = temp_classes_file.name
@@ -896,54 +896,29 @@ def evaluate_method(
                 run_name=task.run_name,
             )
 
-            # Extract categories and create classes file with all required fields
+            # Extract categories and create classes file
             categories = schema.get("categories", [])
+            classes_data = _schema_to_classes_data(categories)
 
-            # Convert category names to letters (A, B, C, ...)
-            classes = [
-                chr(65 + i) for i in range(len(categories))
-            ]  # ["A", "B", "C", ...]
-            descriptions = {
-                chr(65 + i): cat["description"] for i, cat in enumerate(categories)
-            }
-
-            # Build taxonomy_context with letter-to-name mapping
-            taxonomy_lines = []
-            for i, cat in enumerate(categories):
-                letter = chr(65 + i)
-                taxonomy_lines.append(
-                    f"{letter}. {cat['name']}\n{cat['description']}\n"
-                )
-            taxonomy_context = "\n".join(taxonomy_lines)
-
-            # Create temporary classes file
-            import json
             import tempfile
 
             temp_classes_file = tempfile.NamedTemporaryFile(
                 mode="w", suffix=".json", delete=False
             )
-            classes_data = {
-                "classes": classes,
-                "descriptions": descriptions,
-                "taxonomy_context": taxonomy_context,
-                "instruction": (
-                    "Instruction: think out loud and explain your reasoning, then choose "
-                    "the SINGLE best letter. For the final judgement, use this format exactly: "
-                    "'The final answer is $\\boxed{<letter>}$'"
-                ),
-            }
             json.dump(classes_data, temp_classes_file, indent=2)
             temp_classes_file.close()
             classes_file = temp_classes_file.name
 
-            category_names = [cat["name"] for cat in categories]
-            logger.info(f"Generated schema with classes: {classes} -> {category_names}")
+            logger.info(
+                f"Generated schema with classes: {classes_data['classes']} -> "
+                f"{[c['name'] for c in categories]}"
+            )
 
         elif not classes_file:
-            # Default fallback
-            classes_file = "prompts/custom/gsm8k_classes.json"
-            logger.warning(f"No classes_file specified, using default: {classes_file}")
+            raise ValueError(
+                "Pseudologit requires a classes_file. Specify 'classes_file' in the method config, "
+                "or use 'use_oracle_schema: true' or 'generate_schema: true'."
+            )
 
         raw = evaluate_with_pseudologit(
             documents=document_texts,

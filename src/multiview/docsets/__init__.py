@@ -28,6 +28,7 @@ from multiview.docsets.intent_emotion import IntentEmotionDocSet
 from multiview.docsets.met_museum import MetMuseumDocSet
 from multiview.docsets.mmlu import MMLUDocSet
 from multiview.docsets.moralfables import MoralFablesDocSet
+from multiview.docsets.newyorker_covers import NewYorkerCoversDocSet
 from multiview.docsets.nytclustering import NYTClusteringDocSet
 from multiview.docsets.onion_headlines import OnionNewsDocSet
 from multiview.docsets.ratemyprof import RateMyProfClusteringDocSet
@@ -61,6 +62,7 @@ DOCSETS = {
     "inb_instructstsb": InstructSTSBDocSet,
     "met_museum": MetMuseumDocSet,
     "mmlu": MMLUDocSet,
+    "newyorker_covers": NewYorkerCoversDocSet,
     "moralfables": MoralFablesDocSet,
     "inb_nytclustering": NYTClusteringDocSet,
     "onion_headlines": OnionNewsDocSet,
@@ -100,6 +102,7 @@ __all__ = [
     "InstructSTSBDocSet",
     "MetMuseumDocSet",
     "MMLUDocSet",
+    "NewYorkerCoversDocSet",
     "MoralFablesDocSet",
     "NYTClusteringDocSet",
     "OnionNewsDocSet",

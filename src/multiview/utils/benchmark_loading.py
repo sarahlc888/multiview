@@ -229,7 +229,7 @@ def _resolve_required_criterion_description(
 
 
 def generate_embeddings(
-    doc_texts: list[str],
+    doc_texts: list[str | None],
     embedding_preset: str,
     cache_alias: str | None = None,
     force_refresh: bool = False,
@@ -239,12 +239,38 @@ def generate_embeddings(
     pseudologit_classes: str | None = None,
     images: list[str | None] | None = None,
 ) -> np.ndarray:
-    """Generate embeddings for documents."""
+    """Generate embeddings for documents.
+
+    Entries in *doc_texts* that are ``None`` are skipped during inference and
+    filled with NaN vectors in the returned array.
+    """
     logger.info(f"Generating embeddings with {embedding_preset}")
 
-    inputs = {"document": doc_texts}
+    # Separate valid texts from None entries so inference only runs on real docs.
+    n_total = len(doc_texts)
+    valid_indices = [i for i, t in enumerate(doc_texts) if t is not None]
+    valid_texts = [doc_texts[i] for i in valid_indices]  # type: ignore[index]
+    n_none = n_total - len(valid_texts)
+
+    if not valid_texts:
+        raise ValueError(
+            "All doc_texts entries are None — cannot generate any embeddings"
+        )
+
+    if n_none > 0:
+        logger.warning(
+            f"{n_none}/{n_total} doc_texts entries are None; "
+            "corresponding rows will contain NaN"
+        )
+
+    # Filter images to match valid_texts when present.
+    valid_images = None
     if images and any(img is not None for img in images):
-        inputs["images"] = images
+        valid_images = [images[i] for i in valid_indices]
+
+    inputs: dict[str, Any] = {"document": valid_texts}
+    if valid_images:
+        inputs["images"] = valid_images
 
     if criterion:
         criterion_description = validate_criterion_description(
@@ -282,89 +308,26 @@ def generate_embeddings(
         **config_overrides,
     )
 
-    embeddings = []
+    valid_embeddings = []
     for result in results:
         if isinstance(result, dict) and "vector" in result:
-            embeddings.append(result["vector"])
+            valid_embeddings.append(result["vector"])
         else:
-            embeddings.append(result)
+            valid_embeddings.append(result)
 
-    embeddings = np.array(embeddings)
+    valid_arr = np.array(valid_embeddings)
+    emb_dim = valid_arr.shape[1] if valid_arr.ndim == 2 else 1
+
+    # Reconstruct full array, inserting NaN rows for None positions.
+    if n_none == 0:
+        embeddings = valid_arr
+    else:
+        embeddings = np.full((n_total, emb_dim), np.nan, dtype=valid_arr.dtype)
+        for out_idx, src_idx in enumerate(valid_indices):
+            embeddings[src_idx] = valid_arr[out_idx]
+
     logger.info(f"Generated embeddings shape: {embeddings.shape}")
     return embeddings
-
-
-def _regenerate_full_document_rewrite_embeddings(
-    run_name: str,
-    task_name: str,
-    method_name: str,
-    documents: list[Any],
-    criterion: str,
-    criterion_description: str,
-    method_metadata: dict[str, Any],
-    output_base: Path,
-    cache_alias: str,
-) -> np.ndarray | None:
-    """Regenerate full-corpus embeddings for document_rewrite methods."""
-    summary_preset = method_metadata.get("summary_preset")
-    embedding_preset = method_metadata.get("embedding_preset")
-    if not summary_preset or not embedding_preset:
-        logger.warning(
-            f"Cannot regenerate full embeddings for {task_name}/{method_name}: "
-            "missing summary_preset or embedding_preset metadata"
-        )
-        return None
-
-    from multiview.eval.document_summary import (
-        _compute_embeddings_for_documents,
-        _generate_summaries,
-    )
-
-    logger.info(
-        "Regenerating full-corpus document-rewrite embeddings "
-        f"for {task_name}/{method_name} ({len(documents)} docs)"
-    )
-
-    summaries = _generate_summaries(
-        documents=documents,
-        criterion=criterion,
-        criterion_description=criterion_description,
-        summary_preset=summary_preset,
-        cache_alias=cache_alias,
-        run_name=run_name,
-    )
-
-    display_texts_path = _corpus_document_texts_path(
-        output_base, task_name, method_name
-    )
-    _save_document_texts(summaries, display_texts_path)
-
-    doc_ids = list(range(len(documents)))
-    doc_id_to_embedding = _compute_embeddings_for_documents(
-        summaries=summaries,
-        doc_ids=doc_ids,
-        embedding_preset=embedding_preset,
-        cache_alias=cache_alias,
-        run_name=run_name,
-        preset_overrides=None,
-        criterion=criterion,
-    )
-
-    full_embeddings = np.array(
-        [doc_id_to_embedding[i] for i in range(len(documents))], dtype=np.float32
-    )
-
-    nan_mask = np.isnan(full_embeddings).any(axis=1) | np.isinf(full_embeddings).any(
-        axis=1
-    )
-    n_bad = int(nan_mask.sum())
-    if n_bad > 0:
-        logger.warning(
-            f"Regenerated full embeddings contain {n_bad}/{len(full_embeddings)} "
-            "rows with NaN/Inf (failed summaries); keeping array with NaN rows"
-        )
-
-    return full_embeddings
 
 
 def _regenerate_full_method_embeddings(
@@ -379,7 +342,19 @@ def _regenerate_full_method_embeddings(
     method_metadata: dict[str, Any] | None,
     cache_alias: str,
 ) -> np.ndarray | None:
-    """Regenerate full-corpus embeddings for supported method types."""
+    """Regenerate full-corpus embeddings for supported method types.
+
+    NOTE: This duplicates the embedding-generation dispatch logic from
+    ``evaluate_method`` / the ``evaluate_with_*`` functions in
+    ``multiview.eval``.  The duplication is intentional: the eval path
+    operates on triplet-scoped documents (and for methods like
+    ``document_rewrite`` only processes docs referenced in triplets),
+    whereas this function needs embeddings for the *full* corpus for
+    visualization.  Extracting a shared ``generate_representations``
+    layer was considered but the scoping difference means the eval
+    functions wouldn't actually reuse it, so the net result would just
+    be moving the dispatch rather than eliminating it.
+    """
     if not method_metadata:
         return None
 
@@ -408,20 +383,48 @@ def _regenerate_full_method_embeddings(
         )
 
     if method_type == "document_rewrite":
-        return _regenerate_full_document_rewrite_embeddings(
-            run_name=run_name,
-            task_name=task_name,
-            method_name=method_name,
+        from multiview.eval.document_summary import _generate_summaries
+
+        summary_preset = method_metadata.get("summary_preset")
+        embedding_preset = method_metadata.get("embedding_preset")
+        if not summary_preset or not embedding_preset:
+            logger.warning(
+                f"Cannot regenerate full embeddings for {task_name}/{method_name}: "
+                "missing summary_preset or embedding_preset metadata"
+            )
+            return None
+
+        validated_description = validate_criterion_description(
+            criterion=criterion,
+            criterion_description=criterion_description,
+            context=f"benchmark regeneration for {task_name}/{method_name}",
+        )
+
+        logger.info(
+            "Regenerating full-corpus document-rewrite embeddings "
+            f"for {task_name}/{method_name} ({len(documents)} docs)"
+        )
+
+        summaries = _generate_summaries(
             documents=documents,
             criterion=criterion,
-            criterion_description=validate_criterion_description(
-                criterion=criterion,
-                criterion_description=criterion_description,
-                context=f"benchmark regeneration for {task_name}/{method_name}",
-            ),
-            method_metadata=method_metadata,
-            output_base=output_base,
+            criterion_description=validated_description,
+            summary_preset=summary_preset,
             cache_alias=cache_alias,
+            run_name=run_name,
+        )
+
+        display_texts_path = _corpus_document_texts_path(
+            output_base, task_name, method_name
+        )
+        _save_document_texts(summaries, display_texts_path)
+
+        return generate_embeddings(
+            doc_texts=summaries,
+            embedding_preset=embedding_preset,
+            cache_alias=cache_alias,
+            criterion=criterion,
+            criterion_description=validated_description,
         )
 
     if method_type == "multisummary":

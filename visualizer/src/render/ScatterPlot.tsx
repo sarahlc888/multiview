@@ -15,6 +15,8 @@ interface ScatterPlotProps {
   width?: number;
   height?: number;
   onSelectDocument?: (index: number | null) => void;
+  highlightedIndex?: number | null;
+  onHoverDocument?: (index: number | null) => void;
 }
 
 export const ScatterPlot: React.FC<ScatterPlotProps> = ({
@@ -26,6 +28,8 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
   width = 800,
   height = 600,
   onSelectDocument,
+  highlightedIndex,
+  onHoverDocument,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -132,6 +136,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
               .raise();
           }
           setHoveredIndex(index);
+          onHoverDocument?.(index);
 
           setTooltip({
             x: event.pageX,
@@ -150,6 +155,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
               .attr('y', yScale(d[1]) - imageSize / 2);
           }
           setHoveredIndex(null);
+          onHoverDocument?.(null);
           setTooltip(null);
         })
         .on('click', function (event, d) {
@@ -183,6 +189,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
               .attr('opacity', 1);
           }
           setHoveredIndex(index);
+          onHoverDocument?.(index);
 
           setTooltip({
             x: event.pageX,
@@ -199,6 +206,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
               .attr('opacity', 0.7);
           }
           setHoveredIndex(null);
+          onHoverDocument?.(null);
           setTooltip(null);
         })
         .on('click', function (event, d) {
@@ -299,6 +307,32 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
       }
     }
 
+    // Draw highlighted point ring (from external hover, e.g. compare view)
+    if (highlightedIndex != null && highlightedIndex >= 0 && highlightedIndex < points.length) {
+      const hp = points[highlightedIndex];
+      const hlGroup = g.append('g').attr('class', 'external-highlight');
+      hlGroup
+        .append('circle')
+        .attr('cx', xScale(hp[0]))
+        .attr('cy', yScale(hp[1]))
+        .attr('r', 14)
+        .attr('fill', 'none')
+        .attr('stroke', '#ff6b6b')
+        .attr('stroke-width', 3)
+        .attr('opacity', 0.8)
+        .style('pointer-events', 'none');
+      hlGroup
+        .append('circle')
+        .attr('cx', xScale(hp[0]))
+        .attr('cy', yScale(hp[1]))
+        .attr('r', 20)
+        .attr('fill', 'none')
+        .attr('stroke', '#ff6b6b')
+        .attr('stroke-width', 1.5)
+        .attr('opacity', 0.4)
+        .style('pointer-events', 'none');
+    }
+
     // Draw axes
     const xAxis = d3.axisBottom(xScale).ticks(5);
     const yAxis = d3.axisLeft(yScale).ticks(5);
@@ -315,7 +349,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
       .call(yAxis)
       .style('font-size', '10px');
 
-  }, [coords, documents, thumbnailUrls, useThumbnails, triplets, selectedTripletIndex, selectedPointIndex, showTriplets, hoveredTripletRole, width, height]);
+  }, [coords, documents, thumbnailUrls, useThumbnails, triplets, selectedTripletIndex, selectedPointIndex, showTriplets, hoveredTripletRole, width, height, highlightedIndex, onHoverDocument]);
 
   // Filter triplets by selected point for sidebar display
   let displayTriplets = triplets || [];

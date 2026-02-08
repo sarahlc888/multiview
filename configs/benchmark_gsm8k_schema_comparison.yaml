@@ -1,0 +1,114 @@
+# GSM8K schema comparison: taxonomy detail vs performance
+#
+# Compares coarse, medium, and detailed taxonomies across pseudologit and in-one-word,
+# plus oracle/proposed/no-schema baselines.
+#
+# Usage:
+#   uv run python -m multiview.benchmark.run configs/benchmark_gsm8k_schema_comparison.yaml
+
+run_name: "benchmark_gsm8k_schema_comparison"
+
+logging:
+  level: DEBUG
+  output_file: "outputs/logs/${run_name}.log"
+
+reuse_cached_triplets: true
+seed: 42
+use_cache: true
+step_through: false
+
+auto_visualize: true
+visualization:
+  reducers: ["tsne", "umap", "pca", "som", "dendrogram"]
+  thumbnails: true
+  output_dir: "outputs/viz"
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 30
+    max_triplets: 5
+    num_synthetic_docs: 0
+    triplet_style: "lm_all"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 10
+    n_schema_samples: 10
+    rate_triplet_quality: true
+    min_triplet_quality: 2
+    validate_consistency: true
+    consistency_max_invalid: 1
+    prelabeled_selection: "hard_negatives"
+
+  task_list:
+    - document_set: gsm8k
+      criterion: final_expression
+      triplet_style: lm_tags
+
+# Evaluation methods
+methods_to_evaluate:
+
+  # # ============================================================================
+  # # IN-ONE-WORD METHODS
+  # # ============================================================================
+
+  # in_one_word:
+  #   # No schema — generic categorization without specific categories
+  #   - name: inoneword_no_schema
+  #     preset: inoneword_hf_qwen3_8b
+  #     category_context: "Question: Categorize this text in one word."
+
+  #   # Oracle schema — uses schema from annotations
+  #   - name: inoneword_oracle_schema
+  #     preset: inoneword_hf_qwen3_8b
+
+  #   # Proposed schema — freshly generated, multiple trials
+  #   - name: inoneword_proposed
+  #     preset: inoneword_hf_qwen3_8b
+  #     generate_schema: true
+  #     n_schema_samples: 10
+  #     num_trials: 3
+
+  # ============================================================================
+  # PSEUDOLOGIT METHODS
+  # ============================================================================
+
+  pseudologit:
+    # Oracle schema — uses schema from annotations
+    - name: pseudologit_oracle_schema
+      preset: pseudologit_gemini_n3
+      use_oracle_schema: true
+
+    # Proposed schema — freshly generated, multiple trials
+    - name: pseudologit_proposed
+      preset: pseudologit_gemini_n3
+      generate_schema: true
+      n_schema_samples: 10
+      num_trials: 3
+
+    # Coarse custom schema (5 classes — which operations appear)
+    - name: pseudologit_coarse
+      preset: pseudologit_gemini_n3
+      classes_file: prompts/custom/gsm8k_1_classes.json
+
+    # Detailed custom schema (9 classes — computational graph structure)
+    - name: pseudologit_detailed
+      preset: pseudologit_gemini_n3
+      classes_file: prompts/custom/gsm8k_classes.json
+
+  # ============================================================================
+  # BASELINES
+  # ============================================================================
+
+  embeddings:
+    - name: qwen3_8b_with_instructions
+      preset: instr_hf_qwen3_embedding_8b
+    - name: qwen3_8b_no_instructions
+      preset: hf_qwen3_embedding_8b
+
+  bm25:
+    - name: bm25_baseline
+      preset: bm25_lexical
+
+outputs_dir: outputs/${run_name}

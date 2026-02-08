@@ -802,7 +802,10 @@ const App: React.FC = () => {
   return (
     <div className="app">
       <header className="header">
-        <h1>🔬 View X by Y</h1>
+        <div className="header-top-row">
+          <h1>🔬 View X by Y</h1>
+          <a href="/compare.html" className="nav-compare-btn">Compare Criteria</a>
+        </div>
         <p className="header-subtitle">
           Represent documents <strong>{selectedDataset || 'X'}</strong> according to criteria <strong>{selectedCriterion || 'Y'}</strong>
         </p>

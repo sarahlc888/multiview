@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 def evaluate_with_pseudologit(
     documents: list[str],
     triplet_ids: list[tuple[int, int, int]],
+    classes_file: str,
     preset: str = "pseudologit_gemini_n100",
-    classes_file: str = "prompts/custom/gsm8k_classes.json",
     cache_alias: str | None = None,
     run_name: str | None = None,
     preset_overrides: dict | None = None,

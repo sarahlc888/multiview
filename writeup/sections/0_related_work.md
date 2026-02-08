@@ -77,3 +77,20 @@ We also focus specifically on representing multiple views of the same corpus.
 Unlike traditional STS tasks, which use `(condition, sentence1, sentence2, score)` tuples and rewrite `condition` to alter scores, this benchmark uses `(condition, anchor, positive, negative)` triplets to emphasize multiple views of the same corpus.
 In addition, rather than a one-to-all retrieval task, the goal is to incorporate criteria into an all-to-all representation task. This choice has a few motivating applications. For applications requiring "specific" semantic similarity, we're currently left with either tuning specialized classification models or accepting the limitations of sentence embeddings.
 For example, [semantic entropy](https://arxiv.org/abs/2302.09664) and [NoveltyBench](https://arxiv.org/abs/2504.05228) train specialized classifiers and evaluate similarity between all pairs of items in a dataset -- with a quadratic cost that necessitates use of a very small model.
+
+## Extended related work
+TODO clean this up
+
+- jiang data diffing
+
+- hypothesae- i like this paper bc it's so elegant https://arxiv.org/pdf/2502.04382
+	- no training no nothing; just look at SAE neurons for the positive class -> do some auto interp -> see what the distinguishing features are
+	- if we want to do it backward: you can create a linear probe that operates over SAE neurons as its basis
+		- basically, if you want to detect neighbors-by-x-attribute, you can find a comination of neurons that are relevant to that attribute, and then figure out what the neighbors are based on those neurons
+		- it's a bit roundabout no? how would you find the neurons?
+		- i guess you'd have to train some meta model to tell you... like output a weighting over neurons, based on a natural language description (so what that paper does but backward)
+		- and this is a lot harder
+		- well you just need the same probe dataset stuff...
+		- i guess you could run the forward direction a bunch of times, use that as your data, and go backward?
+		- this doesn't feel as natural as just doing normal embeddings, the unsupervised stuff doesn't get you anywhere
+		-

@@ -256,7 +256,7 @@ def _create_thumbnail_images(
         for stale in existing_images:
             stale.unlink(missing_ok=True)
 
-    if dataset_name == "gsm8k" and criterion in ["arithmetic", "final_expression"]:
+    if dataset_name == "gsm8k":
         return create_gsm8k_marker_images(
             documents,
             str(output_dir),
@@ -266,7 +266,12 @@ def _create_thumbnail_images(
             minimal=True,
         )
 
-    if dataset_name in ["ut_zappos50k", "met_museum", "example_images"]:
+    if dataset_name in [
+        "ut_zappos50k",
+        "met_museum",
+        "example_images",
+        "newyorker_covers",
+    ]:
         output_dir.mkdir(parents=True, exist_ok=True)
         image_paths = []
         for idx, doc in enumerate(documents):
@@ -777,14 +782,18 @@ def should_use_thumbnails(task_name: str, use_thumbnails: bool) -> bool:
 
     # Extract dataset name from task
     dataset_name = task_name.split("__")[0]
-    criterion = task_name.split("__")[1] if "__" in task_name else None
 
-    # GSM8K with computational criteria uses computational graphs
-    if dataset_name == "gsm8k" and criterion in ["arithmetic", "final_expression"]:
+    # GSM8K uses computational graph markers for all criteria
+    if dataset_name == "gsm8k":
         return True
 
     # Image datasets use actual images
-    if dataset_name in ["ut_zappos50k", "met_museum", "example_images"]:
+    if dataset_name in [
+        "ut_zappos50k",
+        "met_museum",
+        "example_images",
+        "newyorker_covers",
+    ]:
         return True
 
     return False

@@ -43,3 +43,7 @@ npm run dev
 TODO add screenshot here
 
 TODO add leaderboard here
+
+```bash
+python scripts/analyze_corpus.py --config-name corpus_new_yorker_covers
+```

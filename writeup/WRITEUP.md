@@ -50,3 +50,6 @@ To that end, it could be interesting to tune a small MLP or linear linear, or a 
 - However, when moving beyond toy criteria, it seems difficult to train performant embedding models without including a generative reasoning component. It could also be interesting to finetune dedicated "document rewriters" for use with bm25 or a frozen embedding model. (Triplet correctness could serve as a reward signal for prompt optimization with GEPA or tuning with RL.
 In this view, the criteria description and schema is **privileged information** used by the "verifier".
 The resulting models would be akin to "advisor models" for the downstream embedding models ([Asawa 2025](https://arxiv.org/abs/2510.02453)).
+
+## Motivating applications
+- Graph databases and [Swanson linking](https://en.wikipedia.org/wiki/Literature-based_discovery#Swanson_linking)
