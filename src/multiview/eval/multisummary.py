@@ -333,7 +333,10 @@ def _max_similarity(
     """Compute symmetric max-similarity between two sets of embeddings.
 
     For each embedding in set A, finds the maximum similarity with any embedding
-    in set B, then averages these maximum similarities.
+    in set B, then averages these maximum similarities. This is analogous to
+    ColBERT's late-interaction MaxSim (sum-of-max over token embeddings), but
+    applied to summary-level embeddings. Mean vs sum doesn't affect triplet
+    ordering since k is constant across documents.
 
     This is symmetric: max_similarity(A, B) = max_similarity(B, A)
 

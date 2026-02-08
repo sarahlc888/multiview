@@ -94,3 +94,6 @@ TODO clean this up
 		- i guess you could run the forward direction a bunch of times, use that as your data, and go backward?
 		- this doesn't feel as natural as just doing normal embeddings, the unsupervised stuff doesn't get you anywhere
 		-
+- Similar motivations
+	- "MosAIc: Finding Artistic Connections across Culture with Conditional Image Retrieval" https://arxiv.org/pdf/2007.07177
+	- https://style-aligned-artwork-datasets.github.io/fruit-explorer/?dataset=fruit-SALAD_1k&projection=ViT-H-14_IN21k+%28t-SNE%29

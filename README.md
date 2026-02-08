@@ -40,10 +40,46 @@ npm run dev
 
 ## Example
 
-TODO add screenshot here
+### Side-by-side of two criteria
+<img src="writeup/assets/sidebyside.png" alt="Side by side example" width="600"/>
 
+### Leaderboard for triplet agreement
 TODO add leaderboard here
 
-```bash
-python scripts/analyze_corpus.py --config-name corpus_new_yorker_covers
-```
+## Commands for replicating experiments
+### Triplets
+- TODO
+    ```bash
+    uv run python scripts/create_eval.py --config-name benchmark_zappos_100
+    uv run python scripts/run_eval.py --config-name benchmark_zappos_100
+    uv run python scripts/analyze_corpus.py --config-name benchmark_zappos_100
+    cd visualizer
+    npm install
+    npm run dev
+    ```
+- GSM8K problems
+    ```bash
+    python3 scripts/create_eval.py --config-name benchmark_gsm8k_schema_comparison
+    python3 scripts/run_eval.py --config-name benchmark_gsm8k_schema_comparison
+    ```
+### Corpus
+- *New Yorker* covers
+    ```bash
+    python scripts/analyze_corpus.py --config-name corpus_new_yorker_covers
+    ```
+- TODO
+    ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_haiku_100
+    ```
+- TODO
+    ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_crossword_100
+    ```
+- TODO
+    ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_met_100
+    ```
+- TODO
+    ```bash
+    # TODO
+    ```

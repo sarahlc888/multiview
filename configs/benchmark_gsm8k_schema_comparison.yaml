@@ -26,8 +26,8 @@ visualization:
 # Task configuration
 tasks:
   defaults:
-    max_docs: 30
-    max_triplets: 5
+    max_docs: 200
+    max_triplets: 20
     num_synthetic_docs: 0
     triplet_style: "lm_all"
     candidate_strategy: "multi"

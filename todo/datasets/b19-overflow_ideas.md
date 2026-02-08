@@ -195,3 +195,30 @@ Subtle associational vibes
 By its sparkle
 There are seven kinds of Tom and Jerry episodes
 Take a book, chunk it up into paragraphs, and make a graph of connections and interpretations
+
+
+
+Interesting features
+```
+* "Arguments that use appeals to authority vs. empirical evidence"
+* "Explanations that build intuition vs. provide formal definitions"
+* "Writing that assumes reader expertise vs. explains basics"
+* "Responses that directly answer vs. reframe the question"
+Invokes Foucault's concept of biopower
+Poems that include a similar use of enjambment
+```
+
+
+
+
+
+Dominant color
+Number of characters in the scene
+Location of the vanishing point of the painting
+Quadrant that has the most going on in it in terms of visual clutter
+Religious themes
+Subversion -- weird in the same way
+Look alike -- plain surface similarity
+Thematic
+Historical
+And then 2 that are generated on the fly based on what jumps out about the painting, e.g. narrative-ness
