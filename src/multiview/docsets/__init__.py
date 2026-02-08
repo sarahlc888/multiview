@@ -7,6 +7,7 @@ from multiview.docsets.arxiv_abstract_sentences import ArxivAbstractSentencesDoc
 from multiview.docsets.arxiv_cs import ArxivCSDocSet
 from multiview.docsets.base import BaseDocSet
 from multiview.docsets.bills import BillsDocSet
+from multiview.docsets.cari_aesthetics import CARIAestheticsDocSet
 from multiview.docsets.crossword_clues import CrosswordCluesDocSet
 from multiview.docsets.d5 import D5DocSet
 from multiview.docsets.d5_applic import D5ApplicabilityDocSet
@@ -28,6 +29,7 @@ from multiview.docsets.intent_emotion import IntentEmotionDocSet
 from multiview.docsets.met_museum import MetMuseumDocSet
 from multiview.docsets.mmlu import MMLUDocSet
 from multiview.docsets.moralfables import MoralFablesDocSet
+from multiview.docsets.new_yorker_cartoons import NewYorkerCartoonsDocSet
 from multiview.docsets.newyorker_covers import NewYorkerCoversDocSet
 from multiview.docsets.nytclustering import NYTClusteringDocSet
 from multiview.docsets.onion_headlines import OnionNewsDocSet
@@ -36,6 +38,7 @@ from multiview.docsets.rocstories import RocStoriesDocSet
 from multiview.docsets.trex import TRExDocSet
 from multiview.docsets.triz40 import TRIZ40DocSet
 from multiview.docsets.ut_zappos50k import UTZappos50kDocSet
+from multiview.docsets.whole_earth_catalog import WholeEarthCatalogDocSet
 
 DOCSETS = {
     "abstractsim": AbstractSimDocSet,
@@ -44,6 +47,7 @@ DOCSETS = {
     "arxiv_cs": ArxivCSDocSet,
     "arxiv_abstract_sentences": ArxivAbstractSentencesDocSet,
     "bills": BillsDocSet,
+    "cari_aesthetics": CARIAestheticsDocSet,
     "d5": D5DocSet,  # Kept for backwards compatibility
     "d5_doc2doc": D5DocSet,
     "d5_applicability": D5ApplicabilityDocSet,
@@ -62,6 +66,7 @@ DOCSETS = {
     "inb_instructstsb": InstructSTSBDocSet,
     "met_museum": MetMuseumDocSet,
     "mmlu": MMLUDocSet,
+    "new_yorker_cartoons": NewYorkerCartoonsDocSet,
     "newyorker_covers": NewYorkerCoversDocSet,
     "moralfables": MoralFablesDocSet,
     "inb_nytclustering": NYTClusteringDocSet,
@@ -74,6 +79,7 @@ DOCSETS = {
     "trex": TRExDocSet,
     "triz40": TRIZ40DocSet,
     "ut_zappos50k": UTZappos50kDocSet,
+    "whole_earth_catalog": WholeEarthCatalogDocSet,
 }
 
 __all__ = [
@@ -84,6 +90,7 @@ __all__ = [
     "ArxivAbstractSentencesDocSet",
     "BaseDocSet",
     "BillsDocSet",
+    "CARIAestheticsDocSet",
     "D5DocSet",
     "D5ApplicabilityDocSet",
     "DickinsonDocSet",
@@ -102,6 +109,7 @@ __all__ = [
     "InstructSTSBDocSet",
     "MetMuseumDocSet",
     "MMLUDocSet",
+    "NewYorkerCartoonsDocSet",
     "NewYorkerCoversDocSet",
     "MoralFablesDocSet",
     "NYTClusteringDocSet",
@@ -114,4 +122,5 @@ __all__ = [
     "TRExDocSet",
     "TRIZ40DocSet",
     "UTZappos50kDocSet",
+    "WholeEarthCatalogDocSet",
 ]

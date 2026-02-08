@@ -85,6 +85,10 @@ TODO add leaderboard here
     ```
 - TODO
     ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_onion_100
+    ```
+- TODO
+    ```bash
     python scripts/analyze_corpus.py --config-name benchmark_met_100
     ```
 - TODO

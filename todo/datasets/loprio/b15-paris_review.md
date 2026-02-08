@@ -1,4 +1,5 @@
 # Task: Add Paris Review interviews docset
+loprio because paywall
 
 ## Goal
 Create a new docset for Paris Review interviews (literary interviews with authors).

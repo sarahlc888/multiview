@@ -138,6 +138,21 @@ hackernews:
   article_topic:
     description: "The topic or subject matter of the article (technology, business, science, culture, politics, etc.). Does the article reference specific technologies, companies, products, people, events?"
 
+# New Yorker Caption Contest: Cartoon captions (text-only humor analysis)
+new_yorker_cartoons:
+  humor_move:
+    description: "What comedic strategy or 'move' does the caption make? How does the caption interact with the cartoon's visual scene to create humor? e.g. literalization (taking something figurative literally), incongruity (unexpected juxtaposition), understatement, role reversal, meta-commentary, absurd escalation, deadpan observation, dark humor, misplaced normalcy, anthropomorphism, etc."
+    category_schema_hint: "Consider categories based on humor mechanisms: literalization, incongruity, understatement, role-reversal, meta-commentary, absurd-escalation, deadpan, dark-humor, misplaced-normalcy, wordplay, anthropomorphism, social-satire, surreal-acceptance, etc."
+    tag_schema_hint: "Create tags for humor strategies: uses_literalization, uses_incongruity, uses_understatement, uses_role_reversal, uses_meta_commentary, uses_absurd_escalation, uses_deadpan, uses_dark_humor, uses_misplaced_normalcy, uses_wordplay, uses_anthropomorphism, uses_social_satire, uses_surreal_acceptance, caption_reframes_scene, caption_adds_context, caption_is_dialogue, caption_is_narration, etc."
+
+  overt_features:
+    description: "The literal, surface-level content of the cartoon and caption. What is depicted in the cartoon? What is the setting? Who are the characters? What does the caption literally say? What objects, animals, or situations are shown?"
+    category_schema_hint: "Consider categories for settings and subjects: office/workplace, domestic/home, desert-island, doctor/medical, bar/restaurant, outdoors/nature, fantasy/surreal, animal-focused, technology, politics, relationships, etc."
+
+  covert_features:
+    description: "The deeper themes, anxieties, or cultural commentary beneath the joke. What is the cartoon really about? What shared cultural knowledge does it assume? What social norms or expectations does it play with? e.g. workplace alienation, existential dread, relationship dynamics, class commentary, technology anxiety, generational tensions, etc."
+    category_schema_hint: "Consider categories for underlying themes: workplace-culture, existential-anxiety, relationship-dynamics, class-commentary, technology-critique, generational-tension, political-satire, consumerism, identity, mortality, social-norms, power-dynamics, modern-life-absurdity, etc."
+
 # Onion News: Satirical headlines
 onion_headlines:
   topic:
@@ -423,6 +438,15 @@ newyorker_covers:
   composition:
     description: "Visual composition of the cover — use of color palette, negative space, framing, figure placement, typography integration, perspective, and overall visual structure."
 
+# Whole Earth Catalog: Cover images (1968-1998)
+whole_earth_catalog:
+  visual_style:
+    description: "Cover design style (photographic, illustrated, collage, typographic, mixed media, etc.)."
+  era:
+    description: "What period does this edition represent (early counterculture late 60s, 70s expansion, 80s revival, 90s digital, etc.)?"
+  subject_focus:
+    description: "Primary subject of the cover (tools, ecology, technology, community, space, shelter, communications, etc.)."
+
 # Moral Fables
 moralfables: {}
 
@@ -437,3 +461,14 @@ ut_zappos50k:
     description: "The functional type of the shoe."
   color:
     description: "The color of the shoe."
+
+# CARI Aesthetics: Named aesthetic movements with Are.na gallery images
+cari_aesthetics:
+  aesthetic_name:
+    description: "Which named aesthetic movement does this image belong to? (e.g., synthwave, vaporwave, nu-brutalism, eco-brutalism, cottagecore, etc.)"
+  visual_style:
+    description: "What visual techniques and design elements are used — neon colors, pastels, geometric patterns, organic shapes, glitch effects, gradients, typography style, texture, etc."
+  era:
+    description: "What decade or historical era does this aesthetic evoke — 1950s, 1970s, 1980s, 1990s, 2000s, Y2K, contemporary, retro-futuristic, etc."
+  medium:
+    description: "What medium or format is this — poster, album cover, interior design, product design, web design, architecture, fashion, packaging, digital art, etc."

@@ -1,5 +1,4 @@
 # Add more datasets
-- Dickinson
 - role-of-line-in-poem
 Does similar work
 What does it evoke

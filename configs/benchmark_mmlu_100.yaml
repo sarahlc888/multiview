@@ -1,4 +1,4 @@
-run_name: "benchmark_crossword"
+run_name: "benchmark_mmlu"
 logging:
   level: DEBUG
   output_file: "outputs/logs/${run_name}.log"
@@ -34,12 +34,15 @@ tasks:
     prelabeled_selection: "hard_negatives"
 
   task_list:
-    - document_set: crossword_clues
-      criterion: topic
-      triplet_style: lm_tags
-    - document_set: crossword_clues
-      criterion: clue_type
-      triplet_style: lm_tags
+    - document_set: mmlu
+      criterion: blooms_taxonomy
+      triplet_style: lm_all
+    - document_set: mmlu
+      criterion: subject
+      triplet_style: lm_all
+    - document_set: mmlu
+      criterion: difficulty
+      triplet_style: lm_all
 
 # Evaluation methods configuration
 methods_to_evaluate:

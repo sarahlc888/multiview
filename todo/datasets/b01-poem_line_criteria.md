@@ -1,15 +1,6 @@
-# Task: Add new Dickinson criteria
+# Task: Add new poetry dataset + criteria
 
-## Goal
-Add poetry-specific criteria to the existing Dickinson docset that capture what a poem *does* beyond its theme and imagery.
 
-## Type
-ADD_CRITERIA
-
-## Current state
-- Docset exists: `src/multiview/docsets/dickinson.py` (scrapes Project Gutenberg, ~200 poems)
-- Existing criteria in `configs/available_criteria.yaml` under `dickinson:`: `poetic_theme`, `specific_imagery`
-- Several commented-out criteria exist (philosophical_stance, emotional_register, structural_strategy, stylistic_signature)
 
 ## What to add
 New criteria from the original notes:
