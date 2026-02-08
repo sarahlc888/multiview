@@ -472,29 +472,27 @@ const CompareView: React.FC = () => {
             </select>
           </div>
 
-          {availableViewKinds.length > 1 && (
-            <div className="control-group">
-              <label>View:</label>
-              <select value={selectedViewKind} onChange={(e) => {
-                const view = e.target.value;
-                setSelectedViewKind(view);
-                const key = resolveBenchmarkKey(index, selectedBenchmark, view);
-                const bd = key ? index[key] : undefined;
-                if (bd) {
-                  const ds = Object.keys(bd);
-                  if (ds.length > 0) {
-                    setSelectedDataset(ds[0]);
-                    const crits = Object.keys(bd[ds[0]]);
-                    if (crits.length > 0) setCriterionA(crits[0]);
-                    if (crits.length > 1) setCriterionB(crits[1]);
-                    else if (crits.length > 0) setCriterionB(crits[0]);
-                  }
+          <div className="control-group">
+            <label>View:</label>
+            <select value={selectedViewKind} onChange={(e) => {
+              const view = e.target.value;
+              setSelectedViewKind(view);
+              const key = resolveBenchmarkKey(index, selectedBenchmark, view);
+              const bd = key ? index[key] : undefined;
+              if (bd) {
+                const ds = Object.keys(bd);
+                if (ds.length > 0) {
+                  setSelectedDataset(ds[0]);
+                  const crits = Object.keys(bd[ds[0]]);
+                  if (crits.length > 0) setCriterionA(crits[0]);
+                  if (crits.length > 1) setCriterionB(crits[1]);
+                  else if (crits.length > 0) setCriterionB(crits[0]);
                 }
-              }}>
-                {availableViewKinds.map((v) => <option key={v} value={v}>{v}</option>)}
-              </select>
-            </div>
-          )}
+              }
+            }}>
+              {availableViewKinds.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
 
           <div className="control-group">
             <label>Dataset:</label>

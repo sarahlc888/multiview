@@ -77,7 +77,19 @@ TODO add leaderboard here
     ```
 - TODO
     ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_dickinson_100
+    ```
+- TODO
+    ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_hn_100
+    ```
+- TODO
+    ```bash
     python scripts/analyze_corpus.py --config-name benchmark_met_100
+    ```
+- TODO
+    ```bash
+    python scripts/analyze_corpus.py --config-name benchmark_gsm8k_100
     ```
 - TODO
     ```bash

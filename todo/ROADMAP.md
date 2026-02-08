@@ -21,18 +21,6 @@ The gap: all of that plumbing hasn't been turned into findings, a public artifac
 | Narrative | rocstories | seven_basic_plots |
 | Humor/subjective | onion_headlines | joke_type |
 
-**Run all 10 methods on each:**
-- embeddings (OpenAI, Voyage, HF)
-- lm_judge (bidirectional)
-- bm25
-- reranker
-- pseudologit
-- in_one_word
-- document_summary
-- multisummary
-- query_relevance_vectors
-- lm_judge_pair
-
 **Deliverable:** Results matrix — method x criteria type → accuracy. This is the core finding.
 
 **Entry points:**
@@ -40,50 +28,6 @@ The gap: all of that plumbing hasn't been turned into findings, a public artifac
 - `scripts/create_eval.py` then `scripts/run_eval.py`
 
 **Parallelizable:** Yes — each docset/criterion/method combo is independent. Spawn one agent per config.
-
----
-
-## Phase 2: Corpus map / multi-criteria visualizer
-
-**Goal:** Same documents, reorganized by different criteria. Toggle between views.
-
-**Builds on:** Phase 1 results + existing visualizer + `todo/c-comparison_plots.md`
-
-**Features to add:**
-- [ ] Criterion selector in visualizer (currently only method selector exists)
-- [ ] Side-by-side view: same corpus under 2 criteria simultaneously
-- [ ] Pareto frontier plot: accuracy on criterion A vs. accuracy on criterion B, per method
-- [ ] Correlation heatmap: how correlated are different criteria's embeddings for a given corpus?
-- [ ] "Guided tour" mode: walk through 3-4 compelling toggles (e.g., haiku by imagery vs. by meaning_evoked)
-
-**Key files:**
-- `visualizer/src/App.tsx` — main app (1322 lines), add criterion selector
-- `visualizer/src/render/ScatterPlot.tsx` — scatter plot, needs dual-criterion support
-- `visualizer/src/render/HeatmapView.tsx` — extend for correlation
-- `viz/` — already structured per task/method, extend to per-criterion
-
-**Deliverable:** Interactive demo: load a corpus, toggle between "sort by meaning" / "sort by structure" / "sort by imagery."
-
----
-
-## Phase 3: Ship publicly
-
-**Goal:** A URL you can share.
-
-**Depends on:** Findings (Phase 1) and demo (Phase 2).
-
-- [ ] **Leaderboard site** — static site (GitHub Pages) showing method x criteria matrix
-  - See `todo/f-scale_leaderboard.md`
-- [ ] **Writeup** — blog post or paper draft:
-  - Problem: criteria-specific similarity is underserved by existing embedding models
-  - Benchmark: triplet-based evaluation with quality validation
-  - Findings: which methods work where (from Phase 1)
-  - Demo: link to visualizer (from Phase 2)
-- [ ] **Package** — `pip install multiview-bench` for others to evaluate their models
-  - `pyproject.toml` already exists
-- [ ] **README** — fill in TODO placeholders (screenshots, leaderboard link)
-
-**Deliverable:** Public URL — leaderboard, blog post, or both.
 
 ---
 

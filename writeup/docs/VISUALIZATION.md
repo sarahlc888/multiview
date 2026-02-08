@@ -1,4 +1,6 @@
 # Visualization Guide
+Interactive demo: load a corpus, toggle between "sort by meaning" / "sort by structure" / "sort by imagery."
+
   Full Feature List
 
   ✅ Experiment selector - Browse multiple benchmark runs

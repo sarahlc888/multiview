@@ -51,8 +51,8 @@ These methods succeed on C-STS, but more complex criteria and documents likely r
 - **Instructed retrieval**.
 Conditional semantic similarity is closely related to instructed retrieval.
 Benchmarks including [MAIR](https://arxiv.org/abs/2410.10127), [BRIGHT](https://brightbenchmark.github.io/), and [RaR-B](https://arxiv.org/abs/2404.06347) evaluate instruction-tuned embedding models and rerankers on retrieval tasks with realistic context and specific user preferences.
-In these evaluations, relevance judgments are reasoning-intensive, and query-rewriting and/or reranking become essential to achieving strong performance.
-Indeed, retrieval systems typically defer criteria-specific considerations to the reranking phase.
+The core representation criteria can roughly be summarized as "usefulness for solving the problem".
+In these evaluations, relevance judgments are reasoning-intensive, and query-rewriting and/or reranking become essential to achieving strong performance -- deferring criteria-specific considerations to the reranking phase.
 
 
 - **Opportunities: one-to-all vs. all-to-all**.
