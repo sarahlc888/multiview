@@ -35,6 +35,7 @@ from multiview.docsets.nytclustering import NYTClusteringDocSet
 from multiview.docsets.onion_headlines import OnionNewsDocSet
 from multiview.docsets.ratemyprof import RateMyProfClusteringDocSet
 from multiview.docsets.rocstories import RocStoriesDocSet
+from multiview.docsets.tao_te_ching import TaoTeChingDocSet
 from multiview.docsets.trex import TRExDocSet
 from multiview.docsets.triz40 import TRIZ40DocSet
 from multiview.docsets.ut_zappos50k import UTZappos50kDocSet
@@ -76,6 +77,7 @@ DOCSETS = {
     "inb_fewrel": FewRelClusteringDocSet,
     "inb_fewnerd": FewNerdClusteringDocSet,
     "inb_fewevent": FewEventClusteringDocSet,
+    "tao_te_ching": TaoTeChingDocSet,
     "trex": TRExDocSet,
     "triz40": TRIZ40DocSet,
     "ut_zappos50k": UTZappos50kDocSet,
@@ -119,6 +121,7 @@ __all__ = [
     "FewRelClusteringDocSet",
     "FewNerdClusteringDocSet",
     "FewEventClusteringDocSet",
+    "TaoTeChingDocSet",
     "TRExDocSet",
     "TRIZ40DocSet",
     "UTZappos50kDocSet",

@@ -438,6 +438,12 @@ newyorker_covers:
   composition:
     description: "Visual composition of the cover — use of color palette, negative space, framing, figure placement, typography integration, perspective, and overall visual structure."
 
+# Tao Te Ching (Ursula K. Le Guin translation)
+tao_te_ching:
+  philosophical_theme:
+    description: "What philosophical concept does this passage address? (wu wei, the Tao, simplicity, leadership, humility, non-contention, emptiness, the uncarved block, etc.)"
+  teaching_strategy:
+    description: "How does the passage convey its teaching? (paradox, metaphor, negation, direct instruction, analogy, reversal, enumeration, contrast, etc.)"
 # Whole Earth Catalog: Cover images (1968-1998)
 whole_earth_catalog:
   visual_style:
