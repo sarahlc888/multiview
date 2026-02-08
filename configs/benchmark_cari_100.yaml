@@ -1,4 +1,4 @@
-run_name: "benchmark_crossword"
+run_name: "benchmark_cari"
 logging:
   level: DEBUG
   output_file: "outputs/logs/${run_name}.log"
@@ -34,11 +34,11 @@ tasks:
     prelabeled_selection: "hard_negatives"
 
   task_list:
-    - document_set: crossword_clues
-      criterion: topic
+    - document_set: cari_aesthetics
+      criterion: aesthetic_name
       triplet_style: lm_tags
-    - document_set: crossword_clues
-      criterion: clue_type
+    - document_set: cari_aesthetics
+      criterion: visual_style
       triplet_style: lm_tags
 
 # Evaluation methods configuration
@@ -51,7 +51,5 @@ methods_to_evaluate:
       summary_preset: document_summary_gemini_flash
 
   embeddings:
-    - name: qwen3_8b_with_instructions
-      preset: instr_hf_qwen3_embedding_8b
-    - name: qwen3_8b_no_instructions
-      preset: hf_qwen3_embedding_8b
+    - name: voyage_multimodal_3_5
+      preset: voyage_multimodal_3_5

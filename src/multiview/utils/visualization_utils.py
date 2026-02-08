@@ -500,6 +500,7 @@ def _export_for_web_viewer(
     dendrogram_image: str | None = None,
     som_grid_image: str | None = None,
     quiet: bool = False,
+    raw_documents: list[Any] | None = None,
 ) -> None:
     """Export visualization artifacts for web viewer."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -537,6 +538,16 @@ def _export_for_web_viewer(
     with open(documents_path, "w", encoding="utf-8") as f:
         for doc in documents:
             f.write(_doc_to_viewer_text(doc).replace("\n", "\\n") + "\n")
+
+    if raw_documents is not None:
+        raw_texts = [_doc_to_viewer_text(d) for d in raw_documents]
+        doc_texts_out = [_doc_to_viewer_text(d) for d in documents]
+        if raw_texts != doc_texts_out:
+            raw_documents_path = output_dir / "raw_documents.txt"
+            with open(raw_documents_path, "w", encoding="utf-8") as f:
+                for doc in raw_documents:
+                    f.write(_doc_to_viewer_text(doc).replace("\n", "\\n") + "\n")
+            manifest["raw_documents_path"] = "raw_documents.txt"
 
     embeddings_path = output_dir / "embeddings.npy"
     # Always overwrite embeddings so filtered/rerun outputs are reflected immediately.
@@ -729,6 +740,7 @@ def _run_benchmark_embedding_mode(args: Any) -> None:
                 dendrogram_image=dendrogram_image_path,
                 som_grid_image=som_grid_image_path,
                 quiet=quiet,
+                raw_documents=documents,
             )
 
 

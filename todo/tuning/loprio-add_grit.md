@@ -24,3 +24,23 @@ Once we have this dataset, it useful not only for capability evaluations but als
 hm but we want to be able to do this zero shot.....
 maybe we should do a tuning method?
 need some tuned methods
+
+
+
+## Phase 4: Train a criteria-conditional embedding model
+
+**Goal:** A model that embeds documents differently depending on the criterion.
+
+**Depends on:** Benchmark to evaluate against, findings to know what to beat.
+
+- [ ] **Triplet export** — script to export quality-validated triplets as (anchor, pos, neg, criterion_description) tuples in SentenceTransformers format
+  - Source: `src/multiview/benchmark/triplets/quality_assurance.py`
+- [ ] **Criterion-conditioned fine-tuning** — prepend criterion description to each doc before embedding
+  - Base model: `nomic-embed-text-v1.5` or similar
+  - Loss: `MultipleNegativesRankingLoss` or `TripletLoss`
+  - Criterion description acts as task instruction that steers the embedding
+- [ ] **Evaluate** — train/test split on triplets, show improvement over base model
+- [ ] **Zero-shot transfer** — train on criteria A, B, C → evaluate on unseen criterion D
+- [ ] **Document rewriter variant** — instead of conditioning the embedder, train an LM to rewrite documents to expose a specific criterion (see `loprio-add_grit.md` notes)
+
+**Deliverable:** A model. Evaluated on the benchmark. Ideally with zero-shot transfer results.

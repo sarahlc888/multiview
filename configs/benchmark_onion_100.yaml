@@ -1,4 +1,4 @@
-run_name: "benchmark_crossword"
+run_name: "benchmark_onion"
 logging:
   level: DEBUG
   output_file: "outputs/logs/${run_name}.log"
@@ -34,11 +34,11 @@ tasks:
     prelabeled_selection: "hard_negatives"
 
   task_list:
-    - document_set: crossword_clues
+    - document_set: onion_headlines
       criterion: topic
       triplet_style: lm_tags
-    - document_set: crossword_clues
-      criterion: clue_type
+    - document_set: onion_headlines
+      criterion: joke_type
       triplet_style: lm_tags
 
 # Evaluation methods configuration
