@@ -10,6 +10,7 @@ import { TripletData } from '../types/manifest';
 interface ForceDirectedGraphProps {
   coords: Float32Array;
   documents: string[];
+  rawDocuments?: string[];  // Original documents before processing/summarization
   embeddings: Float32Array;
   triplets?: TripletData[];
   width?: number;
@@ -31,6 +32,7 @@ interface Link {
 export const ForceDirectedGraph: React.FC<ForceDirectedGraphProps> = ({
   coords,
   documents,
+  rawDocuments,
   embeddings,
   triplets,
   width = 1000,
@@ -122,9 +124,12 @@ export const ForceDirectedGraph: React.FC<ForceDirectedGraphProps> = ({
     return edges;
   }, [embeddingsData, threshold, kCap, metric]);
 
+  // Use raw documents for tooltips if available, otherwise fall back to processed documents
+  const tooltipDocuments = rawDocuments || documents;
+
   // Initialize nodes and simulation
   useEffect(() => {
-    const nodes: Node[] = documents.map((label, i) => ({
+    const nodes: Node[] = tooltipDocuments.map((label, i) => ({
       id: i,
       label,
       x: (Math.random() - 0.5) * 200,
@@ -161,7 +166,7 @@ export const ForceDirectedGraph: React.FC<ForceDirectedGraphProps> = ({
     return () => {
       simulation.stop();
     };
-  }, [documents, edges]);
+  }, [documents, tooltipDocuments, edges]);
 
   // Render loop
   useEffect(() => {
@@ -318,7 +323,15 @@ export const ForceDirectedGraph: React.FC<ForceDirectedGraphProps> = ({
         setTooltip(null);
       } else {
         const node = nodesRef.current[closest.id];
-        const text = node.label;
+        const rawText = node.label;
+        const summaryText = documents[node.id];
+
+        // Build tooltip with raw text and summary (if different)
+        let text = rawText;
+        if (rawDocuments && rawText !== summaryText) {
+          text = `📄 Raw:\n${rawText}\n\n📝 Summary:\n${summaryText}`;
+        }
+
         const x = Math.min(Math.max(offsetX + 12, 8), rect.width - 220);
         const y = Math.min(Math.max(offsetY + 12, 8), rect.height - 40);
         setTooltip({ text, x, y });

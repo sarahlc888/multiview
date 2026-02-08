@@ -37,6 +37,9 @@ def _task_dir(output_dir: str | Path, task_name: str) -> Path:
     return task_dir
 
 
+_SKIP_SENTINEL = object()
+
+
 def _clean_document_for_json(doc: Any) -> Any:
     """Clean a document for JSON serialization.
 
@@ -47,14 +50,19 @@ def _clean_document_for_json(doc: Any) -> Any:
         clean_doc = {}
         for k, v in doc.items():
             if not k.startswith("_"):
-                clean_doc[k] = _clean_document_for_json(v)
+                cleaned = _clean_document_for_json(v)
+                if cleaned is not _SKIP_SENTINEL:
+                    clean_doc[k] = cleaned
         return clean_doc
     elif isinstance(doc, set):
         return [_clean_document_for_json(item) for item in doc]
     elif isinstance(doc, list):
         return [_clean_document_for_json(item) for item in doc]
-    else:
+    elif isinstance(doc, str | int | float | bool | type(None)):
         return doc
+    else:
+        # Skip non-serializable objects (e.g. PIL Images)
+        return _SKIP_SENTINEL
 
 
 def save_documents_jsonl(
@@ -954,13 +962,60 @@ def triplet_config_matches(
     return c1 == c2
 
 
+def save_doc_metadata_json(
+    *, doc_metadata: list[dict], output_dir: str | Path, task_name: str
+) -> Path:
+    """Save document metadata as JSON to `{output_dir}/{task_name}/doc_metadata.json`."""
+    task_dir = _task_dir(output_dir, task_name)
+    output_file = task_dir / "doc_metadata.json"
+    with open(output_file, "w", encoding="utf-8") as f:
+        json.dump(doc_metadata, f, indent=2)
+    logger.info(
+        f"Saved doc metadata for {len(doc_metadata)} documents to {output_file}"
+    )
+    return output_file
+
+
+def load_doc_metadata_json(
+    *, output_dir: str | Path, task_name: str
+) -> list[dict] | None:
+    """Load document metadata from `{output_dir}/{task_name}/doc_metadata.json`.
+
+    Returns None if the file doesn't exist.
+    """
+    task_dir = Path(output_dir) / task_name
+    metadata_file = task_dir / "doc_metadata.json"
+    if not metadata_file.exists():
+        return None
+    with open(metadata_file) as f:
+        return json.load(f)
+
+
 def save_task_documents(task: _TaskLike, output_dir: str | Path) -> Path:
-    """Save a Task's documents to JSONL under `{output_dir}/{task_name}/documents.jsonl`."""
+    """Save a Task's documents to JSONL under `{output_dir}/{task_name}/documents.jsonl`.
+
+    Also saves doc_metadata.json if the task's document_set provides metadata.
+    """
     if task.documents is None:
         raise RuntimeError("Must call load_documents() before saving documents")
-    return save_documents_jsonl(
+    result = save_documents_jsonl(
         documents=task.documents, output_dir=output_dir, task_name=task.get_task_name()
     )
+
+    # Collect and save document metadata if available
+    document_set = getattr(task, "document_set", None)
+    if document_set is not None and hasattr(document_set, "get_document_metadata"):
+        metadata_list = [
+            document_set.get_document_metadata(i) for i in range(len(task.documents))
+        ]
+        if any(m for m in metadata_list):
+            save_doc_metadata_json(
+                doc_metadata=metadata_list,
+                output_dir=output_dir,
+                task_name=task.get_task_name(),
+            )
+
+    return result
 
 
 def save_task_annotations(task: _TaskLike, output_dir: str | Path) -> Path:

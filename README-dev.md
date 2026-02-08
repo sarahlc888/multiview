@@ -1,4 +1,27 @@
 
+## Project components
+- Triplets benchmark
+- Tools for corpus analysis and visualization
+- Finetuning
+
+
+
+## Task types
+
+- classification/clustering-style tasks
+    - possible to achieve strong performance with very lossing
+- retrieval-style tasks
+    - classification style treatment is very lossy... a more faithful setting is sparse matches... but this requires synthesis
+
+
+
+## Motivating applications
+- Graph databases and [Swanson linking](https://en.wikipedia.org/wiki/Literature-based_discovery#Swanson_linking)
+
+
+
+
+
 ## Example commands
 - Generate 256 triples for `gsm8k/arithmetic_operations`
 - Evaluate 4 methods

@@ -1,5 +1,15 @@
 # Multiview: scalable evaluations for conditional semantic similarity
 
+Standard embedding models prioritize general notions of semantic similarity. **Multiview evaluates how well embedding models can represent similarity according to specific criteria.**
+
+For example, two math word problems might be similar in their arithmetic structure (both use the distance formula) but different in their narrative setup (one about walking, another about driving). A good instruction-tuned embedding model should be able to represent *both* views depending on what you ask for.
+
+**This benchmark measures that capability.** Given a corpus of documents and a criteria (e.g., "arithmetic structure" or "narrative setup"), Multiview generates evaluation triplets and tests whether models can distinguish relevant matches from irrelevant ones.
+
+
+---
+
+
 ## Overview
 
 - Semantic similarity is **criteria-dependent**.
@@ -26,6 +36,20 @@ conditioned on **arbitrary criteria**.
     - ...
     - See [TASKS_TABLE.md](../TASKS_TABLE.md) for additional examples.
 
+## Method
+Given a **corpus of unlabeled documents** and **a freetext criteria**, the pipeline:
+1. Annotates each document with how it relates to the criteria (using LM judges)
+2. Creates criteria-specific triplets `(anchor, positive, negative)` where anchor-positive share the criteria better than anchor-negative
+3. Evaluates how well embedding models, rerankers, and LMs can distinguish positives from negatives
+
+**Evaluation metric**: Accuracy rate over triplets.
+
+**Example tasks**:
+- GSM8K problems by arithmetic structure vs. narrative setup
+- Crossword clues by answer topic vs. clue type
+- Haiku by literal imagery vs. philosophical meaning
+- Code snippets by algorithm vs. domain
+- See [TASKS_TABLE.md](../TASKS_TABLE.md) for the full benchmark.
 
 ## Related work
 - Conditional semantic similarity is a canonical task in computer vision and NLP. However, existing benchmarks focus primarily on simple conditions and sentence-length texts.
@@ -33,10 +57,12 @@ conditioned on **arbitrary criteria**.
 - See [Related Work](sections/0_related_work.md) for references, including a discussion of instructed retrieval benchmarks.
 
 ## Technical artifacts
-1. **Data generation pipeline**. A general-purpose data generation pipeline that creates criteria-conditional triplets from unlabeled document sets. Using more capable LM judges, it can scale to complex documents and criteria. See [Data Generation](sections/1_data_gen.md).
-2. **Benchmark**. A benchmark of different document sets and criteria, which includes
-data generated via the above method as well as data adapted from pre-existing sources.
-3. **Leaderboard**. Evaluation results for instruction-tuned embedding models, rerankers, embedding models with query expansion, and additional baselines. See [Scoring Methods](sections/2_scoring_methods.md) and [Results](sections/3_results.md).
+
+1. **Data generation pipeline**: Scalable method for creating criteria-conditional triplets from unlabeled documents. Can be adapted to new domains and used to generate training data. See [Data Generation](sections/1_data_gen.md).
+
+2. **Benchmark suite**: 15+ document types with 2-4 criteria each, including data generated via our pipeline and data adapted from existing sources.
+
+3. **Baseline results**: Evaluation of instruction-tuned embedding models, rerankers, query expansion methods, and LM-based scorers. Current models show inconsistent performance across criteria. See [Scoring Methods](sections/2_scoring_methods.md) and [Results](sections/3_results.md).
 
 
 ## Future work
@@ -50,6 +76,3 @@ To that end, it could be interesting to tune a small MLP or linear linear, or a 
 - However, when moving beyond toy criteria, it seems difficult to train performant embedding models without including a generative reasoning component. It could also be interesting to finetune dedicated "document rewriters" for use with bm25 or a frozen embedding model. (Triplet correctness could serve as a reward signal for prompt optimization with GEPA or tuning with RL.
 In this view, the criteria description and schema is **privileged information** used by the "verifier".
 The resulting models would be akin to "advisor models" for the downstream embedding models ([Asawa 2025](https://arxiv.org/abs/2510.02453)).
-
-## Motivating applications
-- Graph databases and [Swanson linking](https://en.wikipedia.org/wiki/Literature-based_discovery#Swanson_linking)

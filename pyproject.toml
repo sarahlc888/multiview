@@ -39,6 +39,11 @@ providers = [
     "huggingface-hub>=0.20.0",
     "voyageai>=0.3.0",
 ]
+# DSPy-based prompt tuning (GEPA)
+tuning = [
+    "dspy-ai>=2.6.0",
+    "scipy>=1.11.0",
+]
 # Visualization tools
 viz = [
     "matplotlib>=3.7.0",
@@ -52,7 +57,7 @@ viz = [
 ]
 # All optional dependencies for full testing
 all = [
-    "multiview[dev,providers,viz]",
+    "multiview[dev,providers,viz,tuning]",
 ]
 
 [tool.ruff]

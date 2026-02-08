@@ -2,13 +2,14 @@
  * ScatterPlot renderer for t-SNE, SOM, UMAP, and PCA visualizations.
  */
 
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import { TripletData } from '../types/manifest';
 
 interface ScatterPlotProps {
   coords: Float32Array;
   documents: string[];
+  rawDocuments?: string[];  // Original documents before processing/summarization
   thumbnailUrls?: (string | null)[];
   triplets?: TripletData[];
   displayMode?: 'points' | 'thumbnails';
@@ -17,11 +18,14 @@ interface ScatterPlotProps {
   onSelectDocument?: (index: number | null) => void;
   highlightedIndex?: number | null;
   onHoverDocument?: (index: number | null) => void;
+  colorByField?: string;
+  docMetadata?: Record<string, string>[];
 }
 
 export const ScatterPlot: React.FC<ScatterPlotProps> = ({
   coords,
   documents,
+  rawDocuments,
   thumbnailUrls,
   triplets,
   displayMode = 'thumbnails',
@@ -30,6 +34,8 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
   onSelectDocument,
   highlightedIndex,
   onHoverDocument,
+  colorByField,
+  docMetadata,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -41,6 +47,32 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
   const hasThumbnailsAvailable = thumbnailUrls && thumbnailUrls.some(url => url !== null);
   const useThumbnails = displayMode === 'thumbnails' && hasThumbnailsAvailable;
   const hasTriplets = triplets && triplets.length > 0;
+
+  // Use raw documents for tooltips if available, otherwise fall back to processed documents
+  const tooltipDocuments = rawDocuments || documents;
+
+  const colorScale = useMemo(() => {
+    if (!colorByField || !docMetadata) return null;
+    const uniqueValues = Array.from(
+      new Set(
+        docMetadata
+          .map((m) => m?.[colorByField])
+          .filter((v): v is string => v != null)
+      )
+    ).sort();
+    if (uniqueValues.length === 0) return null;
+    return d3.scaleOrdinal<string, string>()
+      .domain(uniqueValues)
+      .range(d3.schemeCategory10);
+  }, [colorByField, docMetadata]);
+
+  const getPointColor = (index: number): string => {
+    if (colorScale && docMetadata) {
+      const value = docMetadata[index]?.[colorByField!];
+      if (value != null) return colorScale(value);
+    }
+    return '#4a90e2';
+  };
 
   // Reset triplet index when selected point changes
   useEffect(() => {
@@ -138,10 +170,24 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
           setHoveredIndex(index);
           onHoverDocument?.(index);
 
+          // Build tooltip with raw text and summary (if different)
+          const rawText = tooltipDocuments[index] || `Point ${index}`;
+          const summaryText = documents[index];
+          let tooltipText = rawText;
+
+          // If raw and summary are different, show both
+          if (rawDocuments && rawText !== summaryText) {
+            const rawDisplay = rawText.length > 300 ? rawText.slice(0, 300) + '...' : rawText;
+            const summaryDisplay = summaryText.length > 300 ? summaryText.slice(0, 300) + '...' : summaryText;
+            tooltipText = `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+          } else {
+            tooltipText = rawText.length > 500 ? rawText.slice(0, 500) + '...' : rawText;
+          }
+
           setTooltip({
             x: event.pageX,
             y: event.pageY,
-            text: documents[index] || `Point ${index}`,
+            text: tooltipText,
           });
         })
         .on('mouseleave', function (event, d) {
@@ -174,7 +220,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
         .attr('cx', (d) => xScale(d[0]))
         .attr('cy', (d) => yScale(d[1]))
         .attr('r', (d, i) => i === selectedPointIndex ? 9 : 6)
-        .attr('fill', (d, i) => i === selectedPointIndex ? '#ff6b6b' : '#4a90e2')
+        .attr('fill', (d, i) => i === selectedPointIndex ? '#ff6b6b' : getPointColor(i))
         .attr('opacity', (d, i) => i === selectedPointIndex ? 1 : 0.7)
         .attr('stroke', (d, i) => i === selectedPointIndex ? '#ff6b6b' : '#fff')
         .attr('stroke-width', (d, i) => i === selectedPointIndex ? 2.5 : 1)
@@ -191,10 +237,24 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
           setHoveredIndex(index);
           onHoverDocument?.(index);
 
+          // Build tooltip with raw text and summary (if different)
+          const rawText = tooltipDocuments[index] || `Point ${index}`;
+          const summaryText = documents[index];
+          let tooltipText = rawText;
+
+          // If raw and summary are different, show both
+          if (rawDocuments && rawText !== summaryText) {
+            const rawDisplay = rawText.length > 300 ? rawText.slice(0, 300) + '...' : rawText;
+            const summaryDisplay = summaryText.length > 300 ? summaryText.slice(0, 300) + '...' : summaryText;
+            tooltipText = `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+          } else {
+            tooltipText = rawText.length > 500 ? rawText.slice(0, 500) + '...' : rawText;
+          }
+
           setTooltip({
             x: event.pageX,
             y: event.pageY,
-            text: documents[index] || `Point ${index}`,
+            text: tooltipText,
           });
         })
         .on('mouseleave', function (event, d) {
@@ -202,7 +262,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
           if (index !== selectedPointIndex) {
             d3.select(this)
               .attr('r', 6)
-              .attr('fill', '#4a90e2')
+              .attr('fill', getPointColor(index))
               .attr('opacity', 0.7);
           }
           setHoveredIndex(null);
@@ -349,7 +409,7 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
       .call(yAxis)
       .style('font-size', '10px');
 
-  }, [coords, documents, thumbnailUrls, useThumbnails, triplets, selectedTripletIndex, selectedPointIndex, showTriplets, hoveredTripletRole, width, height, highlightedIndex, onHoverDocument]);
+  }, [coords, documents, thumbnailUrls, useThumbnails, triplets, selectedTripletIndex, selectedPointIndex, showTriplets, hoveredTripletRole, width, height, highlightedIndex, onHoverDocument, colorByField, docMetadata]);
 
   // Filter triplets by selected point for sidebar display
   let displayTriplets = triplets || [];
@@ -424,14 +484,40 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
               padding: '8px 12px',
               borderRadius: '4px',
               fontSize: '12px',
-              maxWidth: '300px',
+              maxWidth: '500px',
+              maxHeight: '300px',
+              overflowY: 'auto',
               pointerEvents: 'none',
               zIndex: 1000,
               whiteSpace: 'pre-wrap',
             }}
           >
-            {tooltip.text.slice(0, 200)}
-            {tooltip.text.length > 200 ? '...' : ''}
+            {tooltip.text}
+          </div>
+        )}
+        {colorScale && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'rgba(255, 255, 255, 0.92)',
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              padding: '8px 12px',
+              fontSize: '12px',
+              pointerEvents: 'none',
+              maxHeight: '200px',
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '4px' }}>{colorByField}</div>
+            {colorScale.domain().map((value) => (
+              <div key={value} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', background: colorScale(value), flexShrink: 0 }} />
+                <span>{value}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -463,9 +549,19 @@ export const ScatterPlot: React.FC<ScatterPlotProps> = ({
           {selectedPointIndex !== null && (
             <div style={{ marginBottom: '15px', padding: '10px', background: '#e3f2fd', borderRadius: '4px', fontSize: '13px' }}>
               <strong>Selected Point: {selectedPointIndex}</strong>
-              <div style={{ marginTop: '6px', maxHeight: '100px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                {documents[selectedPointIndex].slice(0, 300)}
-                {documents[selectedPointIndex].length > 300 ? '...' : ''}
+              <div style={{ marginTop: '6px', maxHeight: '200px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                {(() => {
+                  const rawText = tooltipDocuments[selectedPointIndex];
+                  const summaryText = documents[selectedPointIndex];
+
+                  if (rawDocuments && rawText !== summaryText) {
+                    const rawDisplay = rawText.slice(0, 250) + (rawText.length > 250 ? '...' : '');
+                    const summaryDisplay = summaryText.slice(0, 250) + (summaryText.length > 250 ? '...' : '');
+                    return `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+                  }
+
+                  return rawText.slice(0, 300) + (rawText.length > 300 ? '...' : '');
+                })()}
               </div>
               {displayTriplets.length > 0 && (
                 <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>

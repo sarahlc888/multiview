@@ -1,0 +1,27 @@
+# Landmark GEPA tuning configuration
+# Usage: python scripts/tune_landmarks.py
+
+data:
+  benchmark_dir: outputs/benchmark_haiku
+  task_filter: null       # optional substring filter on task dirs
+  min_quality: 2          # min quality_assessment.rating
+  use_criterion_description: true
+  per_criterion_triplets: true  # true = each criterion scored against own triplets only;
+                                # false = all criteria share merged triplets (cross-criteria signal)
+  train_ratio: 0.6
+  val_ratio: 0.2
+
+lm:
+  model: "gemini/gemini-2.5-flash-lite"
+
+embedding_preset: openai_embedding_small
+domain: "general"
+num_queries: 10
+
+gepa:
+  rollout_budget: 200
+  reflection_lm_model: "gemini/gemini-2.5-flash-lite"
+  reflection_minibatch_size: 3
+
+output_dir: outputs/tune_landmarks
+seed: 42

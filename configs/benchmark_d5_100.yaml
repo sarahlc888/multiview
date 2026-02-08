@@ -1,0 +1,61 @@
+run_name: "benchmark_d5"
+logging:
+  level: DEBUG
+  output_file: "outputs/logs/${run_name}.log"
+seed: 42
+use_cache: true
+reuse_cached_triplets: true
+step_through: false
+
+# Auto-visualization configuration
+auto_visualize: true  # Generate visualizations after evaluation (default: true)
+visualization:
+  reducers: ["tsne", "umap", "pca", "som", "dendrogram"]  # All available reducers (graph & heatmap always available)
+  thumbnails: true    # Use thumbnails for image datasets and GSM8K (default: true)
+  output_dir: "outputs/viz"   # Output directory for visualizations (default: outputs/viz)
+
+# Task configuration
+tasks:
+  defaults:
+    max_docs: 20
+    max_triplets: 5
+    # max_docs: 200
+    # max_triplets: 25
+    num_synthetic_docs: 0
+    triplet_style: "prelabeled"
+    prelabeled_selection: "hard_negatives"
+    candidate_strategy: "multi"
+    use_spurious_hard_negs: true
+    embedding_preset: "hf_qwen3_embedding_8b"
+    max_num_candidates: 10
+    n_schema_samples: 10
+    rate_triplet_quality: false  # Skip LM validation for high-quality prelabeled data
+    min_triplet_quality: null
+    # Consistency validation - ensures swapped (a,c,b) gets Invalid rating
+    validate_consistency: true        # Enable consistency check (default: true)
+    consistency_max_invalid: 1        # Swapped triplet must be rated ≤1 Invalid (default: 1, strict)
+
+  task_list:
+    # D5 Applicability: Property-text matching in joint embedding space
+    # Headlines and descriptors embedded in the same space - the core instanceof demo
+    - document_set: d5_applicability
+      criterion: applicability
+      # max_docs: 500  # Limits texts only (60 properties always included)
+
+    # NOTE: d5_doc2doc variant exists for document-to-document comparison
+    # but is not the focus of this demo. See benchmark_prelabeled.yaml for examples.
+
+# Evaluation methods configuration
+methods_to_evaluate:
+  # Document rewriting: Generate summaries and compare them
+  document_rewrite:
+    # Embeddings over summaries
+    - name: dr_gemini_lite_openai_small
+      embedding_preset: openai_embedding_small
+      summary_preset: document_summary_gemini_flash
+
+  embeddings:
+    - name: qwen3_8b_with_instructions
+      preset: instr_hf_qwen3_embedding_8b
+    - name: qwen3_8b_no_instructions
+      preset: hf_qwen3_embedding_8b

@@ -15,6 +15,7 @@ import * as d3 from 'd3';
 interface DendrogramViewProps {
   coords: Float32Array;
   documents: string[];
+  rawDocuments?: string[];  // Original documents before processing/summarization
   thumbnailUrls?: (string | null)[];
   displayMode?: 'points' | 'thumbnails';
   linkageMatrix?: Float32Array;
@@ -273,6 +274,7 @@ function getClusterColors(numClusters: number): string[] {
 export const DendrogramView: React.FC<DendrogramViewProps> = ({
   coords,
   documents,
+  rawDocuments,
   thumbnailUrls,
   displayMode = 'thumbnails',
   linkageMatrix,
@@ -286,6 +288,9 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
   const hasThumbnailsAvailable = thumbnailUrls && thumbnailUrls.some(url => url !== null);
   const useThumbnails = displayMode === 'thumbnails' && hasThumbnailsAvailable;
+
+  // Use raw documents for tooltips if available, otherwise fall back to processed documents
+  const tooltipDocuments = rawDocuments || documents;
 
   // If we have a matplotlib-generated dendrogram image, just display that
   if (dendrogramImageUrl) {
@@ -384,7 +389,8 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
           .attr('opacity', 0.8);
       });
 
-      // Calculate grid layout for images
+      // Calculate grid layout for images (only show grid if we have thumbnails)
+      const showGrid = useThumbnails;
       const effectiveImagesPerRow = imagesPerRow || Math.min(n, Math.max(10, Math.floor(dendrogramWidth / 70)));
       const numRows = Math.ceil(n / effectiveImagesPerRow);
       const imageSize = useThumbnails ? 50 : 8;
@@ -394,8 +400,62 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
 
       console.log(`Dendrogram: ${n} leaves in ${numRows} rows (${effectiveImagesPerRow} per row), ${effectiveNumClusters} clusters`);
 
-      // Draw colored bands for clusters
-      if (useThumbnails) {
+      // Add interactive circles at actual leaf node positions (bottom of tree)
+      leafOrder.forEach((leafIdx) => {
+        const node = nodes[leafIdx];
+        const clusterId = clusterMap.get(leafIdx);
+        const nodeColor = clusterId !== undefined
+          ? clusterColors[clusterId % clusterColors.length]
+          : '#888888';
+
+        g.append('circle')
+          .attr('cx', xScale(node.x!))
+          .attr('cy', yScale(0))  // At the bottom of the dendrogram tree
+          .attr('r', 4)
+          .attr('fill', nodeColor)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1.5)
+          .style('cursor', 'pointer')
+          .on('mouseenter', function (event) {
+            d3.select(this)
+              .transition()
+              .duration(150)
+              .attr('r', 7)
+              .attr('stroke-width', 2.5);
+
+            // Build tooltip with raw text and summary (if different)
+            const rawText = tooltipDocuments[leafIdx] || `Doc ${leafIdx}`;
+            const summaryText = documents[leafIdx];
+            let tooltipText = rawText;
+
+            // If raw and summary are different, show both
+            if (rawDocuments && rawText !== summaryText) {
+              const rawDisplay = rawText.length > 300 ? rawText.slice(0, 300) + '...' : rawText;
+              const summaryDisplay = summaryText.length > 300 ? summaryText.slice(0, 300) + '...' : summaryText;
+              tooltipText = `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+            } else {
+              tooltipText = rawText.length > 500 ? rawText.slice(0, 500) + '...' : rawText;
+            }
+
+            setTooltip({
+              x: event.pageX,
+              y: event.pageY,
+              text: tooltipText,
+            });
+          })
+          .on('mouseleave', function () {
+            d3.select(this)
+              .transition()
+              .duration(150)
+              .attr('r', 4)
+              .attr('stroke-width', 1.5);
+
+            setTooltip(null);
+          });
+      });
+
+      // Draw colored bands for clusters (only if showing grid)
+      if (showGrid) {
         const bandHeight = 8;
         const bandY = dendrogramHeight + 5;
 
@@ -428,19 +488,20 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
         }
       }
 
-      // Render leaf images/points in grid layout
-      leafOrder.forEach((leafIdx, idx) => {
-        const gridRow = Math.floor(idx / effectiveImagesPerRow);
-        const gridCol = idx % effectiveImagesPerRow;
-        const xPos = gridCol * gridSpacingX + gridSpacingX / 2;
-        const yPos = gridStartY + gridRow * gridSpacingY;
+      // Render leaf images in grid layout (only if we have thumbnails)
+      if (showGrid) {
+        leafOrder.forEach((leafIdx, idx) => {
+          const gridRow = Math.floor(idx / effectiveImagesPerRow);
+          const gridCol = idx % effectiveImagesPerRow;
+          const xPos = gridCol * gridSpacingX + gridSpacingX / 2;
+          const yPos = gridStartY + gridRow * gridSpacingY;
 
-        const clusterId = clusterMap.get(leafIdx);
-        const borderColor = clusterId !== undefined
-          ? clusterColors[clusterId % clusterColors.length]
-          : '#ccc';
+          const clusterId = clusterMap.get(leafIdx);
+          const borderColor = clusterId !== undefined
+            ? clusterColors[clusterId % clusterColors.length]
+            : '#ccc';
 
-        if (useThumbnails && thumbnailUrls && thumbnailUrls[leafIdx]) {
+          if (thumbnailUrls && thumbnailUrls[leafIdx]) {
           const thumbnailUrl = thumbnailUrls[leafIdx];
 
           const imageGroup = g.append('g')
@@ -479,10 +540,20 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
 
               d3.select(this).raise();
 
+              // Build tooltip with raw text and summary (if different)
+              const rawText = tooltipDocuments[leafIdx] || `Doc ${leafIdx}`;
+              const summaryText = documents[leafIdx];
+              let tooltipText = rawText;
+
+              // If raw and summary are different, show both
+              if (rawDocuments && rawText !== summaryText) {
+                tooltipText = `📄 Raw:\n${rawText}\n\n📝 Summary:\n${summaryText}`;
+              }
+
               setTooltip({
                 x: event.pageX,
                 y: event.pageY,
-                text: documents[leafIdx] || `Doc ${leafIdx}`,
+                text: tooltipText,
               });
             })
             .on('mouseleave', function () {
@@ -523,8 +594,9 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
 
               setTooltip(null);
             });
-        }
-      });
+          }
+        });
+      }
 
     } catch (error) {
       console.error('Error rendering dendrogram:', error);
@@ -536,14 +608,15 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
         .style('fill', '#f00');
     }
 
-  }, [coords, documents, thumbnailUrls, useThumbnails, linkageMatrix, width, height, imagesPerRow, numClusters]);
+  }, [coords, documents, tooltipDocuments, thumbnailUrls, useThumbnails, linkageMatrix, width, height, imagesPerRow, numClusters]);
 
   // Calculate dynamic height
   const n = documents.length;
+  const showGrid = displayMode === 'thumbnails' && hasThumbnailsAvailable;
   const effectiveImagesPerRow = imagesPerRow || Math.min(n, Math.max(10, Math.floor((width - 80) / 70)));
   const numRows = Math.ceil(n / effectiveImagesPerRow);
-  const gridHeight = numRows * 70 + 100;
-  const totalHeight = 300 + 50 + gridHeight + 80;  // dendrogram + gap + grid + margins
+  const gridHeight = showGrid ? (numRows * 70 + 100) : 0;
+  const totalHeight = 300 + 50 + gridHeight + 80;  // dendrogram + gap + grid (if shown) + margins
 
   return (
     <div style={{ position: 'relative', width: '100%', overflow: 'auto' }}>
@@ -568,14 +641,17 @@ export const DendrogramView: React.FC<DendrogramViewProps> = ({
             padding: '8px 12px',
             borderRadius: '6px',
             fontSize: '12px',
-            maxWidth: '400px',
+            maxWidth: '500px',
+            maxHeight: '300px',
+            overflowY: 'auto',
             pointerEvents: 'none',
             zIndex: 1000,
+            whiteSpace: 'pre-wrap',
             wordWrap: 'break-word',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           }}
         >
-          {tooltip.text.length > 300 ? tooltip.text.slice(0, 300) + '...' : tooltip.text}
+          {tooltip.text}
         </div>
       )}
     </div>

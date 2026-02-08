@@ -2,23 +2,21 @@
 
 This variant creates a joint embedding space containing:
 - Properties (60 descriptors formatted as "property: <text>")
-- Headlines (texts formatted as "headline: <text>")
-- Descriptions (texts formatted as "description: <text>")
+- Headlines (~2000 news headlines formatted as "headline: <text>")
 
-The task is to match properties to texts based on applicability.
+The task is to match properties to headlines based on applicability.
 
 STRUCTURE:
 ----------
 Documents (~2060 total):
   - 60 properties: "property: mention the coronavirus and the pandemic's effects"
-  - ~2000 texts: "headline: ..." or "description: ..." (alternating)
+  - ~2000 headlines: "headline: nsw records 16 new cases; all linked to known"
 
 Single criterion: "applicability"
-  - Determines which property-text pairs match
-  - No more description_0, description_1, etc.
+  - Determines which property-headline pairs match
 
-Applicability matrix: Shape (n_texts, n_properties)
-  - Matrix[text_idx, property_idx] = applicability score (0-1)
+Applicability matrix: Shape (n_headlines, n_properties)
+  - Matrix[headline_idx, property_idx] = applicability score (0-1)
   - Binarized at threshold (default 0.5)
 
 TRIPLET STRUCTURE:
@@ -28,9 +26,9 @@ Two types of triplets (mixed together):
 Type 1: Property-anchored
   Anchor: property: highlight struggles of certain industries
   Positive: headline: crew of stranded coal ship (applicable)
-  Negative: description: sports news (not applicable)
+  Negative: headline: sports news (not applicable)
 
-Type 2: Text-anchored
+Type 2: Headline-anchored
   Anchor: headline: north korea fires projectiles
   Positive: property: discuss politics and government responses (applicable)
   Negative: property: discuss criminal cases (not applicable)
@@ -42,9 +40,9 @@ Properties:
   1. property: discuss the politics of the situation, such as government responses
   2. property: discuss safety protocols and measures to prevent the spread
 
-Texts:
+Headlines:
   60. headline: nsw records 16 new cases; all linked to known
-  61. description: musical theatre star caroline oconnor swaps west end
+  61. headline: musical theatre star caroline oconnor swaps west end
   62. headline: coronavirus queensland cargo ship sunshine coast two new cases
 
 USAGE:
@@ -74,15 +72,14 @@ D5_applicability:
 WHAT IT TESTS:
 --------------
 This task evaluates whether an embedding model can:
-1. Embed properties and texts in the same space
-2. Recognize when a property is applicable to a text
-3. Retrieve applicable texts for a given property
-4. Retrieve applicable properties for a given text
-5. Be invariant to formatting (headline vs description)
+1. Embed properties and headlines in the same space
+2. Recognize when a property is applicable to a headline
+3. Retrieve applicable headlines for a given property
+4. Retrieve applicable properties for a given headline
 
 For embedding models:
-- Property side: "Given the following property, embed it so that it is close to texts that it is applicable to."
-- Text side: "Given the following text, embed it so that it is close to applicable properties."
+- Property side: "Given the following property, embed it so that it is close to headlines that it is applicable to."
+- Headline side: "Given the following headline, embed it so that it is close to applicable properties."
 """
 
 from __future__ import annotations
@@ -97,17 +94,17 @@ logger = logging.getLogger(__name__)
 
 
 class D5ApplicabilityDocSet(BaseDocSet):
-    """D5 property-text matching task in joint embedding space.
+    """D5 property-headline matching task in joint embedding space.
 
     Documents include:
     - All 60 properties: "property: <descriptor_text>"
-    - All ~2000 texts: "headline: <text>" or "description: <text>"
+    - All ~2000 headlines: "headline: <text>"
 
     Single criterion: "applicability"
-    - Determines which property-text pairs match
+    - Determines which property-headline pairs match
 
     Config parameters:
-        max_docs (int, optional): Maximum number of TEXT documents to load (properties always included)
+        max_docs (int, optional): Maximum number of headline documents to load (properties always included)
         binarization_threshold (float): Threshold for binarizing applicability scores (default: 0.5)
 
     Usage:
@@ -123,6 +120,13 @@ class D5ApplicabilityDocSet(BaseDocSet):
 
     # Single criterion for applicability matching
     KNOWN_CRITERIA = ["applicability"]
+
+    # Static criterion metadata (since we only have one criterion)
+    _CRITERION_METADATA = {
+        "applicability": {
+            "description": "Whether a property is applicable to a text",
+        }
+    }
 
     def __init__(self, config: dict | None = None):
         """Initialize D5ApplicabilityDocSet.
@@ -149,13 +153,6 @@ class D5ApplicabilityDocSet(BaseDocSet):
         # Load data
         self._load_data()
 
-        # Set up criterion metadata
-        self.CRITERION_METADATA = {
-            "applicability": {
-                "description": "Whether a property is applicable to a text",
-            }
-        }
-
     def _load_data(self) -> None:
         """Load D5 data."""
         self.property_names, self.text_contents, self.applicability_matrix = (
@@ -166,21 +163,16 @@ class D5ApplicabilityDocSet(BaseDocSet):
             f"{len(self.text_contents)} texts from D5 PKL"
         )
 
-    def _format_text(self, text: str, text_idx: int) -> str:
-        """Format text as either a headline or description.
+    def _format_text(self, text: str) -> str:
+        """Format text as a headline.
 
         Args:
             text: Raw text content
-            text_idx: Text index (used to alternate formatting)
 
         Returns:
-            Formatted text with prefix
+            Formatted text with headline prefix
         """
-        # Alternate between headline and description
-        if text_idx % 2 == 0:
-            return f"headline: {text}"
-        else:
-            return f"description: {text}"
+        return f"headline: {text}"
 
     def load_documents(self) -> list[Any]:
         """Load all documents (properties + texts).
@@ -199,13 +191,11 @@ class D5ApplicabilityDocSet(BaseDocSet):
         # Format all properties
         formatted_properties = [f"property: {prop}" for prop in self.property_names]
 
-        # Format all texts (alternating headline/description)
-        formatted_texts = [
-            self._format_text(text, idx) for idx, text in enumerate(self.text_contents)
-        ]
+        # Format all texts as headlines
+        formatted_headlines = [self._format_text(text) for text in self.text_contents]
 
-        # Combine: properties first, then texts
-        self.all_documents = formatted_properties + formatted_texts
+        # Combine: properties first, then headlines
+        self.all_documents = formatted_properties + formatted_headlines
         self.property_start_idx = 0
         self.text_start_idx = len(formatted_properties)
 
@@ -222,7 +212,7 @@ class D5ApplicabilityDocSet(BaseDocSet):
 
         logger.info(
             f"Loaded {len(formatted_properties)} properties and "
-            f"{len(formatted_texts)} texts = {len(self.all_documents)} total documents"
+            f"{len(formatted_headlines)} headlines = {len(self.all_documents)} total documents"
         )
 
         return self.all_documents
@@ -283,3 +273,22 @@ class D5ApplicabilityDocSet(BaseDocSet):
         return (
             "applicable" if score >= self.binarization_threshold else "not_applicable"
         )
+
+    def get_document_metadata(self, doc_idx: int) -> dict[str, Any]:
+        """Get metadata for a document at the given index.
+
+        Args:
+            doc_idx: Document index in all_documents
+
+        Returns:
+            Dict with doc_type ("property" or "headline")
+        """
+        if doc_idx < 0 or doc_idx >= len(self.all_documents):
+            return {}
+
+        if self.is_property(doc_idx):
+            return {"doc_type": "property"}
+        elif self.is_text(doc_idx):
+            return {"doc_type": "headline"}
+
+        return {}

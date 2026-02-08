@@ -38,6 +38,7 @@ npm install
 npm run dev
 ```
 
+
 ## Example
 
 ### Side-by-side of two criteria
@@ -47,8 +48,14 @@ npm run dev
 TODO add leaderboard here
 
 ## Commands for replicating experiments
-### Triplets
+
+<details>
+<summary><b>Triplets</b></summary>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     uv run python scripts/create_eval.py --config-name benchmark_zappos_100
     uv run python scripts/run_eval.py --config-name benchmark_zappos_100
@@ -57,45 +64,101 @@ TODO add leaderboard here
     npm install
     npm run dev
     ```
+    </details>
+
 - GSM8K problems
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python3 scripts/create_eval.py --config-name benchmark_gsm8k_schema_comparison
     python3 scripts/run_eval.py --config-name benchmark_gsm8k_schema_comparison
     ```
-### Corpus
-- *New Yorker* covers
+    </details>
+</details>
+
+<details>
+<summary><b>Corpus</b></summary>
+
+- <i>New Yorker</i> covers
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name corpus_new_yorker_covers
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_haiku_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_crossword_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_dickinson_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_hn_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_onion_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_met_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     python scripts/analyze_corpus.py --config-name benchmark_gsm8k_100
     ```
+    </details>
+
 - TODO
+    <details>
+    <summary>Show commands</summary>
+
     ```bash
     # TODO
     ```
+    </details>
+
+</details>

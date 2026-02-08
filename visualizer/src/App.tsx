@@ -2,7 +2,7 @@
  * Main App component for Multiview Visualizer.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DatasetIndex, VisualizationMode, VisualizationData, TripletLogEntry } from './types/manifest';
 import { loadDatasetIndex, loadVisualizationData, loadBenchmarkResults, loadTripletLogs, loadEmbeddingsData } from './utils/dataLoader';
 import { ModeRenderer } from './render/ModeRenderer';
@@ -322,6 +322,7 @@ const App: React.FC = () => {
   const [selectedMethod, setSelectedMethod] = useState<string>('');
   const [selectedMode, setSelectedMode] = useState<VisualizationMode>('tsne');
   const [displayMode, setDisplayMode] = useState<'points' | 'thumbnails'>('thumbnails');
+  const [selectedColorBy, setSelectedColorBy] = useState<string>('none');
 
   // Benchmark results
   const [results, setResults] = useState<BenchmarkResults | null>(null);
@@ -337,6 +338,24 @@ const App: React.FC = () => {
   const [currentCriterionNeighbors, setCurrentCriterionNeighbors] = useState<CurrentCriterionNeighbors | null>(null);
   const [loadingNeighbors, setLoadingNeighbors] = useState<boolean>(false);
   const [neighborsError, setNeighborsError] = useState<string | null>(null);
+
+  const availableColorByFields = useMemo(() => {
+    if (!vizData?.docMetadata) return [];
+    const fieldSet = new Set<string>();
+    for (const meta of vizData.docMetadata) {
+      if (meta) {
+        for (const key of Object.keys(meta)) {
+          fieldSet.add(key);
+        }
+      }
+    }
+    return Array.from(fieldSet).sort();
+  }, [vizData?.docMetadata]);
+
+  // Reset colorBy when dataset/criterion/method changes
+  useEffect(() => {
+    setSelectedColorBy('none');
+  }, [selectedDataset, selectedCriterion, selectedMethod]);
 
   const isPseudologitSelected = selectedMethod.toLowerCase().includes('pseudologit');
   const isCorpusView = selectedViewKind === 'corpus';
@@ -1022,6 +1041,23 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
+
+          {availableColorByFields.length > 0 && (
+            <div className="control-group">
+              <label>Color by:</label>
+              <select
+                value={selectedColorBy}
+                onChange={(e) => setSelectedColorBy(e.target.value)}
+              >
+                <option value="none">None</option>
+                {availableColorByFields.map((field) => (
+                  <option key={field} value={field}>
+                    {field}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         <div className="regen-command-panel">
@@ -1110,6 +1146,8 @@ const App: React.FC = () => {
               width={1000}
               height={700}
               onSelectDocument={setSelectedDocumentIndex}
+              colorByField={selectedColorBy !== 'none' ? selectedColorBy : undefined}
+              docMetadata={vizData.docMetadata}
             />
           </div>
         )}

@@ -17,6 +17,8 @@ interface ModeRendererProps {
   width?: number;
   height?: number;
   onSelectDocument?: (index: number | null) => void;
+  colorByField?: string;
+  docMetadata?: Record<string, string>[];
 }
 
 export const ModeRenderer: React.FC<ModeRendererProps> = ({
@@ -26,6 +28,8 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
   width = 800,
   height = 600,
   onSelectDocument,
+  colorByField,
+  docMetadata,
 }) => {
   switch (mode) {
     case 'tsne':
@@ -35,12 +39,15 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
         <ScatterPlot
           coords={data.coords}
           documents={data.documents}
+          rawDocuments={data.rawDocuments}
           thumbnailUrls={data.thumbnailUrls}
           triplets={data.triplets}
           displayMode={displayMode}
           width={width}
           height={height}
           onSelectDocument={onSelectDocument}
+          colorByField={colorByField}
+          docMetadata={docMetadata}
         />
       );
 
@@ -49,6 +56,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
         <SOMGridView
           coords={data.coords}
           documents={data.documents}
+          rawDocuments={data.rawDocuments}
           thumbnailUrls={data.thumbnailUrls}
           triplets={data.triplets}
           displayMode={displayMode}
@@ -63,6 +71,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
         <DendrogramView
           coords={data.coords}
           documents={data.documents}
+          rawDocuments={data.rawDocuments}
           thumbnailUrls={data.thumbnailUrls}
           displayMode={displayMode}
           linkageMatrix={data.linkageMatrix}
@@ -77,6 +86,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
         <ForceDirectedGraph
           coords={data.coords}
           documents={data.documents}
+          rawDocuments={data.rawDocuments}
           embeddings={data.embeddings}
           triplets={data.triplets}
           width={width}
@@ -89,6 +99,7 @@ export const ModeRenderer: React.FC<ModeRendererProps> = ({
         <HeatmapView
           embeddings={data.embeddings}
           documents={data.documents}
+          rawDocuments={data.rawDocuments}
           triplets={data.triplets}
           manifest={data.manifest}
           width={width}

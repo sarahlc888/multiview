@@ -63,7 +63,8 @@ crossword:
     description: "The 'type' of crossword clue. Independent of the topic. The archetype or prototype of the clue type. The kinds of strategies or 'moves' that clue writers might pull."
     category_schema_hint: "Consider categories like: straight definition, wordplay/pun, cryptic, fill-in-the-blank, trivia/knowledge, abbreviation, themed, and more."
     tag_schema_hint: "Create tags for a bunch of different types of clues: e.g. direct_definition (provides a standard definition or synonym for the word that is the answer), oblique_definition (provides a definition of the word that is the answer, but in a way that is very cryptic), direct_reference (refers directly to a notable person/event/object/place via their claim to fame), niche_reference (refers to a trivia factoid that would make the answer obvious, if known), anagram (uses an anagram of the answer), cross_reference (references to other parts of the puzzle), needs_letter (extremely hard and probably not able to be solved without knowing some of the letters), answer_is_word, answer_is_proper_noun, answer_is_abbrev, answer_is_phrase, answer_is_fragment, etc."
-
+  ambiguity:
+    description: is the clue underspecified? could there be multiple possible answers?
   type_of_challenge:
     description: "What makes the clue difficult to solve? What is the source of ambiguity? Does it reference obscure facts? Is the hint obfuscated by word play?"
     default_hint: "Consider distinctions like: niche_fact (Does the clue reference a specific piece of niche knowledge that would unlock the answer?), many_options (Does the clue narrow down to a particular class of items without providing a hint toward which one is the right answer?), unexpected_word_use (Is the clue misleading in that it requires the solver to interpret a word in an unconventional sense, which they would be unlikely to guess at first?), very_cryptic_needs_letters (Does the clue seem impossible to solve without knowing some of the letters?), puzzle_dependent (Is the clue difficult to solve because it is dependent on the puzzle as a whole, rather than just the clue itself?). Also consider tags like is_a_thinker (you might be able to get it by thinking harder about it), know_it_or_dont (more time would not help solve); clear_clue (it's obvious what the clue says, you just don't know the answer), ambiguous_clue (it's not clear what the clue itself is even saying), misleading_clue (the clue is actively misleading in some way)."
@@ -426,6 +427,22 @@ met_museum:
     description: "Visual composition of the artwork. How the image is structured — use of space, color palette, lighting, perspective, symmetry, density, focal points, foreground/background relationships, etc."
   period_or_movement:
     description: "The historical period or artistic movement the artwork belongs to. When and in what cultural/artistic context was it created — Ancient, Medieval, Renaissance, Baroque, Impressionist, Modern, Contemporary, etc."
+  animacy:
+    description: "How animate or alive does the artwork feel? Does it convey a sense of movement, dynamism, energy, or life? Consider presence of living beings, implied motion, vitality versus stillness, static versus dynamic energy."
+  expression:
+    description: "Emotional expression conveyed in the artwork, particularly in portraits and figurative works. What feelings, moods, or psychological states are expressed through facial expressions, body language, or overall atmosphere — joy, melancholy, serenity, anguish, contemplation, pride, etc."
+  form:
+    description: "The physical form, medium, and material nature of the artwork. What type of object is it — painting, sculpture, ceramic, textile, metalwork, photograph, mixed media? What are its dimensional qualities and material characteristics? Distinct from compositional structure."
+  content:
+    description: "What the artwork is fundamentally about at a conceptual or narrative level, beyond literal subject matter. Underlying themes, allegories, symbolic meanings, narrative arcs, philosophical ideas, or cultural messages being communicated."
+  influence_network:
+    description: "Stylistic lineage and artistic influence. Which artworks seem to share common artistic ancestors or stylistic DNA? What traditions, schools, or influences connect different pieces through shared techniques, motifs, or aesthetic approaches?"
+  unusual_features:
+    description: "What makes this artwork unusual, distinctive, or stand out from others? Unexpected elements, uncommon techniques, surprising subject choices, rare materials, unconventional approaches, or other distinguishing characteristics that make it notable or unique."
+  number_of_people:
+    description: "How many people or human figures are depicted in the artwork? Solo portrait, pair, small group, crowd, or no people at all. Consider both primary figures and background figures."
+  use_of_color:
+    description: "Color palette choices and color usage strategies. What colors dominate — warm or cool tones, monochromatic or polychromatic, muted or vibrant, earth tones or jewel tones? How is color used to create mood, contrast, harmony, or emphasis?"
 
 # New Yorker Covers: Magazine cover illustrations (1925-2025)
 newyorker_covers:

@@ -51,6 +51,8 @@ class AnalogiesDocSet(BaseDocSet):
         # Initialize precomputed annotations as instance variable
         # Will be populated during load_documents()
         self.PRECOMPUTED_ANNOTATIONS = {}
+        # Store document metadata for visualization
+        self._doc_metadata: list[dict[str, Any]] = []
 
     def load_documents(self) -> list[Any]:
         """Load analogy pairs from HuggingFace.
@@ -110,7 +112,11 @@ class AnalogiesDocSet(BaseDocSet):
                     stem_text = " : ".join(stem)
                     documents.append(stem_text)
                     metadata_list.append(
-                        {"text": stem_text, "analogy_type": analogy_type}
+                        {
+                            "text": stem_text,
+                            "analogy_type": analogy_type,
+                            "pair_type": "stem",
+                        }
                     )
 
                 # Extract answer pair
@@ -122,7 +128,11 @@ class AnalogiesDocSet(BaseDocSet):
                         answer_text = " : ".join(answer_choice)
                         documents.append(answer_text)
                         metadata_list.append(
-                            {"text": answer_text, "analogy_type": analogy_type}
+                            {
+                                "text": answer_text,
+                                "analogy_type": analogy_type,
+                                "pair_type": "answer",
+                            }
                         )
 
             except (KeyError, IndexError, ValueError, TypeError) as e:
@@ -145,6 +155,11 @@ class AnalogiesDocSet(BaseDocSet):
 
         # Build precomputed annotations for analogy_type criterion
         self._build_precomputed_annotations(metadata_list)
+
+        # Store metadata for get_document_metadata
+        # Create a mapping from document text to metadata
+        metadata_map = {item["text"]: item for item in metadata_list if "text" in item}
+        self._doc_metadata = [metadata_map.get(doc, {}) for doc in documents]
 
         return documents
 
@@ -196,3 +211,22 @@ class AnalogiesDocSet(BaseDocSet):
         logger.info(
             f"Built precomputed annotations for analogy_type: {len(annotations)} documents"
         )
+
+    def get_document_metadata(self, doc_idx: int) -> dict[str, Any]:
+        """Get metadata for a document at the given index.
+
+        Args:
+            doc_idx: Document index
+
+        Returns:
+            Dict with pair_type ("stem" or "answer") and analogy_type
+        """
+        if 0 <= doc_idx < len(self._doc_metadata):
+            metadata = self._doc_metadata[doc_idx]
+            result = {}
+            if "pair_type" in metadata:
+                result["pair_type"] = metadata["pair_type"]
+            if "analogy_type" in metadata:
+                result["analogy_type"] = metadata["analogy_type"]
+            return result
+        return {}

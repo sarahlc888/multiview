@@ -1,0 +1,25 @@
+# Rewriter GEPA tuning configuration
+# Usage: python scripts/tune_rewriter.py
+
+data:
+  benchmark_dir: outputs/benchmark_haiku
+  task_filter: null       # optional substring filter on task dirs
+  min_quality: 2          # min quality_assessment.rating
+  use_criterion_description: true
+  train_ratio: 0.6
+  val_ratio: 0.2
+  # test_ratio is inferred as 1 - train_ratio - val_ratio
+
+lm:
+  model: "gemini/gemini-2.5-flash-lite"
+
+embedder:
+  model: "gemini/text-embedding-004"
+
+gepa:
+  rollout_budget: 200
+  reflection_lm_model: "gemini/gemini-2.5-flash-lite"
+  reflection_minibatch_size: 3
+
+output_dir: outputs/tune_rewriter
+seed: 42

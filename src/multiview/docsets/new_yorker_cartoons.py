@@ -1,15 +1,16 @@
-"""New Yorker Caption Contest cartoons docset.
+"""New Yorker Caption Contest cartoons docset (text-only).
 
 Loads cartoon caption contest entries from the HuggingFace dataset
 jmhessel/newyorker_caption_contest (explanation config). Text-only
-analysis using image descriptions and winning captions; thumbnail
-images available for display.
+analysis using image descriptions and winning captions; cartoon images
+available as thumbnails for visualization/dashboard.
 
 Each document contains:
+    - text: formatted "Cartoon: {desc}\nCaption: {caption}"
     - image_description: textual description of the cartoon
     - caption: the winning/funny caption
     - contest_number: contest identifier
-    - image: PIL Image (for thumbnail display)
+    - image: PIL Image (for thumbnail display, excluded from serialization)
 
 Example usage in benchmark config:
     tasks:
@@ -27,7 +28,6 @@ Config parameters:
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import tempfile
 from pathlib import Path
@@ -44,11 +44,11 @@ _THUMBNAIL_DIR = Path(tempfile.gettempdir()) / "newyorker_cartoons_thumbnails"
 
 
 class NewYorkerCartoonsDocSet(BaseDocSet):
-    """New Yorker Caption Contest cartoons (text-only with thumbnail images).
+    """New Yorker Caption Contest cartoons (text-only analysis with thumbnails).
 
     Loads from HuggingFace jmhessel/newyorker_caption_contest, explanation config.
-    Primary analysis is text-based (image description + caption); PIL images
-    are available as thumbnails for dashboard display.
+    Analysis is text-based using image descriptions and captions.
+    Cartoon images are available as thumbnails for visualization.
 
     Config parameters:
         max_docs (int, optional): Maximum documents to load
@@ -100,11 +100,25 @@ class NewYorkerCartoonsDocSet(BaseDocSet):
             if not image_description and not caption:
                 continue
 
+            desc = image_description.strip()
+            cap = caption.strip()
+            # Build text field for downstream pipeline compatibility
+            parts = []
+            if desc:
+                parts.append(f"Cartoon: {desc}")
+            if cap:
+                parts.append(f"Caption: {cap}")
+
+            # Save thumbnail to disk for visualization pipeline
+            contest_num = example.get("contest_number", "")
+            image_path = self._save_thumbnail(example.get("image"), contest_num)
+
             doc = {
-                "image_description": image_description.strip(),
-                "caption": caption.strip(),
-                "contest_number": example.get("contest_number", ""),
-                "image": example.get("image"),
+                "text": "\n".join(parts),
+                "image_description": desc,
+                "caption": cap,
+                "contest_number": contest_num,
+                "image_path": image_path,
             }
             documents.append(doc)
 
@@ -121,42 +135,26 @@ class NewYorkerCartoonsDocSet(BaseDocSet):
         return self._deduplicate(documents)
 
     def get_document_text(self, document: Any) -> str:
-        """Extract text from a document.
-
-        Returns cartoon description and caption as text for analysis.
-        """
+        """Extract text from a document."""
         if isinstance(document, dict):
-            desc = document.get("image_description", "")
-            caption = document.get("caption", "")
-            parts = []
-            if desc:
-                parts.append(f"Cartoon: {desc}")
-            if caption:
-                parts.append(f"Caption: {caption}")
-            return "\n".join(parts)
+            return document.get("text", "")
         return str(document)
 
     def get_document_image(self, document: Any) -> str | None:
-        """Save PIL image to temp file and return path for thumbnail display."""
-        if not isinstance(document, dict):
-            return None
+        """Return thumbnail image path from document."""
+        if isinstance(document, dict):
+            return document.get("image_path")
+        return None
 
-        pil_image = document.get("image")
+    @staticmethod
+    def _save_thumbnail(pil_image, contest_num) -> str | None:
+        """Save PIL image to disk and return path."""
         if pil_image is None:
             return None
-
-        # Generate stable filename from contest number
-        contest_num = document.get("contest_number", "")
-        key = (
-            f"nyc_{contest_num}"
-            if contest_num
-            else hashlib.md5(document.get("image_description", "").encode()).hexdigest()
-        )
+        key = f"nyc_{contest_num}" if contest_num else str(id(pil_image))
         path = _THUMBNAIL_DIR / f"{key}.jpg"
-
         if path.exists():
             return str(path)
-
         try:
             _THUMBNAIL_DIR.mkdir(parents=True, exist_ok=True)
             pil_image.save(str(path), format="JPEG")

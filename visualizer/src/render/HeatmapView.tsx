@@ -14,6 +14,7 @@ import { TripletData, MultiviewManifest } from '../types/manifest';
 interface HeatmapViewProps {
   embeddings: Float32Array;
   documents: string[];
+  rawDocuments?: string[];  // Original documents before processing/summarization
   triplets?: TripletData[];
   manifest?: MultiviewManifest;
   width?: number;
@@ -150,6 +151,7 @@ function computeStructuredOrder(
 export const HeatmapView: React.FC<HeatmapViewProps> = ({
   embeddings,
   documents,
+  rawDocuments,
   triplets,
   manifest,
   width = 800,
@@ -164,6 +166,9 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
   const [hoveredTripletRole, setHoveredTripletRole] = useState<'anchor' | 'positive' | 'negative' | null>(null);
   const [ordering, setOrdering] = useState<HeatmapOrdering>('structured');
   const hasTriplets = triplets && triplets.length > 0;
+
+  // Use raw documents for tooltips if available, otherwise fall back to processed documents
+  const tooltipDocuments = rawDocuments || documents;
 
   // Refs for values needed by D3 event handlers (avoids stale closures)
   const tripletsRef = useRef(triplets);
@@ -301,14 +306,34 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({
                 .attr('stroke-width', 2);
             }
 
-            const docI = documents[d.origI].length > 100 ? documents[d.origI].slice(0, 100) + '...' : documents[d.origI];
-            const docJ = documents[d.origJ].length > 100 ? documents[d.origJ].slice(0, 100) + '...' : documents[d.origJ];
+            // Build tooltip with raw text and summaries (if different)
+            const rawI = tooltipDocuments[d.origI];
+            const rawJ = tooltipDocuments[d.origJ];
+            const summaryI = documents[d.origI];
+            const summaryJ = documents[d.origJ];
+
+            const docIText = rawI.length > 100 ? rawI.slice(0, 100) + '...' : rawI;
+            const docJText = rawJ.length > 100 ? rawJ.slice(0, 100) + '...' : rawJ;
+
+            // Check if we should show summaries separately
+            let docIPart = `[${d.origI}]: ${docIText}`;
+            let docJPart = `[${d.origJ}]: ${docJText}`;
+
+            if (rawDocuments && rawI !== summaryI) {
+              const sumI = summaryI.length > 80 ? summaryI.slice(0, 80) + '...' : summaryI;
+              docIPart = `[${d.origI}] 📄 Raw: ${docIText}\n       📝 Summary: ${sumI}`;
+            }
+
+            if (rawDocuments && rawJ !== summaryJ) {
+              const sumJ = summaryJ.length > 80 ? summaryJ.slice(0, 80) + '...' : summaryJ;
+              docJPart = `[${d.origJ}] 📄 Raw: ${docJText}\n       📝 Summary: ${sumJ}`;
+            }
 
             const metricLabel = usePseudologit ? 'Distance' : 'Similarity';
             setTooltip({
               x: event.pageX,
               y: event.pageY,
-              text: `Doc ${d.origI} ↔ Doc ${d.origJ}\n${metricLabel}: ${d.similarity.toFixed(3)}\n\n[${d.origI}]: ${docI}\n\n[${d.origJ}]: ${docJ}`,
+              text: `Doc ${d.origI} ↔ Doc ${d.origJ}\n${metricLabel}: ${d.similarity.toFixed(3)}\n\n${docIPart}\n\n${docJPart}`,
             });
           })
           .on('mouseleave', function (event, d) {

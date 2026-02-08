@@ -25,6 +25,7 @@ import csv
 import json
 import logging
 import random
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -33,6 +34,14 @@ import requests
 from multiview.docsets.base import BaseDocSet
 
 logger = logging.getLogger(__name__)
+
+# Headers to avoid bot detection
+DOWNLOAD_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.are.na/",
+}
 
 DATASET_PATH = "/Users/sarahchen/code/pproj/bounding_bosch/scraping_data/data/cari"
 GALLERIES_DIR = Path(DATASET_PATH) / "galleries"
@@ -44,17 +53,64 @@ IMAGES_DIR = Path("data/cari_aesthetics/images")
 def _download_image(url: str, arena_id: int) -> Path | None:
     """Download an image to the local cache. Returns the path on success."""
     dest = IMAGES_DIR / f"{arena_id}.jpg"
+
+    # Check if valid cached file exists (non-empty)
+    if dest.exists() and dest.stat().st_size > 0:
+        return dest
+
+    # Remove empty/invalid file if it exists
     if dest.exists():
-        return dest
+        dest.unlink()
+
     IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        resp = requests.get(url, timeout=30)
-        resp.raise_for_status()
-        dest.write_bytes(resp.content)
-        return dest
-    except Exception as e:
-        logger.debug(f"Failed to download image for arena block {arena_id}: {e}")
-        return None
+
+    # Retry with exponential backoff to handle rate limiting
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Add delay to avoid rate limiting
+            if attempt > 0:
+                time.sleep(2**attempt)
+
+            resp = requests.get(url, timeout=30, headers=DOWNLOAD_HEADERS)
+
+            # Check for WAF challenge or other non-200 responses
+            if resp.status_code == 202:
+                logger.debug(f"WAF challenge for arena block {arena_id}, retrying...")
+                continue
+
+            resp.raise_for_status()
+            content = resp.content
+
+            # Validate we got actual content
+            if not content or len(content) == 0:
+                logger.debug(f"Empty response for arena block {arena_id}")
+                return None
+
+            # Validate it's actually an image (basic check)
+            if len(content) < 100:  # Suspiciously small
+                logger.debug(
+                    f"Suspiciously small image ({len(content)} bytes) for arena block {arena_id}"
+                )
+                return None
+
+            dest.write_bytes(content)
+            logger.debug(
+                f"Successfully downloaded arena block {arena_id} ({len(content)} bytes)"
+            )
+            return dest
+
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.debug(
+                    f"Failed to download image for arena block {arena_id} after {max_retries} attempts: {e}"
+                )
+                return None
+            logger.debug(
+                f"Download attempt {attempt + 1} failed for arena block {arena_id}: {e}"
+            )
+
+    return None
 
 
 def _load_aesthetics_map() -> dict[str, str]:
@@ -97,8 +153,12 @@ class CARIAestheticsDocSet(BaseDocSet):
         # Try loading from cache first
         cached = self._load_cache()
         if cached:
-            # Verify cached image files still exist
-            documents = [d for d in cached if Path(d.get("image_path", "")).exists()]
+            # Verify cached image files exist and are non-empty
+            documents = []
+            for d in cached:
+                img_path = Path(d.get("image_path", ""))
+                if img_path.exists() and img_path.stat().st_size > 0:
+                    documents.append(d)
             if documents:
                 if max_docs and max_docs < len(documents):
                     rng = random.Random(seed)
@@ -116,13 +176,14 @@ class CARIAestheticsDocSet(BaseDocSet):
                 f"Check that gallery JSON files exist."
             )
 
-        # Download images concurrently
+        # Download images concurrently (reduced workers to avoid rate limiting)
         documents = []
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {
                 pool.submit(_download_image, item["url"], item["arena_id"]): item
                 for item in raw_items
             }
+            completed_count = 0
             for future in as_completed(futures):
                 item = futures[future]
                 local_path = future.result()
@@ -137,6 +198,13 @@ class CARIAestheticsDocSet(BaseDocSet):
                             "arena_id": item["arena_id"],
                         }
                     )
+                completed_count += 1
+                if completed_count % 100 == 0:
+                    logger.info(
+                        f"Downloaded {completed_count}/{len(raw_items)} images..."
+                    )
+                # Small delay between downloads to avoid rate limiting
+                time.sleep(0.1)
 
         if not documents:
             raise RuntimeError(

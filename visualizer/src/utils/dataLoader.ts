@@ -97,6 +97,20 @@ export async function loadVisualizationData(
     somGridImageUrl = `/${basePath}/${manifest.som_grid_image}`;
   }
 
+  // Load document metadata if available
+  let docMetadata: Record<string, string>[] | undefined;
+  if (manifest.doc_metadata_path) {
+    try {
+      const metadataUrl = `/${basePath}/${manifest.doc_metadata_path}`;
+      const metadataResponse = await fetch(metadataUrl);
+      if (metadataResponse.ok) {
+        docMetadata = await metadataResponse.json();
+      }
+    } catch (e) {
+      console.warn('Failed to load doc metadata:', e);
+    }
+  }
+
   // Try to load triplets
   const triplets = await loadTriplets(basePath);
 
@@ -134,6 +148,7 @@ export async function loadVisualizationData(
     thumbnailUrls,
     manifest,
     triplets: enrichedTriplets,
+    docMetadata,
   };
 }
 

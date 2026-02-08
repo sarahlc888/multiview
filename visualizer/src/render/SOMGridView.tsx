@@ -9,6 +9,7 @@ import { TripletData } from '../types/manifest';
 interface SOMGridViewProps {
   coords: Float32Array;
   documents: string[];
+  rawDocuments?: string[];  // Original documents before processing/summarization
   thumbnailUrls?: (string | null)[];
   triplets?: TripletData[];
   displayMode?: 'points' | 'thumbnails';
@@ -20,6 +21,7 @@ interface SOMGridViewProps {
 export const SOMGridView: React.FC<SOMGridViewProps> = ({
   coords,
   documents,
+  rawDocuments,
   thumbnailUrls,
   triplets,
   displayMode = 'thumbnails',
@@ -36,6 +38,9 @@ export const SOMGridView: React.FC<SOMGridViewProps> = ({
   const hasThumbnailsAvailable = thumbnailUrls && thumbnailUrls.some(url => url !== null);
   const useThumbnails = displayMode === 'thumbnails' && hasThumbnailsAvailable;
   const hasTriplets = triplets && triplets.length > 0;
+
+  // Use raw documents for tooltips if available, otherwise fall back to processed documents
+  const tooltipDocuments = rawDocuments || documents;
 
   // Parse grid positions and determine grid size
   const { gridData, gridRows, gridCols } = useMemo(() => {
@@ -293,8 +298,19 @@ export const SOMGridView: React.FC<SOMGridViewProps> = ({
               whiteSpace: 'pre-wrap',
             }}
           >
-            {documents[hoveredCellIndex].slice(0, 200)}
-            {documents[hoveredCellIndex].length > 200 ? '...' : ''}
+            {(() => {
+              // Build tooltip with raw text and summary (if different)
+              const rawText = tooltipDocuments[hoveredCellIndex];
+              const summaryText = documents[hoveredCellIndex];
+
+              if (rawDocuments && rawText !== summaryText) {
+                const rawDisplay = rawText.slice(0, 150) + (rawText.length > 150 ? '...' : '');
+                const summaryDisplay = summaryText.slice(0, 150) + (summaryText.length > 150 ? '...' : '');
+                return `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+              }
+
+              return rawText.slice(0, 200) + (rawText.length > 200 ? '...' : '');
+            })()}
           </div>
         )}
       </div>
@@ -327,9 +343,19 @@ export const SOMGridView: React.FC<SOMGridViewProps> = ({
           {selectedPointIndex !== null && (
             <div style={{ marginBottom: '15px', padding: '10px', background: '#e3f2fd', borderRadius: '4px', fontSize: '13px' }}>
               <strong>Selected Point: {selectedPointIndex}</strong>
-              <div style={{ marginTop: '6px', maxHeight: '100px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
-                {documents[selectedPointIndex].slice(0, 300)}
-                {documents[selectedPointIndex].length > 300 ? '...' : ''}
+              <div style={{ marginTop: '6px', maxHeight: '200px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>
+                {(() => {
+                  const rawText = tooltipDocuments[selectedPointIndex];
+                  const summaryText = documents[selectedPointIndex];
+
+                  if (rawDocuments && rawText !== summaryText) {
+                    const rawDisplay = rawText.slice(0, 250) + (rawText.length > 250 ? '...' : '');
+                    const summaryDisplay = summaryText.slice(0, 250) + (summaryText.length > 250 ? '...' : '');
+                    return `📄 Raw:\n${rawDisplay}\n\n📝 Summary:\n${summaryDisplay}`;
+                  }
+
+                  return rawText.slice(0, 300) + (rawText.length > 300 ? '...' : '');
+                })()}
               </div>
               {filteredTriplets.length > 0 && (
                 <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>

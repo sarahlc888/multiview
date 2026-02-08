@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from multiview.benchmark.artifacts import load_doc_metadata_json
 from multiview.utils.benchmark_loading import load_from_benchmark
 from multiview.visualization import (
     CorpusVisualizer,
@@ -271,6 +272,9 @@ def _create_thumbnail_images(
         "met_museum",
         "example_images",
         "newyorker_covers",
+        "new_yorker_cartoons",
+        "cari_aesthetics",
+        "whole_earth_catalog",
     ]:
         output_dir.mkdir(parents=True, exist_ok=True)
         image_paths = []
@@ -449,14 +453,20 @@ def _visualize(
 
     if args.reducer == "dendrogram":
         if not image_paths:
-            raise ValueError("Dendrogram visualization requires thumbnail markers.")
-        dendrogram_image_path = _create_dendrogram_plot(
-            visualizer, embeddings, image_paths, figsize, args
-        )
-        if hasattr(visualizer.reducer, "linkage_matrix"):
-            linkage_matrix = visualizer.reducer.linkage_matrix
-        if hasattr(visualizer.reducer, "coords_2d_"):
-            coords_2d = visualizer.reducer.coords_2d_
+            # Text-only dataset: skip PNG, just compute linkage matrix for web viewer
+            embeddings_arr = np.array(embeddings, dtype=np.float32)
+            coords_2d = visualizer.reducer.fit_transform(embeddings_arr)
+            if hasattr(visualizer.reducer, "linkage_matrix"):
+                linkage_matrix = visualizer.reducer.linkage_matrix
+        else:
+            # Image dataset: create full dendrogram PNG
+            dendrogram_image_path = _create_dendrogram_plot(
+                visualizer, embeddings, image_paths, figsize, args
+            )
+            if hasattr(visualizer.reducer, "linkage_matrix"):
+                linkage_matrix = visualizer.reducer.linkage_matrix
+            if hasattr(visualizer.reducer, "coords_2d_"):
+                coords_2d = visualizer.reducer.coords_2d_
     elif args.reducer == "som" and image_paths and isinstance(reducer, SOMReducer):
         som_grid_image_path = _create_som_grid_composite(
             visualizer, reducer, embeddings, image_paths, args
@@ -501,6 +511,7 @@ def _export_for_web_viewer(
     som_grid_image: str | None = None,
     quiet: bool = False,
     raw_documents: list[Any] | None = None,
+    doc_metadata: list[dict[str, Any]] | None = None,
 ) -> None:
     """Export visualization artifacts for web viewer."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -608,6 +619,15 @@ def _export_for_web_viewer(
             thumbnail_refs.append(None)
         manifest["thumbnails"] = thumbnail_refs
 
+    # Save document metadata if provided
+    if doc_metadata is not None and len(doc_metadata) > 0:
+        doc_metadata_path = output_dir / "doc_metadata.json"
+        with open(doc_metadata_path, "w", encoding="utf-8") as f:
+            json.dump(doc_metadata, f, indent=2)
+        manifest["doc_metadata_path"] = "doc_metadata.json"
+        if not quiet:
+            logger.debug(f"Document metadata: wrote {doc_metadata_path}")
+
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
     if not quiet:
@@ -639,6 +659,19 @@ def _run_benchmark_embedding_mode(args: Any) -> None:
             )
         )
     embeddings = np.array(embeddings, dtype=np.float32)
+
+    # Load document metadata if available
+    doc_metadata: list[dict] | None = None
+    try:
+        doc_metadata = load_doc_metadata_json(
+            output_dir=str(Path("outputs") / args.from_benchmark / "documents"),
+            task_name=args.task,
+        )
+    except Exception:
+        pass
+    if doc_metadata is not None and len(doc_metadata) != len(documents):
+        doc_metadata = None
+
     finite_mask = _finite_embedding_row_mask(embeddings)
     if finite_mask.size == 0:
         raise ValueError("Embeddings are empty or malformed; cannot visualize.")
@@ -654,6 +687,8 @@ def _run_benchmark_embedding_mode(args: Any) -> None:
         embeddings = embeddings[finite_mask]
         documents = [doc for i, doc in enumerate(documents) if finite_mask[i]]
         doc_texts = [text for i, text in enumerate(doc_texts) if finite_mask[i]]
+        if doc_metadata is not None:
+            doc_metadata = [m for i, m in enumerate(doc_metadata) if finite_mask[i]]
 
     classes = None
     if args.annotations_file:
@@ -741,6 +776,7 @@ def _run_benchmark_embedding_mode(args: Any) -> None:
                 som_grid_image=som_grid_image_path,
                 quiet=quiet,
                 raw_documents=documents,
+                doc_metadata=doc_metadata,
             )
 
 
@@ -805,6 +841,9 @@ def should_use_thumbnails(task_name: str, use_thumbnails: bool) -> bool:
         "met_museum",
         "example_images",
         "newyorker_covers",
+        "new_yorker_cartoons",
+        "cari_aesthetics",
+        "whole_earth_catalog",
     ]:
         return True
 

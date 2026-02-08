@@ -70,6 +70,10 @@ class BaseDocSet(ABC):
         Returns:
             Dictionary mapping criterion names to their metadata
         """
+        # Check for instance-level override first
+        if hasattr(self, "_criterion_metadata_instance"):
+            return self._criterion_metadata_instance
+
         # If explicitly set on the class, use that
         if self.__class__._CRITERION_METADATA is not None:
             return self.__class__._CRITERION_METADATA
@@ -82,6 +86,15 @@ class BaseDocSet(ABC):
 
         # No dataset name and no explicit metadata
         return {}
+
+    @CRITERION_METADATA.setter
+    def CRITERION_METADATA(self, value: dict[str, dict[str, Any]]) -> None:
+        """Set instance-level criterion metadata.
+
+        Args:
+            value: Dictionary mapping criterion names to their metadata
+        """
+        self._criterion_metadata_instance = value
 
     @abstractmethod
     def load_documents(self) -> list[Any]:
@@ -218,3 +231,18 @@ class BaseDocSet(ABC):
         """
         # Default: no images
         return None
+
+    def get_document_metadata(self, doc_idx: int) -> dict[str, Any]:
+        """Get metadata properties for a document at the given index.
+
+        Subclasses can override this to provide document properties for visualization.
+        These properties can be used to color/filter points in the visualizer.
+
+        Args:
+            doc_idx: Index of the document in the loaded documents list
+
+        Returns:
+            Dict of metadata properties (e.g., {"doc_type": "headline", "category": "news"})
+            Returns empty dict by default
+        """
+        return {}

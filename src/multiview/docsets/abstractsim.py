@@ -288,3 +288,35 @@ class AbstractSimDocSet(BaseDocSet):
         logger.info(
             f"Built triplet metadata for {len(self._triplet_metadata)} documents"
         )
+
+    def get_document_metadata(self, doc_idx: int) -> dict[str, Any]:
+        """Get metadata for a document at the given index.
+
+        Args:
+            doc_idx: Document index
+
+        Returns:
+            Dict with doc_type ("sentence" or "description") and abstraction_level
+        """
+        if (
+            not hasattr(self, "documents")
+            or doc_idx < 0
+            or doc_idx >= len(self.documents)
+        ):
+            return {}
+
+        doc_text = str(self.documents[doc_idx])
+        metadata = self._triplet_metadata.get(doc_text, {})
+
+        result = {}
+        # Determine doc_type based on is_sentence flag
+        if metadata.get("is_sentence"):
+            result["doc_type"] = "sentence"
+        else:
+            result["doc_type"] = "description"
+
+        # Add abstraction_level if available
+        if "abstraction_level" in metadata:
+            result["abstraction_level"] = metadata["abstraction_level"]
+
+        return result

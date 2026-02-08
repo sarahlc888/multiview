@@ -27,6 +27,7 @@ export interface MultiviewManifest {
   dendrogram_image?: string;  // Path to matplotlib-generated dendrogram PNG
   som_grid_image?: string;    // Path to SOM grid composite PNG
   thumbnails?: (string | null)[];
+  doc_metadata_path?: string;
 }
 
 export interface DatasetIndex {
@@ -54,6 +55,7 @@ export interface VisualizationData {
   thumbnailUrls?: (string | null)[];
   manifest: MultiviewManifest;
   triplets?: TripletData[];
+  docMetadata?: Record<string, string>[];
 }
 
 export interface TripletData {
