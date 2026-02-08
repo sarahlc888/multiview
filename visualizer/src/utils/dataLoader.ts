@@ -38,6 +38,17 @@ export async function loadVisualizationData(
   const documentsUrl = `/${basePath}/${manifest.documents_path}`;
   const documents = await loadDocuments(documentsUrl);
 
+  // Load raw documents (original text before rewrites) if available
+  let rawDocuments: string[] | undefined;
+  if (manifest.raw_documents_path) {
+    try {
+      const rawDocumentsUrl = `/${basePath}/${manifest.raw_documents_path}`;
+      rawDocuments = await loadDocuments(rawDocumentsUrl);
+    } catch (e) {
+      console.warn('Failed to load raw documents:', e);
+    }
+  }
+
   // Load embeddings
   const embeddingsUrl = `/${basePath}/${manifest.embeddings_path}`;
   const embeddings = await loadNpy(embeddingsUrl);
@@ -114,6 +125,7 @@ export async function loadVisualizationData(
 
   return {
     documents,
+    rawDocuments,
     embeddings,
     coords,
     linkageMatrix,

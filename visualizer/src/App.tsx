@@ -1143,14 +1143,23 @@ const App: React.FC = () => {
                 )}
                 <div className="neighbors-doc-text">
                   {(() => {
+                    const rawText = (vizData.rawDocuments?.[selectedDocumentIndex] ?? vizData.documents[selectedDocumentIndex]) || '';
                     const displayText = getDisplayTextForDoc(
                       selectedDocumentIndex,
                       vizData.documents[selectedDocumentIndex] || ''
                     );
                     return (
                       <>
-                        {displayText.slice(0, 400)}
-                        {displayText.length > 400 ? '...' : ''}
+                        <div className="neighbor-doc-preview">
+                          {rawText.slice(0, 400)}
+                          {rawText.length > 400 ? '...' : ''}
+                        </div>
+                        {displayText !== rawText && (
+                          <div className="neighbor-summary">
+                            {displayText.slice(0, 400)}
+                            {displayText.length > 400 ? '...' : ''}
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -1188,11 +1197,20 @@ const App: React.FC = () => {
                               )}
                               <div className="neighbor-text">
                                 {(() => {
+                                  const rawText = (vizData.rawDocuments?.[neighbor.index] ?? vizData.documents[neighbor.index]) || '';
                                   const displayText = getDisplayTextForDoc(neighbor.index, neighbor.text);
                                   return (
                                     <>
-                                      {displayText.slice(0, 180)}
-                                      {displayText.length > 180 ? '...' : ''}
+                                      <div className="neighbor-doc-preview">
+                                        {rawText.slice(0, 80)}
+                                        {rawText.length > 80 ? '...' : ''}
+                                      </div>
+                                      {displayText !== rawText && (
+                                        <div className="neighbor-summary">
+                                          {displayText.slice(0, 120)}
+                                          {displayText.length > 120 ? '...' : ''}
+                                        </div>
+                                      )}
                                     </>
                                   );
                                 })()}
@@ -1234,11 +1252,20 @@ const App: React.FC = () => {
                                   )}
                                   <div className="neighbor-text">
                                     {(() => {
+                                      const rawText = (vizData.rawDocuments?.[neighbor.index] ?? vizData.documents[neighbor.index]) || '';
                                       const displayText = getDisplayTextForDoc(neighbor.index, neighbor.text);
                                       return (
                                         <>
-                                          {displayText.slice(0, 180)}
-                                          {displayText.length > 180 ? '...' : ''}
+                                          <div className="neighbor-doc-preview">
+                                            {rawText.slice(0, 80)}
+                                            {rawText.length > 80 ? '...' : ''}
+                                          </div>
+                                          {displayText !== rawText && (
+                                            <div className="neighbor-summary">
+                                              {displayText.slice(0, 120)}
+                                              {displayText.length > 120 ? '...' : ''}
+                                            </div>
+                                          )}
                                         </>
                                       );
                                     })()}
@@ -1286,11 +1313,20 @@ const App: React.FC = () => {
                                   )}
                                   <div className="neighbor-text">
                                     {(() => {
+                                      const rawText = (vizData.rawDocuments?.[neighbor.index] ?? vizData.documents[neighbor.index]) || '';
                                       const displayText = getDisplayTextForDoc(neighbor.index, neighbor.text);
                                       return (
                                         <>
-                                          {displayText.slice(0, 180)}
-                                          {displayText.length > 180 ? '...' : ''}
+                                          <div className="neighbor-doc-preview">
+                                            {rawText.slice(0, 80)}
+                                            {rawText.length > 80 ? '...' : ''}
+                                          </div>
+                                          {displayText !== rawText && (
+                                            <div className="neighbor-summary">
+                                              {displayText.slice(0, 120)}
+                                              {displayText.length > 120 ? '...' : ''}
+                                            </div>
+                                          )}
                                         </>
                                       );
                                     })()}

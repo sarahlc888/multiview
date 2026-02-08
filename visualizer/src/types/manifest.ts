@@ -12,6 +12,7 @@ export interface MultiviewManifest {
   n_docs: number;
   embedding_dim: number;
   documents_path: string;
+  raw_documents_path?: string;
   embeddings_path: string;
   layouts: {
     tsne?: string;
@@ -44,6 +45,7 @@ export interface DatasetIndex {
 
 export interface VisualizationData {
   documents: string[];
+  rawDocuments?: string[];
   embeddings: Float32Array;
   coords: Float32Array;
   linkageMatrix?: Float32Array;
